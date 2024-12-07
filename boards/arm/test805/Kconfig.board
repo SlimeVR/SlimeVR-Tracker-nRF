@@ -1,6 +1,0 @@
-# Copyright (c) 2024 Nordic Semiconductor ASA
-# SPDX-License-Identifier: Apache-2.0
-
-config BOARD_TEST805
-	bool "test805"
-	depends on SOC_NRF52805_CAAA
