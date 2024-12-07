@@ -1,9 +1,9 @@
 # Copyright (c) 2024 Nordic Semiconductor ASA
 # SPDX-License-Identifier: Apache-2.0
 
-identifier: supermini_uf2
-name: supermini_uf2
-vendor: vendor
+identifier: slimenrf_r3_uf2
+name: slimenrf_r3_uf2
+vendor: nordic
 type: mcu
 arch: arm
 ram: 256

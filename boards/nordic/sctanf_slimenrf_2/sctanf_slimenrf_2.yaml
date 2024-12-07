@@ -3,7 +3,7 @@
 
 identifier: sctanf_slimenrf_2
 name: sctanf slimenrf 2
-vendor: vendor
+vendor: nordic
 type: mcu
 arch: arm
 ram: 64

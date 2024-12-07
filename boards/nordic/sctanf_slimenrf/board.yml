@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 board:
-  name: Xiao nRF52840 UF2
-  vendor: vendor
+  name: sctanf slimenrf
+  vendor: nordic
   socs:
     - name: nrf52840

@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 board:
-  name: supermini_uf2
-  vendor: vendor
+  name: test805
+  vendor: nordic
   socs:
-    - name: nrf52840
+    - name: nrf52805
