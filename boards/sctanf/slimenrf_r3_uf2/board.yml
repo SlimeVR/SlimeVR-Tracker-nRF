@@ -1,8 +1,0 @@
-# Copyright (c) 2024 Nordic Semiconductor ASA
-# SPDX-License-Identifier: Apache-2.0
-
-board:
-  name: slimenrf_r3_uf2
-  vendor: sctanf
-  socs:
-    - name: nrf52840

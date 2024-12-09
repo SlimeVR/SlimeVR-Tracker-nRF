@@ -1,7 +1,7 @@
 # Copyright (c) 2024 Nordic Semiconductor ASA
 # SPDX-License-Identifier: Apache-2.0
 
-identifier: slimenrf_r3_uf2
+identifier: slimenrf_r3/nrf52840/uf2
 name: slimenrf_r3_uf2
 vendor: sctanf
 type: mcu
