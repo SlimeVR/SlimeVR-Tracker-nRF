@@ -2,4 +2,4 @@
 # SPDX-License-Identifier: Apache-2.0
 
 config BOARD_TEST805
-	depends on SOC_NRF52805_CAAA
+	select SOC_NRF52805_CAAA

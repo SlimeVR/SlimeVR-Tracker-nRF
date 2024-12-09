@@ -2,5 +2,4 @@
 # SPDX-License-Identifier: Apache-2.0
 
 config BOARD_SLIMENRF_R3_UF2
-	select SOC_DCDC_NRF52X
-	depends on SOC_NRF52840_QIAA
+	select SOC_NRF52840_QIAA
