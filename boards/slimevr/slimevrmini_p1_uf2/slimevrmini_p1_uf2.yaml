@@ -3,7 +3,7 @@
 
 identifier: slimevrmini_p1_uf2
 name: slimevrmini_p1_uf2
-vendor: nordic
+vendor: slimevr
 type: mcu
 arch: arm
 ram: 128

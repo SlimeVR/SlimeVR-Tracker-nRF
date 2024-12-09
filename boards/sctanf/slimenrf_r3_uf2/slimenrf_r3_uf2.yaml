@@ -3,7 +3,7 @@
 
 identifier: slimenrf_r3_uf2
 name: slimenrf_r3_uf2
-vendor: nordic
+vendor: sctanf
 type: mcu
 arch: arm
 ram: 256

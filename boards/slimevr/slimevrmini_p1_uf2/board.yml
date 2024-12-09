@@ -3,6 +3,6 @@
 
 board:
   name: slimevrmini_p1_uf2
-  vendor: nordic
+  vendor: slimevr
   socs:
     - name: nrf52833
