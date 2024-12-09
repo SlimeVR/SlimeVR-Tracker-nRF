@@ -6,6 +6,10 @@
 		};
 	};
 
+	lsm6ds3tr-c-en {
+		startup-delay-us = <0>;
+	};
+
 	// Uncomment below to Enable SW0
 	buttons {
 		compatible = "gpio-keys";
@@ -19,12 +23,6 @@
 		sw0 = &button0;
 	};
 
-	pwmclock: pwmclock {
-		compatible = "pwm-clock";
-		#clock-cells = <1>;
-		pwms = <&pwm1 0 PWM_HZ(32768) PWM_POLARITY_NORMAL>;
-	};
-
 	battery-divider {
         compatible = "voltage-divider";
         status = "okay";
@@ -35,12 +33,13 @@
 	};
 
 	zephyr,user {
+		int0-gpios = <&gpio0 11 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>;
 		led-gpios = <&gpio0 17 (GPIO_OPEN_DRAIN|GPIO_ACTIVE_LOW)>;
 	};
 
 };
 
-&i2c1 {
+&i2c0 {
 	compatible = "nordic,nrf-twim";
 	zephyr,concat-buf-size = <255>; // probable max for nrf52832
 	zephyr,flash-buf-max-size = <255>; // probable max for nrf52832
@@ -52,19 +51,6 @@
 		reg = <0>;
 	};
 
-	mag: mag@0 {
-		compatible = "i2c-device";
-		label = "mag";
-		reg = <0>;
-	};
-
-};
-
-&pwm1 {
-	status = "okay";
-	pinctrl-0 = <&pwm1_default>;
-	pinctrl-1 = <&pwm1_sleep>;
-	pinctrl-names = "default", "sleep";
 };
 
 &cryptocell {
