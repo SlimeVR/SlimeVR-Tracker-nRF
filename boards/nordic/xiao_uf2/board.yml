@@ -1,8 +1,0 @@
-# Copyright (c) 2024 Nordic Semiconductor ASA
-# SPDX-License-Identifier: Apache-2.0
-
-board:
-  name: Xiao nRF52840 UF2
-  vendor: nordic
-  socs:
-    - name: nrf52840
