@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 /dts-v1/;
-#include <nordic/nrf52840_qiaa.dtsi>
+#include <nordic/nrf52832_ciaa.dtsi>
 
 //move to dtsi?
 &pinctrl {
@@ -26,6 +26,7 @@
 	pwm0_default: pwm0_default {
 		group1 {
 			psels = <NRF_PSEL(PWM_OUT0, 0, 25)>;
+			nordic,invert;
 		};
 	};
 
@@ -40,8 +41,8 @@
 //end
 
 / {
-	model = "sctanf slimenrf";
-	compatible = "sctanf,sctanf-slimenrf";
+	model = "slimenrf_r2";
+	compatible = "slimenrf_r2";
 
 	chosen {
 		zephyr,sram = &sram0;
@@ -52,7 +53,7 @@
 	pwmleds {
 		compatible = "pwm-leds";
 		pwm_led0: pwm_led_0 {
-			pwms = <&pwm0 0 PWM_MSEC(1) PWM_POLARITY_NORMAL>;
+			pwms = <&pwm0 0 PWM_MSEC(1) PWM_POLARITY_INVERTED>;
 		};
 	};
 
@@ -69,7 +70,7 @@
 		dock-gpios = <&gpio0 8 (GPIO_PULL_UP|GPIO_ACTIVE_LOW)>;
 		chgstat-gpios = <&gpio0 6 (GPIO_PULL_UP|GPIO_ACTIVE_LOW)>;
 		int0-gpios = <&gpio0 11 (GPIO_PULL_UP|GPIO_ACTIVE_LOW)>;
-		led-gpios = <&gpio0 25 (GPIO_OPEN_SOURCE | (1 << 9))>;
+		led-gpios = <&gpio0 25 (GPIO_OPEN_DRAIN|GPIO_ACTIVE_LOW)>;
 	};
 
 };
@@ -86,19 +87,19 @@
 		};
 		slot0_partition: partition@c000 {
 			label = "image-0";
-			reg = <0xc000 0x72000>;
+			reg = <0xc000 0x32000>;
 		};
-		slot1_partition: partition@7e000 {
+		slot1_partition: partition@3e000 {
 			label = "image-1";
-			reg = <0x7e000 0x72000>;
+			reg = <0x3e000 0x32000>;
 		};
-		scratch_partition: partition@f0000 {
+		scratch_partition: partition@70000 {
 			label = "image-scratch";
-			reg = <0xf0000 0xa000>;
+			reg = <0x70000 0xa000>;
 		};
-		storage_partition: partition@fa000 {
+		storage_partition: partition@7a000 {
 			label = "storage";
-			reg = <0xfa000 0x6000>;
+			reg = <0x7a000 0x6000>;
 		};
 	};
 };
@@ -116,10 +117,6 @@
 };
 
 &gpio0 {
-	status = "okay";
-};
-
-&gpio1 {
 	status = "okay";
 };
 
@@ -152,18 +149,6 @@
 	pinctrl-0 = <&pwm0_default>;
 	pinctrl-1 = <&pwm0_sleep>;
 	pinctrl-names = "default", "sleep";
-};
-
-zephyr_udc0: &usbd {
-	compatible = "nordic,nrf-usbd";
-	status = "disabled";
-	cdc_acm_uart0: cdc_acm_uart0 {
-		compatible = "zephyr,cdc-acm-uart";
-	};
-};
-
-&cryptocell {
-	status = "disabled";
 };
 
 &nfct {

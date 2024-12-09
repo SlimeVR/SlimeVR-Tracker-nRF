@@ -1,5 +1,5 @@
 # Copyright (c) 2023 Nordic Semiconductor ASA
 # SPDX-License-Identifier: Apache-2.0
 
-config BOARD_SCTANF_SLIMENRF_2
+config BOARD_SLIMENRF_R2
 	select SOC_NRF52832_CIAA

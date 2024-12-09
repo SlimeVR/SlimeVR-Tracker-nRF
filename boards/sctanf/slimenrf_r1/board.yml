@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 board:
-  name: sctanf slimenrf 2
+  name: slimenrf_r1
   vendor: nordic
   socs:
-    - name: nrf52832
+    - name: nrf52840
