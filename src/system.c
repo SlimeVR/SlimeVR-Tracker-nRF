@@ -114,13 +114,13 @@ static inline void sys_nvs_init(void) // TODO: repeat init until it works?
 		return;
 	struct flash_pages_info info;
 	fs.flash_device = NVS_PARTITION_DEVICE;
-	fs.offset = NVS_PARTITION_OFFSET; // Start NVS FS here
+	fs.offset = NVS_PARTITION_OFFSET; // starting at NVS_PARTITION_OFFSET
 	if (flash_get_page_info_by_offs(fs.flash_device, fs.offset, &info))
 	{
 		LOG_ERR("Failed to get page info");
 		return;
 	}
-	fs.sector_size = info.size; // Sector size equal to page size
+	fs.sector_size = info.size; // sector_size equal to the pagesize
 	fs.sector_count = 4U; // 4 sectors
 	if (nvs_mount(&fs))
 	{
