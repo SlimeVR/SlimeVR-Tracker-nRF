@@ -1,0 +1,35 @@
+manifest:
+  version: "0.10"
+  projects:
+
+    # nRF-Connect SDK
+    - name: sdk-nrf
+      path: nrf
+      url: https://github.com/nrfconnect/sdk-nrf.git
+      revision: v2.9-branch
+      import: true
+
+    # SlimeVR-Tracker-nRF
+    # Change the below to your repository if you are forking to build your custom firmware
+    - name: SlimeVR-Tracker-nRF
+      url: https://github.com/SlimeVR/SlimeVR-Tracker-nRF.git
+      path: SlimeVR-Tracker-nRF
+      revision: master
+
+    # vqf-c
+    - name: vqf-c
+      url: https://github.com/sctanf/vqf-c.git
+      path: SlimeVR-Tracker-nRF/vqf-c
+      revision: master
+
+    # Fusion
+    - name: Fusion
+      url: https://github.com/xioTechnologies/Fusion.git
+      path: SlimeVR-Tracker-nRF/Fusion
+      revision: main
+      
+    # NXP-ISSDK-SensorFusion
+    - name: NXP-ISSDK-SensorFusion
+      url: https://github.com/sctanf/NXP-ISSDK-SensorFusion.git
+      path: SlimeVR-Tracker-nRF/NXP-ISSDK-SensorFusion
+      revision: main
