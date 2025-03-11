@@ -1,0 +1,136 @@
+on:
+  pull_request:
+    branches:
+      - master
+  push:
+    branches:
+      - master
+  create:
+  workflow_dispatch:
+
+# Allow one concurrent deployment
+concurrency:
+  group: ${{ github.ref }}
+  cancel-in-progress: true
+
+permissions: write-all
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        boards: [
+                  {boardname: "supermini_uf2/nrf52840", fileformat: "uf2", filename: "SlimeNRF_SuperMini_Tracker.uf2"},
+                  {boardname: "xiao_ble/nrf52840", fileformat: "uf2", filename: "SlimeNRF_XIAO_Tracker.uf2"},
+                  {boardname: "xiao_ble/nrf52840/sense", fileformat: "uf2", filename: "SlimeNRF_XIAO_Sense_Tracker.uf2"},
+                  {boardname: "slimenrf_r1/nrf52840", fileformat: "hex", filename: "SlimeNRF_slimenrf_r1_Tracker.hex"},
+                  {boardname: "slimenrf_r2/nrf52832", fileformat: "hex", filename: "SlimeNRF_slimenrf_r2_Tracker.hex"},
+                  {boardname: "slimenrf_r3/nrf52840/uf2", fileformat: "uf2", filename: "SlimeNRF_slimenrf_r3_Tracker.uf2"},
+                  {boardname: "slimevrmini_p1_uf2/nrf52833", fileformat: "uf2", filename: "SlimeNRF_slimevrmini_p1_Tracker.uf2"},
+                  {boardname: "slimevrmini_p2_uf2/nrf52833", fileformat: "uf2", filename: "SlimeNRF_slimevrmini_p2_Tracker.uf2"},
+                  {boardname: "nrf52dk/nrf52832", fileformat: "hex", filename: "SlimeNRF_nRF52dk_Tracker.hex"},
+                  {boardname: "nrf52840dk/nrf52840", fileformat: "hex", filename: "SlimeNRF_nRF52840dk_Tracker.hex"},
+                ]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+
+      - name: 🧹 Clean Landing Site
+        run: |
+          sudo rm -rf zephyr-workspace/SlimeNRF-CI
+      - uses: actions/checkout@v4
+        with:
+          # Clone the repo to a subdirectory, so we can initialize the Zephyr
+          # workspace in the parent directory.
+          path: zephyr-workspace/SlimeNRF-CI
+
+      - name: 🧰 Install Dependencies + West
+        # Install the Zephyr host build dependencies, and the `west` Python tool. This list is from
+        # https://docs.zephyrproject.org/3.6.0/develop/getting_started/index.html#install-dependencies
+        run: |
+          sudo apt-get update && sudo apt install --no-install-recommends \
+          git \
+          cmake \
+          ninja-build \
+          gperf \
+          ccache \
+          dfu-util \
+          device-tree-compiler \
+          wget \
+          python3-dev \
+          python3-pip \
+          python3-setuptools \
+          python3-tk \
+          python3-wheel \
+          python3-venv \
+          xz-utils file \
+          make \
+          gcc \
+          gcc-multilib \
+          g++-multilib \
+          libsdl2-dev \
+          libmagic1
+
+          python3 -m venv ~/.venv
+          source ~/.venv/bin/activate
+          # insert the PATH changes the venv activate made to be present for
+          # future steps
+          echo "PATH=$PATH" >> $GITHUB_ENV
+          pip3 install west ninja
+
+      - name: 🪁 Install Zephyr SDK
+        # Fetch the Zephyr SDK from the GitHub Release artifact, unpack it and
+        # run the setup script, selecting the '-c' option to install cmake
+        # packages and the '-t arm-zephyr-eabi' option to install the toolchain
+        # only for the arm-zephyr-eabi (Cortex-M) architecture, since we don't
+        # need the other toolchains (xtensa, riscv, etc.)
+        run: |
+          wget -q https://github.com/zephyrproject-rtos/sdk-ng/releases/download/v0.17.0/zephyr-sdk-0.17.0_linux-x86_64_minimal.tar.xz
+          tar xf zephyr-sdk-0.17.0_linux-x86_64_minimal.tar.xz -C ~/
+          ~/zephyr-sdk-0.17.0/setup.sh -c -t arm-zephyr-eabi
+
+      - name: ♻️ Initialize Zephyr Workspace
+        # Set up the Zephyr workspace and install the Python dependencies
+        run: |
+          cd zephyr-workspace
+          sudo rm -rf .west
+          west init -l SlimeNRF-CI
+          west update --narrow -o=--depth=1
+          west zephyr-export
+
+      - name: 🐍 Install Python Dependencies
+        run: |
+          cd zephyr-workspace
+          pip3 install -r zephyr/scripts/requirements.txt
+
+      - name: 🔨 Build SlimeVR-Tracker-nRF - ${{ matrix.boards.boardname }}
+      # Receiver Firmware Build 
+        if: always()
+        run: |
+          cd zephyr-workspace
+          find='.dt_size\s=\sDT_REG_SIZE(DT_PARENT(node_id))}'
+          replace='.dt_size = DT_REG_SIZE(DT_PARENT(node_id))},'
+          sed -i "s/$find/$replace/g" zephyr/drivers/retained_mem/retained_mem_nrf_ram_ctrl.c
+          sudo rm -rf Releases
+          mkdir Releases
+          sudo rm -rf SlimeVR-Tracker-nRF/build
+          mkdir SlimeVR-Tracker-nRF/build
+
+          west build \
+              --board ${{ matrix.boards.boardname }} \
+              --pristine=always SlimeVR-Tracker-nRF \
+              --build-dir SlimeVR-Tracker-nRF/build \
+              -- \
+              -DNCS_TOOLCHAIN_VERSION=NONE \
+              -DBOARD_ROOT=../SlimeVR-Tracker-nRF
+
+          mv SlimeVR-Tracker-nRF/build/SlimeVR-Tracker-nRF/zephyr/zephyr.${{ matrix.boards.fileformat }} Releases/${{ matrix.boards.filename }}
+
+      - name: 💾 Upload Artifact - ${{ matrix.boards.boardname }}
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          # Artifact name
+          name: ${{ matrix.boards.filename }}
+          # A file, directory or wildcard pattern that describes what to upload
+          path: zephyr-workspace/Releases/${{ matrix.boards.filename }}
