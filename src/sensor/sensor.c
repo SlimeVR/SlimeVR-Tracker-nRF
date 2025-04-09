@@ -405,7 +405,7 @@ void sensor_fusion_invalidate(void)
 	}
 }
 
-int sensor_update_time_ms = 0;
+int sensor_update_time_ms = 6;
 
 // TODO: get rid of it.. ?
 static void set_update_time_ms(int time_ms)
@@ -626,7 +626,7 @@ void main_imu_thread(void)
 				switch (sensor_mode)
 				{
 				case SENSOR_SENSOR_MODE_LOW_NOISE:
-					set_update_time_ms(0);
+					set_update_time_ms(6);
 					LOG_INF("Switching sensors to low noise");
 					break;
 				case SENSOR_SENSOR_MODE_LOW_POWER:
