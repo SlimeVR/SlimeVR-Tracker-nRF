@@ -9,3 +9,4 @@ board:
       variants:
       - name: 'i2c'
       - name: 'spi'
+      - name: 'smspi'
