@@ -68,7 +68,8 @@ jobs:
           python3-tk \
           python3-wheel \
           python3-venv \
-          xz-utils file \
+          xz-utils \
+          file \
           make \
           gcc \
           gcc-multilib \
@@ -90,9 +91,9 @@ jobs:
         # only for the arm-zephyr-eabi (Cortex-M) architecture, since we don't
         # need the other toolchains (xtensa, riscv, etc.)
         run: |
-          wget -q https://github.com/zephyrproject-rtos/sdk-ng/releases/download/v0.17.0/zephyr-sdk-0.17.0_linux-x86_64_minimal.tar.xz
-          tar xf zephyr-sdk-0.17.0_linux-x86_64_minimal.tar.xz -C ~/
-          ~/zephyr-sdk-0.17.0/setup.sh -c -t arm-zephyr-eabi
+          wget -q https://github.com/zephyrproject-rtos/sdk-ng/releases/download/v0.17.2/zephyr-sdk-0.17.2_linux-x86_64_minimal.tar.xz
+          tar xf zephyr-sdk-0.17.2_linux-x86_64_minimal.tar.xz -C ~/
+          ~/zephyr-sdk-0.17.2/setup.sh -c -t arm-zephyr-eabi
 
       - name: 📂 Cloning Triggered Repository/Branch
         run: |
@@ -118,9 +119,6 @@ jobs:
         if: always()
         run: |
           cd zephyr-workspace
-          find='.dt_size\s=\sDT_REG_SIZE(DT_PARENT(node_id))}'
-          replace='.dt_size = DT_REG_SIZE(DT_PARENT(node_id))},'
-          sed -i "s/$find/$replace/g" zephyr/drivers/retained_mem/retained_mem_nrf_ram_ctrl.c
           sudo rm -rf Releases
           mkdir Releases
           sudo rm -rf ${{ github.event.repository.name }}/build

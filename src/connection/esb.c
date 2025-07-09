@@ -433,9 +433,6 @@ void esb_write(uint8_t *data)
 	memcpy(tx_payload.data, data, tx_payload.length);
 	esb_flush_tx(); // this will clear all transmissions even if they did not complete
 	esb_write_payload(&tx_payload); // Add transmission to queue
-#if CONFIG_SOC_NRF52840
-	connection_check_packet(tx_payload.data); // check the packet for errors as late as possible
-#endif
 	send_data = true;
 }
 
