@@ -5,6 +5,8 @@
 
 #include "battery_tracker.h"
 
+//#define DEBUG true
+
 LOG_MODULE_REGISTER(battery_tracker, LOG_LEVEL_INF);
 
 struct battery_tracker
@@ -53,7 +55,10 @@ static void reset_tracker(int16_t pptt)
 	retained->battery_runtime_sum = 0;
 	retained->battery_runtime_saved = 0;
 	retained->battery_pptt_saved = (pptt + 499) / 500 * 500;
-	LOG_DBG("Reset battery tracker, start tracking below %.2f%% (valid below %.2f%%)", (double)(retained->battery_pptt_saved - 500) / 100.0, (double)(pptt - 300) / 100.0);
+	if (pptt >= 0)
+		LOG_DBG("Reset battery tracker, start tracking below %.2f%% (valid below %.2f%%)", (double)(retained->battery_pptt_saved - 500) / 100.0, (double)(pptt - 300) / 100.0);
+	else
+		LOG_DBG("Reset battery tracker");
 }
 
 static void update_interval(int16_t pptt)
@@ -62,6 +67,11 @@ static void update_interval(int16_t pptt)
 
 	uint8_t interval_id = (pptt + 499) / 500;
 	uint64_t runtime = retained->battery_runtime_sum - retained->battery_runtime_saved;
+	if (runtime < CONFIG_SYS_CLOCK_TICKS_PER_SEC * 300)
+	{
+		LOG_ERR("Interval %u: %llu us is too short", interval_id, k_ticks_to_us_floor64(runtime));
+		return;
+	}
 
 	struct battery_tracker_interval interval;
 	sys_read(BATT_STATS_INTERVAL_0 + interval_id, &interval, sizeof(interval));
@@ -74,7 +84,7 @@ static void update_interval(int16_t pptt)
 	if (runtime > interval.runtime_max)
 		interval.runtime_max = runtime;
 	sys_write(BATT_STATS_INTERVAL_0 + interval_id, NULL, &interval, sizeof(interval));
-	LOG_DBG("Interval %u: %u cycles, %llu us (current: %llu us, min: %llu us, max: %llu us)", interval_id, interval.cycles, k_ticks_to_us_floor64(interval.runtime), k_ticks_to_us_floor64(interval.runtime_min), k_ticks_to_us_floor64(interval.runtime_max));
+	LOG_DBG("Interval %u: %u cycles, %llu us (current: %llu us, min: %llu us, max: %llu us)", interval_id, interval.cycles, k_ticks_to_us_floor64(interval.runtime), k_ticks_to_us_floor64(runtime), k_ticks_to_us_floor64(interval.runtime_min), k_ticks_to_us_floor64(interval.runtime_max));
 }
 
 static void update_tracker(int16_t pptt)
@@ -112,7 +122,9 @@ static void update_curve(void)
 	{
 		struct battery_tracker_interval interval;
 		sys_read(BATT_STATS_INTERVAL_0 + i, &interval, sizeof(interval));
+#if DEBUG
 		LOG_DBG("Interval %u: %u cycles, %llu us", i, interval.cycles, k_ticks_to_us_floor64(interval.runtime));
+#endif
 		if (interval.cycles > 0)
 		{
 			uint64_t interval_runtime = interval.runtime / interval.cycles;
@@ -154,7 +166,9 @@ static void update_curve(void)
 	{
 		runtime += intervals[i] ? intervals[i] : average_runtime;
 		curve[i] = runtime * curve_size / curve_runtime + curve_start;
-		LOG_DBG("Map %5.2f%% -> %5.2f%%, %llu us", (i + 1) * 0.5, (double)curve[i] / 100.0, k_ticks_to_us_floor64(intervals[i]));
+#if DEBUG
+		LOG_DBG("Map %5.2f%% -> %5.2f%%, %llu us", (i + 1) * 5.0, (double)curve[i] / 100.0, k_ticks_to_us_floor64(intervals[i]));
+#endif
 	}
 	k_free(intervals);
 
@@ -181,6 +195,10 @@ static int last_mV = -1;
 static int last_unplugged_mV = -1;
 static int16_t last_unplugged_pptt = -1;
 static uint64_t last_unplugged_time = 0;
+static uint64_t last_unplugged_runtime = 0;
+
+static int16_t last_saved_pptt = -1;
+static uint64_t last_saved_time = 0;
 
 void sys_update_battery_tracker_voltage(int mV, bool plugged)
 {
@@ -194,10 +212,20 @@ void sys_update_battery_tracker_voltage(int mV, bool plugged)
 
 void sys_update_battery_tracker(int16_t pptt, bool plugged)
 {
-	if (!plugged)
+	if (plugged)
+	{
+		last_saved_pptt = -1; // reset saved pptt
+	}
+	else
 	{
 		last_unplugged_pptt = pptt;
 		last_unplugged_time = k_uptime_ticks();
+		last_unplugged_runtime = retained->battery_runtime_sum;
+		if (last_saved_pptt == -1)
+		{
+			last_saved_pptt = pptt;
+			last_saved_time = k_uptime_ticks();
+		}
 	}
 
 	if (plugged && retained->min_battery_pptt >= 0) // reset tracker while plugged
@@ -233,6 +261,16 @@ void sys_update_battery_tracker(int16_t pptt, bool plugged)
 			update_statistics();
 			reset_tracker(pptt);
 		}
+		else if (last_saved_pptt != -1 && pptt < last_saved_pptt - 100 && k_uptime_ticks() - last_saved_time <= CONFIG_SYS_CLOCK_TICKS_PER_SEC * 60) // rapid "discharge" (ex. after unplugging)
+		{
+			uint64_t now = k_uptime_ticks();
+			uint64_t delta = k_ticks_to_us_floor64(now - last_saved_time);
+			LOG_INF("Abnormal change to battery SOC: %5.2f%%/min (%5.2f%% -> %5.2f%% in %llu us)", (double)(pptt - last_saved_pptt) / 100.0 / ((double)delta / 60000000), (double)last_saved_pptt / 100.0, (double)pptt / 100.0, delta);
+			update_statistics();
+			reset_tracker(pptt);
+			last_saved_pptt = pptt; // reset saved pptt
+			last_saved_time = now;
+		}
 		else
 		{
 			update_tracker(pptt);
@@ -243,14 +281,14 @@ void sys_update_battery_tracker(int16_t pptt, bool plugged)
 	retained_update();
 }
 
-static int16_t last_battery_pptt = -1;
+static int16_t last_pptt = -1;
 static int16_t last_calibrated_battery_pptt = -1;
 
 int16_t sys_get_calibrated_battery_pptt(int16_t pptt)
 {
-	if (pptt == last_battery_pptt)
+	if (pptt == last_pptt)
 		return last_calibrated_battery_pptt;
-	last_battery_pptt = pptt;
+	last_pptt = pptt;
 	last_calibrated_battery_pptt = apply_curve(pptt);
 	return last_calibrated_battery_pptt;
 }
@@ -286,7 +324,9 @@ uint64_t sys_get_battery_runtime_estimate(void)
 	{
 		struct battery_tracker_interval interval;
 		sys_read(BATT_STATS_INTERVAL_0 + i, &interval, sizeof(interval));
+#if DEBUG
 		LOG_DBG("Interval %u: %u cycles, %llu us", i, interval.cycles, k_ticks_to_us_floor64(interval.runtime));
+#endif
 		if (interval.cycles > 0)
 		{
 			runtime += interval.runtime / interval.cycles;
@@ -312,7 +352,9 @@ uint64_t sys_get_battery_runtime_min_estimate(void)
 	{
 		struct battery_tracker_interval interval;
 		sys_read(BATT_STATS_INTERVAL_0 + i, &interval, sizeof(interval));
+#if DEBUG
 		LOG_DBG("Interval %u min: %llu us", i, k_ticks_to_us_floor64(interval.runtime_min));
+#endif
 		if (interval.cycles > 0)
 		{
 			runtime += interval.runtime_min;
@@ -338,7 +380,9 @@ uint64_t sys_get_battery_runtime_max_estimate(void)
 	{
 		struct battery_tracker_interval interval;
 		sys_read(BATT_STATS_INTERVAL_0 + i, &interval, sizeof(interval));
+#if DEBUG
 		LOG_DBG("Interval %u max: %llu us", i, k_ticks_to_us_floor64(interval.runtime_max));
+#endif
 		if (interval.cycles > 0)
 		{
 			runtime += interval.runtime_max;
@@ -357,6 +401,9 @@ uint64_t sys_get_battery_runtime_max_estimate(void)
 
 uint64_t sys_get_battery_remaining_time_estimate(void)
 {
+	if (last_unplugged_runtime <= CONFIG_SYS_CLOCK_TICKS_PER_SEC * 60) // pptt may not be valid yet
+		return 0; // no valid pptt
+
 	uint64_t runtime = sys_get_battery_runtime_estimate();
 	if (runtime == 0)
 		return 0; // no valid runtime
@@ -380,7 +427,9 @@ float sys_get_battery_cycles(void)
 	{
 		struct battery_tracker_interval interval;
 		sys_read(BATT_STATS_INTERVAL_0 + i, &interval, sizeof(interval));
+#if DEBUG
 		LOG_DBG("Interval %u: %u cycles, %llu us", i, interval.cycles, k_ticks_to_us_floor64(interval.runtime));
+#endif
 		cycles += interval.cycles;
 	}
 

@@ -99,7 +99,7 @@ static int divider_setup(void) {
 		.channels = BIT(0),
 		.buffer = &ddp->raw,
 		.buffer_size = sizeof(ddp->raw),
-		.oversampling = 4,
+		.oversampling = 7, // TODO: using R3 board, ADC is very noisy, are other boards okay?
 		.calibrate = true,
 	};
 
@@ -125,7 +125,7 @@ static int divider_setup(void) {
 	*accp = (struct adc_channel_cfg){
 		.gain = battery_adc_gain,
 		.reference = ADC_REF_INTERNAL,
-		.acquisition_time = ADC_ACQ_TIME(ADC_ACQ_TIME_MICROSECONDS, 40),
+		.acquisition_time = ADC_ACQ_TIME(ADC_ACQ_TIME_MICROSECONDS, 3),
 	};
 
 	if (cfg->output_ohm != 0) {
@@ -133,6 +133,11 @@ static int divider_setup(void) {
 							 + iocp->channel;
 	} else {
 		accp->input_positive = 9;  // SAADC_CH_PSELP_PSELP_VDD
+	}
+
+	if (iocp->channel == 12) { // VDDHDIV5
+		asp->oversampling = 2;
+		accp->acquisition_time = ADC_ACQ_TIME(ADC_ACQ_TIME_MICROSECONDS, 10);
 	}
 
 	asp->resolution = 14;
