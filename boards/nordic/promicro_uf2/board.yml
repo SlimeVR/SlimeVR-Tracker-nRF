@@ -1,6 +1,9 @@
 # Copyright (c) 2024 Nordic Semiconductor ASA
 # SPDX-License-Identifier: Apache-2.0
 
+# The 'smspi' board variant is targeted promico stack with the SM-ICM45686-AK09940A 
+# where ICM is on SPI, AK is on I2C, external clock disabled.
+
 board:
   name: promicro_uf2
   vendor: nordic
