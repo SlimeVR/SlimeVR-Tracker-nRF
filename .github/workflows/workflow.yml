@@ -46,7 +46,7 @@ jobs:
       - name: 🧹 Clean Landing Site
         run: |
           sudo rm -rf zephyr-workspace/SlimeNRF-CI
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           # Clone the repo to a subdirectory, so we can initialize the Zephyr
           # workspace in the parent directory.
