@@ -2,8 +2,8 @@
 # SPDX-License-Identifier: Apache-2.0
 
 board:
-  name: mochi_uf2
-  vendor: mocha-elec
+  name: kawazu_uf2
+  vendor: nekumori
   socs:
     - name: nrf52833
 
