@@ -24,9 +24,9 @@ jobs:
         boards:
           [
             {
-              boardname: "kawazu_uf2/nrf52833/nekumori",
+              boardname: "kawazu_uf2/nrf52833",
               fileformat: "uf2",
-              filename: "Nekumori_Kawazu_Tracker",
+              filename: "Kawazu_Tracker",
             },
             {
               boardname: "promicro_uf2/nrf52840/chrysalis",
