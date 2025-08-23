@@ -15,7 +15,7 @@
 
 	pwm0_sleep: pwm0_sleep {
 		group1 {
-			psels = <NRF_PSEL(PWM_OUT0, 0, 30)>; // Red
+			psels = <NRF_PSEL(PWM_OUT0, 0, 0)>; // Pink
 			low-power-enable;
 		};
 	};
@@ -78,7 +78,6 @@
 	aliases {
 		sw0 = &button0;
 		pwm-led0 = &pwm_led0;
-		pwm-led1 = &pwm_led1;
 		led0 = &led0;
 		led1 = &led1;
 	};
