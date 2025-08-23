@@ -21,29 +21,22 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        boards: [
-                  {boardname: "promicro_uf2/nrf52840/i2c", fileformat: "uf2", filename: "SlimeNRF_ProMicro_I2C_Tracker"},
-                  {boardname: "promicro_uf2/nrf52840/spi", fileformat: "uf2", filename: "SlimeNRF_ProMicro_SPI_Tracker"},
-                  {boardname: "promicro_uf2/nrf52840/smspi", fileformat: "uf2", filename: "SlimeNRF_ProMicro_smSPI_Tracker"},
-                  {boardname: "promicro_uf2/nrf52840/chrysalis", fileformat: "uf2", filename: "SlimeNRF_ProMicro_Chrysalis_Tracker"},
-                  {boardname: "xiao_ble/nrf52840", fileformat: "uf2", filename: "SlimeNRF_XIAO_Tracker"},
-                  {boardname: "xiao_ble/nrf52840/sense", fileformat: "uf2", filename: "SlimeNRF_XIAO_Sense_Tracker"},
-                  {boardname: "slimenrf_r1/nrf52840", fileformat: "hex", filename: "SlimeNRF_slimenrf_r1_Tracker"},
-                  {boardname: "slimenrf_r2/nrf52832", fileformat: "hex", filename: "SlimeNRF_slimenrf_r2_Tracker"},
-                  {boardname: "slimenrf_r3/nrf52840/uf2", fileformat: "uf2", filename: "SlimeNRF_slimenrf_r3_Tracker"},
-                  {boardname: "slimevrmini_p1_uf2/nrf52833", fileformat: "uf2", filename: "SlimeNRF_slimevrmini_p1_Tracker"},
-                  {boardname: "slimevrmini_p2_uf2/nrf52833", fileformat: "uf2", filename: "SlimeNRF_slimevrmini_p2_Tracker"},
-                  {boardname: "slimevrmini_p3r6_uf2/nrf52833", fileformat: "uf2", filename: "SlimeNRF_slimevrmini_p3_r6_Tracker"},
-                  {boardname: "slimevrmini_p3r7_uf2/nrf52833", fileformat: "uf2", filename: "SlimeNRF_slimevrmini_p3_r7_Tracker"},
-                  {boardname: "slimevrmini_p4_uf2/nrf52833", fileformat: "uf2", filename: "SlimeNRF_slimevrmini_p4r8_Tracker"},
-                  {boardname: "slimevrmini_p4r9_uf2/nrf52833", fileformat: "uf2", filename: "SlimeNRF_slimevrmini_p4r9_Tracker"},
-                  {boardname: "nrf52dk/nrf52832", fileformat: "hex", filename: "SlimeNRF_nRF52dk_Tracker"},
-                  {boardname: "nrf52840dk/nrf52840", fileformat: "hex", filename: "SlimeNRF_nRF52840dk_Tracker"},
-                ]
+        boards:
+          [
+            {
+              boardname: "kawazu_uf2/nrf52833/nekumori",
+              fileformat: "uf2",
+              filename: "Nekumori_Kawazu_Tracker",
+            },
+            {
+              boardname: "promicro_uf2/nrf52840/chrysalis",
+              fileformat: "uf2",
+              filename: "SlimeNRF_ProMicro_Chrysalis_Tracker",
+            },
+          ]
     if: always()
     runs-on: ubuntu-latest
     steps:
-
       - name: 🧹 Clean Landing Site
         run: |
           sudo rm -rf zephyr-workspace/SlimeNRF-CI
@@ -119,7 +112,7 @@ jobs:
           pip3 install -r zephyr/scripts/requirements.txt
 
       - name: 🔨 Build SlimeVR-Tracker-nRF - ${{ matrix.boards.boardname }}
-      # Receiver Firmware Build 
+        # Receiver Firmware Build
         if: always()
         run: |
           cd zephyr-workspace

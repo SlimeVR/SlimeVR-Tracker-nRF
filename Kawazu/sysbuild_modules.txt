@@ -1,0 +1,2 @@
+"nrf":"C:/ncs/v2.9.0/nrf":"C:/ncs/v2.9.0/nrf/sysbuild"
+"mcuboot":"C:/ncs/v2.9.0/bootloader/mcuboot":"C:/ncs/v2.9.0/bootloader/mcuboot/boot/zephyr/sysbuild"

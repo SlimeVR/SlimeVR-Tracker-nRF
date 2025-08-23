@@ -1,0 +1,2 @@
+# Load Sysbuild board Kconfig descriptions.
+osource "C:/Users/dqmag/SlimeVR-Tracker-nRF/boards/nekumori/kawazu/Kconfig.sysbuild"
