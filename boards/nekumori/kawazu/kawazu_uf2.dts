@@ -60,10 +60,10 @@
 	leds {
 		compatible = "gpio-leds";
 		led0: led_0 {
-			gpios = <&gpio0 0 GPIO_OPEN_SOURCE>;
+			gpios = <&gpio0 0 GPIO_ACTIVE_LOW>;
 		};
 		led1: led_1 {
-			gpios = <&gpio0 30 GPIO_OPEN_SOURCE>;
+			gpios = <&gpio0 30 GPIO_ACTIVE_LOW>;
 		};
 	};
 
@@ -96,14 +96,14 @@
 		//chg-en-gpios = <&gpio0 29 (GPIO_ACTIVE_HIGH | GPIO_PULL_UP)>;
 		//stby-gpios = <&gpio0 29 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>;
 		clk-gpios = <&gpio0 31 (GPIO_OPEN_DRAIN)>;
-		led0-gpios = <&gpio0 0 (GPIO_OPEN_SOURCE)>;
-		led1-gpios = <&gpio0 30 (GPIO_OPEN_SOURCE)>;
+		led0-gpios = <&gpio0 0 (GPIO_ACTIVE_LOW)>;
+		led1-gpios = <&gpio0 30 (GPIO_ACTIVE_LOW)>;
 	};
 
 };
 
 &reg1 {
-	regulator-initial-mode = <NRF5X_REG_MODE_DCDC>;
+	regulator-initial-mode = <NRF5X_REG_MODE_LDO>;
 };
 
 &adc {
