@@ -65,7 +65,6 @@
 		led1: led_1 {
 			gpios = <&gpio0 30 GPIO_OPEN_SOURCE>;
 		};
-		};
 	};
 
 	buttons {
