@@ -85,7 +85,7 @@
 	battery-divider {
 		compatible = "voltage-divider";
 		status = "okay";
-		io-channels = <&adc 5>;
+		io-channels = <&adc 4>;
 		output-ohms = <4220000>;
 		full-ohms = <(5600000+4220000)>;
 	};
