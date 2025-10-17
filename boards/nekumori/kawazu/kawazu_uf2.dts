@@ -91,7 +91,7 @@
 	};
 
 	zephyr,user {
-		int0-gpios = <&gpio0 1 5>;
+		int0-gpios = <&gpio0 15 0>;
 		//chg-gpios = <&gpio0 29 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>;
 		//chg-en-gpios = <&gpio0 29 (GPIO_ACTIVE_HIGH | GPIO_PULL_UP)>;
 		//stby-gpios = <&gpio0 29 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>;
