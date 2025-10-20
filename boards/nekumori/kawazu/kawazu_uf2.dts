@@ -8,14 +8,14 @@
 &pinctrl {
 	pwm0_default: pwm0_default {
 		group1 {
-			psels = <NRF_PSEL(PWM_OUT0, 0, 20)>; // Pink
+			psels = <NRF_PSEL(PWM_OUT0, 20)>; // Pink
 			nordic,drive-mode = <NRF_DRIVE_D0S1>;
 		};
 	};
 
 	pwm0_sleep: pwm0_sleep {
 		group1 {
-			psels = <NRF_PSEL(PWM_OUT0, 0, 20)>; // Pink
+			psels = <NRF_PSEL(PWM_OUT0, 20)>; // Pink
 			low-power-enable;
 		};
 	};
