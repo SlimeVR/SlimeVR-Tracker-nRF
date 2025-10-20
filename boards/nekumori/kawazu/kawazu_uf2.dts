@@ -62,9 +62,6 @@
 		led0: led_0 {
 			gpios = <&gpio0 20 GPIO_ACTIVE_LOW>;
 		};
-		led1: led_1 {
-			gpios = <&gpio0 30 GPIO_ACTIVE_LOW>;
-		};
 	};
 
 	buttons {
@@ -79,7 +76,6 @@
 		sw0 = &button0;
 		pwm-led0 = &pwm_led0;
 		led0 = &led0;
-		led1 = &led1;
 	};
 
 	battery-divider {
