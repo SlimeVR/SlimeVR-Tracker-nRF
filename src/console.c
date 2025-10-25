@@ -5,6 +5,7 @@
 #include "sensor/calibration.h"
 #include "connection/esb.h"
 #include "build_defines.h"
+#include "parse_args.h"
 
 #if CONFIG_USB_DEVICE_STACK
 #define USB DT_NODELABEL(usbd)
@@ -24,7 +25,7 @@
 #include <zephyr/sys/base64.h>
 
 #include <ctype.h>
-#include <stdlib.h>
+//#include <stdlib.h>
 
 LOG_MODULE_REGISTER(console, LOG_LEVEL_INF);
 
@@ -318,6 +319,12 @@ static void print_meow(void)
 	printk("%s%s%s\n", meows[meow], meow_punctuations[punctuation], meow_suffixes[suffix]);
 }
 
+static inline void strtolower(char *str) {
+	for(int i = 0; str[i]; i++) {
+		str[i] = tolower(str[i]);
+	}
+}
+
 static void console_thread(void)
 {
 #if USB_EXISTS && DFU_EXISTS
@@ -348,152 +355,141 @@ static void console_thread(void)
 	printk("scan                         Restart sensor scan\n");
 	printk("calibrate                    Calibrate sensor ZRO\n");
 
-	uint8_t command_info[] = "info";
-	uint8_t command_uptime[] = "uptime";
-	uint8_t command_reboot[] = "reboot";
-	uint8_t command_battery[] = "battery";
-	uint8_t command_scan[] = "scan";
-	uint8_t command_calibrate[] = "calibrate";
+	const char command_info[] = "info";
+	const char command_uptime[] = "uptime";
+	const char command_reboot[] = "reboot";
+	const char command_battery[] = "battery";
+	const char command_scan[] = "scan";
+	const char command_calibrate[] = "calibrate";
 
 #if CONFIG_SENSOR_USE_6_SIDE_CALIBRATION
 	printk("6-side                       Calibrate 6-side accelerometer\n");
 
-	uint8_t command_6_side[] = "6-side";
+	const char command_6_side[] = "6-side";
 #endif
 
 #if SENSOR_MAG_EXISTS
 	printk("mag                          Clear magnetometer calibration\n");
 
-	uint8_t command_mag[] = "mag";
+	const char command_mag[] = "mag";
 #endif
 
 	printk("set <address>                Manually set receiver\n");
 	printk("pair                         Enter pairing mode\n");
 	printk("clear                        Clear pairing data\n");
 
-	uint8_t command_set[] = "set";
-	uint8_t command_pair[] = "pair";
-	uint8_t command_clear[] = "clear";
+	const char command_set[] = "set";
+	const char command_pair[] = "pair";
+	const char command_clear[] = "clear";
 
 #if DFU_EXISTS
 	printk("dfu                          Enter DFU bootloader\n");
 
-	uint8_t command_dfu[] = "dfu";
+	const char command_dfu[] = "dfu";
 #endif
 
 	printk("meow                         Meow!\n");
 
-	uint8_t command_meow[] = "meow";
+	const char command_meow[] = "meow";
 
 	// debug
-	uint8_t command_reset[] = "reset";
-	uint8_t command_reset_arg_zro[] = "zro";
+	const char command_reset[] = "reset";
+	const char command_reset_arg_zro[] = "zro";
 #if CONFIG_SENSOR_USE_6_SIDE_CALIBRATION
-	uint8_t command_reset_arg_acc[] = "acc";
+	const char command_reset_arg_acc[] = "acc";
 #endif
 #if SENSOR_MAG_EXISTS
-	uint8_t command_reset_arg_mag[] = "mag";
+	const char command_reset_arg_mag[] = "mag";
 #endif
-	uint8_t command_reset_arg_bat[] = "bat";
-	uint8_t command_reset_arg_all[] = "all";
+	const char command_reset_arg_bat[] = "bat";
+	const char command_reset_arg_all[] = "all";
 
 	// settings
-	uint8_t command_write[] = "write";
-	uint8_t command_read[] = "read";
-	uint8_t command_wr_arg_byte[] = "byte";
-	uint8_t command_wr_arg_word[] = "word";
-	uint8_t command_wr_arg_all[] = "all";
+	const char command_write[] = "write";
+	const char command_read[] = "read";
+	const char command_wr_arg_byte[] = "byte";
+	const char command_wr_arg_word[] = "word";
+	const char command_wr_arg_all[] = "all";
 
 	while (1) {
 #if USB_EXISTS
-		uint8_t *line = console_getline();
+		char *line = console_getline();
 #else
-		uint8_t *line = rtt_console_getline();
+		char *line = rtt_console_getline();
 #endif
-		// TODO: currently allow up to 4 args
-		uint8_t *arg[4] = {NULL};
-		uint8_t args = 0;
-		for (uint8_t *p = line; *p; ++p)
-		{
-			if (args < 2) // only care that the first words are matchable
-				*p = tolower(*p);
-			if (*p == ' ' && args < 4)
-			{
-				*p = 0;
-				p++;
-				if (args < 1)
-					*p = tolower(*p);
-				if (*p)
-				{
-					arg[args] = p;
-					args++;
-				}
-			}
-		}
+		char* argv[5] = {NULL}; // command and 4 args
+		size_t argc = parse_args(line, argv, ARRAY_SIZE(argv));
+		if(argc == 0)
+			continue;
+		if(argc > 0)
+			strtolower(argv[0]); // lower case the command
+		if(argc > 1)
+			strtolower(argv[1]); // lower case the first argument
+		// only care that the first words are matchable
 
-		if (memcmp(line, command_info, sizeof(command_info)) == 0)
+		if (strcmp(argv[0], command_info) == 0)
 		{
 			print_info();
 		}
-		else if (memcmp(line, command_uptime, sizeof(command_uptime)) == 0)
+		else if (strcmp(argv[0], command_uptime) == 0)
 		{
 			uint64_t uptime = k_uptime_ticks();
 			print_uptime(uptime, "Uptime");
 			print_uptime(uptime - retained->uptime_latest + retained->uptime_sum, "Accumulated");
 		}
-		else if (memcmp(line, command_reboot, sizeof(command_reboot)) == 0)
+		else if (strcmp(argv[0], command_reboot) == 0)
 		{
 			sys_request_system_reboot(false);
 		}
-		else if (memcmp(line, command_battery, sizeof(command_battery)) == 0)
+		else if (strcmp(argv[0], command_battery) == 0)
 		{
 			print_battery_tracker();
 		}
-		else if (memcmp(line, command_scan, sizeof(command_scan)) == 0)
+		else if (strcmp(argv[0], command_scan) == 0)
 		{
 			sensor_request_scan(true);
 		}
-		else if (memcmp(line, command_calibrate, sizeof(command_calibrate)) == 0)
+		else if (strcmp(argv[0], command_calibrate) == 0)
 		{
 			sensor_request_calibration();
 		}
 #if CONFIG_SENSOR_USE_6_SIDE_CALIBRATION
-		else if (memcmp(line, command_6_side, sizeof(command_6_side)) == 0)
+		else if (strcmp(argv[0], command_6_side) == 0)
 		{
 			sensor_request_calibration_6_side();
 		}
 #endif
 #if SENSOR_MAG_EXISTS
-		else if (memcmp(line, command_mag, sizeof(command_mag)) == 0)
+		else if (strcmp(argv[0], command_mag) == 0)
 		{
 			sensor_calibration_clear_mag(NULL, true);
 		}
 #endif
-		else if (memcmp(line, command_set, sizeof(command_set)) == 0) 
+		else if (strcmp(argv[0], command_set) == 0) 
 		{
-			if (args != 1)
+			if (argc != 2)
 			{
 				printk("Invalid number of arguments\n");
 				continue;
 			}
-			uint64_t addr = strtoull(arg[0], NULL, 16);
+			uint64_t addr = parse_u64(argv[1], 16);
 			uint8_t buf[17];
 			snprintk(buf, 17, "%016llx", addr);
-			if (addr != 0 && memcmp(buf, arg[0], 17) == 0)
+			if (addr != 0 && strcmp(buf, argv[1]) == 0)
 				esb_set_pair(addr);
 			else
 				printk("Invalid address\n");
 		}
-		else if (memcmp(line, command_pair, sizeof(command_pair)) == 0) 
+		else if (strcmp(argv[0], command_pair) == 0) 
 		{
 			esb_reset_pair();
 		}
-		else if (memcmp(line, command_clear, sizeof(command_clear)) == 0) 
+		else if (strcmp(argv[0], command_clear) == 0) 
 		{
 			esb_clear_pair();
 		}
 #if DFU_EXISTS
-		else if (memcmp(line, command_dfu, sizeof(command_dfu)) == 0)
+		else if (strcmp(argv[0], command_dfu) == 0)
 		{
 #if ADAFRUIT_BOOTLOADER
 			NRF_POWER->GPREGRET = 0x57;
@@ -504,37 +500,37 @@ static void console_thread(void)
 #endif
 		}
 #endif
-		else if (memcmp(line, command_meow, sizeof(command_meow)) == 0) 
+		else if (strcmp(argv[0], command_meow) == 0) 
 		{
 			print_meow();
 		}
-		else if (memcmp(line, command_reset, sizeof(command_reset)) == 0)
+		else if (strcmp(argv[0], command_reset) == 0)
 		{
-			if (args != 1)
+			if (argc != 2)
 			{
 				printk("Invalid number of arguments\n");
 			}
-			else if (memcmp(arg[0], command_reset_arg_zro, sizeof(command_reset_arg_zro)) == 0)
+			else if (strcmp(argv[1], command_reset_arg_zro) == 0)
 			{
 				sensor_calibration_clear(NULL, NULL, true);
 			}
 #if CONFIG_SENSOR_USE_6_SIDE_CALIBRATION
-			else if (memcmp(arg[0], command_reset_arg_acc, sizeof(command_reset_arg_acc)) == 0)
+			else if (strcmp(argv[1], command_reset_arg_acc) == 0)
 			{
 				sensor_calibration_clear_6_side(NULL, true);
 			}
 #endif
 #if SENSOR_MAG_EXISTS
-			else if (memcmp(arg[0], command_reset_arg_mag, sizeof(command_reset_arg_mag)) == 0)
+			else if (strcmp(argv[1], command_reset_arg_mag) == 0)
 			{
 				sensor_calibration_clear_mag(NULL, true);
 			}
 #endif
-			else if (memcmp(arg[0], command_reset_arg_bat, sizeof(command_reset_arg_bat)) == 0)
+			else if (strcmp(argv[1], command_reset_arg_bat) == 0)
 			{
 				sys_reset_battery_tracker();
 			}
-			else if (memcmp(arg[0], command_reset_arg_all, sizeof(command_reset_arg_all)) == 0)
+			else if (strcmp(argv[1], command_reset_arg_all) == 0)
 			{
 				sys_clear();
 			}
@@ -543,15 +539,15 @@ static void console_thread(void)
 				printk("Invalid argument\n");
 			}
 		}
-		else if (memcmp(line, command_write, sizeof(command_write)) == 0) 
+		else if (strcmp(argv[0], command_write) == 0) 
 		{
-			if (args == 0)
+			if (argc == 1)
 			{
 				printk("Invalid number of arguments\n");
 			}
-			else if (memcmp(arg[0], command_wr_arg_all, sizeof(command_wr_arg_all)) == 0)
+			else if (strcmp(argv[1], command_wr_arg_all) == 0)
 			{
-				if (args != 2)
+				if (argc != 3)
 				{
 					printk("Invalid number of arguments\n");
 				}
@@ -559,22 +555,22 @@ static void console_thread(void)
 				{
 					uint8_t *tmp = k_malloc(128);
 					uint16_t len = 0;
-					int err = base64_decode(tmp, 128, (size_t *)&len, arg[1], 172);
+					int err = base64_decode(tmp, 128, (size_t *)&len, argv[2], 172);
 					printk("decode: %d, len %d\n", err, len);
 					memcpy(retained->settings, tmp, sizeof(retained->settings));
 					sys_write(SETTINGS_ID, NULL, retained->settings, sizeof(retained->settings));
 					k_free(tmp);
 				}
 			}
-			else if (args != 3)
+			else if (argc != 4)
 			{
 				printk("Invalid number of arguments\n");
 			}
 			else
 			{
-				uint64_t addr = strtoull(arg[1], NULL, 16);
-				uint64_t val = strtoull(arg[2], NULL, 10);
-				if (memcmp(arg[0], command_wr_arg_byte, sizeof(command_wr_arg_byte)) == 0)
+				uint64_t addr = parse_u64(argv[2], 16);
+				uint64_t val = parse_u64(argv[3], 10);
+				if (strcmp(argv[1], command_wr_arg_byte) == 0)
 				{
 					if (addr < 128)
 					{
@@ -594,7 +590,7 @@ static void console_thread(void)
 						printk("Invalid address\n");
 					}
 				}
-				else if (memcmp(arg[0], command_wr_arg_word, sizeof(command_wr_arg_word)) == 0)
+				else if (strcmp(argv[1], command_wr_arg_word) == 0)
 				{
 					if (addr < 127)
 					{
@@ -616,15 +612,15 @@ static void console_thread(void)
 				}
 			}
 		}
-		else if (memcmp(line, command_read, sizeof(command_read)) == 0) 
+		else if (strcmp(line, command_read) == 0) 
 		{
-			if (args == 0)
+			if (argc == 1)
 			{
 				printk("Invalid number of arguments\n");
 			}
-			else if (memcmp(arg[0], command_wr_arg_all, sizeof(command_wr_arg_all)) == 0)
+			else if (strcmp(argv[1], command_wr_arg_all) == 0)
 			{
-				if (args != 1)
+				if (argc != 2)
 				{
 					printk("Invalid number of arguments\n");
 				}
@@ -638,15 +634,15 @@ static void console_thread(void)
 					k_free(tmp);
 				}
 			}
-			else if (args != 2)
+			else if (argc != 3)
 			{
 				printk("Invalid number of arguments\n");
 			}
 			else
 			{
-				uint64_t addr = strtoull(arg[1], NULL, 16);
+				uint64_t addr = parse_u64(argv[2], 16);
 				uint64_t val = 0;
-				if (memcmp(arg[0], command_wr_arg_byte, sizeof(command_wr_arg_byte)) == 0)
+				if (strcmp(argv[1], command_wr_arg_byte) == 0)
 				{
 					if (addr < 128)
 					{
@@ -665,7 +661,7 @@ static void console_thread(void)
 						printk("Invalid address\n");
 					}
 				}
-				else if (memcmp(arg[0], command_wr_arg_word, sizeof(command_wr_arg_word)) == 0)
+				else if (strcmp(argv[1], command_wr_arg_word) == 0)
 				{
 					if (addr < 127)
 					{
