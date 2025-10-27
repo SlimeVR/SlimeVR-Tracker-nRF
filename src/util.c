@@ -58,15 +58,15 @@ void q_negate(const float* q, float* out) {
 	out[3] = -q[3];
 }
 
-float q_diff_mag(const float* x, const float* y) {
-	float z[4];
-	float q[4];
-	q_conj(x, z);
-	q_multiply(z, y, q);
-	if (q[0] > 1) {
+float q_diff_mag(const float *x, const float *y)
+{
+	/* same as quatmultiply(quatconj(x), y, z), where s is scalar of z
+	 * to handle possible inverted quaternions, it should be enough to make sure s is positive
+	 */
+	float s = fabsf(x[0]*y[0] + x[1]*y[1] + x[2]*y[2] + x[3]*y[3]);
+	if (s > 1)
 		return 0;
-	}
-	return fabsf(2 * acosf(q[0]));
+	return 2 * acosf(s);
 }
 
 void v_rotate(const float* v, const float* q, float* out)  // TODO: not the most optimal
@@ -89,15 +89,12 @@ float v_diff_mag(const float* a, const float* b) {
 	return sqrtf(x * x + y * y + z * z);
 }
 
-bool q_epsilon(const float* x, const float* y, float eps) {
-	float z[4];
-	float q[4];
-	q_conj(x, z);
-	q_multiply(z, y, q);
-	if (q[0] > 1) {
+bool q_epsilon(const float *x, const float *y, float eps)
+{
+	float s = fabsf(x[0]*y[0] + x[1]*y[1] + x[2]*y[2] + x[3]*y[3]);
+	if (s > 1)
 		return true;
-	}
-	return fabsf(2 * acosf(q[0])) < eps;
+	return (2 * acosf(s)) < eps;
 }
 
 bool v_epsilon(const float* a, const float* b, float eps) {
