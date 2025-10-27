@@ -6,9 +6,9 @@
 // https://www.st.com/resource/en/datasheet/lsm6dsv.pdf
 #define LSM6DSV_IF_CFG                     0x03
 
-#define LSM6DSV_FIFO_CTRL1                 0x07
 #define LSM6DSV_FIFO_CTRL3                 0x09
 #define LSM6DSV_FIFO_CTRL4                 0x0A
+#define LSM6DSV_COUNTER_BDR_REG1           0x0B
 
 #define LSM6DSV_INT1_CTRL                  0x0D
 

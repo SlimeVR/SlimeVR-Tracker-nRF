@@ -4,9 +4,9 @@
 #include "sensor/sensor.h"
 
 // https://www.st.com/resource/en/datasheet/lsm6dso.pdf
-#define LSM6DSO_FIFO_CTRL1                 0x07
 #define LSM6DSO_FIFO_CTRL3                 0x09
 #define LSM6DSO_FIFO_CTRL4                 0x0A
+#define LSM6DSO_COUNTER_BDR_REG1           0x0B
 
 #define LSM6DSO_INT1_CTRL                  0x0D
 
@@ -70,7 +70,6 @@ int lsm6dso_update_odr(float accel_time, float gyro_time, float *accel_actual_ti
 
 uint16_t lsm6dso_fifo_read(uint8_t *data, uint16_t len);
 
-uint8_t lsm6dso_setup_DRDY(uint16_t threshold);
 uint8_t lsm6dso_setup_WOM(void);
 
 int lsm6dso_ext_setup(void);

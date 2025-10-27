@@ -405,10 +405,14 @@ float lsm_temp_read(void)
 	return temp;
 }
 
+// TODO: does RST_COUNTER_BDR need to be set after every trigger?
 uint8_t lsm_setup_DRDY(uint16_t threshold)
 {
-	int err = ssi_reg_write_byte(SENSOR_INTERFACE_DEV_IMU, LSM6DSV_FIFO_CTRL1, threshold & 0xFF);
-	err |= ssi_reg_write_byte(SENSOR_INTERFACE_DEV_IMU, LSM6DSV_INT1_CTRL, 0x08); // FIFO threshold interrupt
+	uint8_t buf[2];
+	buf[0] = ((threshold >> 8) & 0x03) | (last_gyro_odr > last_accel_odr ? 0x20 : 0x00); // use gyro for BDR if gyro rate is higher // NOTE: using 0x03 for DSV, but DSO allows 0x07
+	buf[1] = threshold & 0xFF;
+	int err = ssi_burst_write(SENSOR_INTERFACE_DEV_IMU, LSM6DSV_COUNTER_BDR_REG1, buf, 2);
+	err |= ssi_reg_write_byte(SENSOR_INTERFACE_DEV_IMU, LSM6DSV_INT1_CTRL, 0x40); // COUNTER_BDR interrupt
 	if (err)
 		LOG_ERR("Communication error");
 	return NRF_GPIO_PIN_PULLUP << 4 | NRF_GPIO_PIN_SENSE_LOW; // active low

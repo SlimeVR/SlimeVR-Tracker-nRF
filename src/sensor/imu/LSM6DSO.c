@@ -299,18 +299,6 @@ uint16_t lsm6dso_fifo_read(uint8_t *data, uint16_t len)
 	return total;
 }
 
-uint8_t lsm6dso_setup_DRDY(uint16_t threshold)
-{
-	uint8_t buf[2];
-	buf[0] = threshold & 0xFF;
-	buf[1] = (threshold >> 8) & 0x01;
-	int err = ssi_burst_write(SENSOR_INTERFACE_DEV_IMU, LSM6DSO_FIFO_CTRL1, buf, 2);
-	err |= ssi_reg_write_byte(SENSOR_INTERFACE_DEV_IMU, LSM6DSO_INT1_CTRL, 0x08); // FIFO threshold interrupt
-	if (err)
-		LOG_ERR("Communication error");
-	return NRF_GPIO_PIN_PULLUP << 4 | NRF_GPIO_PIN_SENSE_LOW; // active low
-}
-
 uint8_t lsm6dso_setup_WOM(void)
 { // TODO: should be off by the time WOM will be setup
 //	ssi_reg_write_byte(SENSOR_INTERFACE_DEV_IMU, LSM6DSO_CTRL1, ODR_OFF); // set accel off
@@ -439,7 +427,7 @@ const sensor_imu_t sensor_imu_lsm6dso = {
 	*lsm_gyro_read,
 	*lsm_temp_read,
 
-	*lsm6dso_setup_DRDY,
+	*lsm_setup_DRDY,
 	*lsm6dso_setup_WOM,
 	
 	*lsm6dso_ext_setup,
