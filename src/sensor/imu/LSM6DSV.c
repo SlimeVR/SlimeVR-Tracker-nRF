@@ -405,7 +405,6 @@ float lsm_temp_read(void)
 	return temp;
 }
 
-// TODO: does RST_COUNTER_BDR need to be set after every trigger?
 uint8_t lsm_setup_DRDY(uint16_t threshold)
 {
 	uint8_t buf[2];
