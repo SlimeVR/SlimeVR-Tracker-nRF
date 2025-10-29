@@ -36,7 +36,7 @@ enum sys_led_pattern {
 
 	SYS_LED_PATTERN_OFF, // yield to lower priority patterns
 	SYS_LED_PATTERN_ON,																// Default | indicates busy
-	SYS_LED_PATTERN_SHORT, // 100ms on 900ms off									// Default | indicates waiting (pairing)
+	SYS_LED_PATTERN_SHORT, // Two rapid blue fades per second							// Pairing mode search
 	SYS_LED_PATTERN_LONG, // 500ms on 500ms off										// Default | indicates waiting
 	SYS_LED_PATTERN_FLASH, // 200ms on 200ms off									// Default | indicates readiness
 
@@ -46,8 +46,8 @@ enum sys_led_pattern {
 	SYS_LED_PATTERN_ONESHOT_COMPLETE, // 200ms on 200ms off, 4 times				// Success
 
 	SYS_LED_PATTERN_ON_PERSIST, // 20% duty cycle									// Success | indicates charged
-	SYS_LED_PATTERN_LONG_PERSIST, // 20% duty cycle, 500ms on 500ms off				// Charging| indicates low battery
-	SYS_LED_PATTERN_PULSE_PERSIST, // 5000ms pulsing								// Charging| indicates charging
+	SYS_LED_PATTERN_LONG_PERSIST, // 20% duty cycle, 500ms on 500ms off				// Low battery
+	SYS_LED_PATTERN_PULSE_PERSIST, // 5000ms pulsing								// Charging
 	SYS_LED_PATTERN_ACTIVE_PERSIST, // 300ms on 9700ms off							// Default | indicates normal operation
 
 	SYS_LED_PATTERN_ERROR_A, // 500ms on 500ms off, 2 times, every 5000ms			// Error
@@ -61,6 +61,8 @@ enum sys_led_color {
 	SYS_LED_COLOR_SUCCESS,
 	SYS_LED_COLOR_ERROR,
 	SYS_LED_COLOR_CHARGING,
+	SYS_LED_COLOR_LOW_BATTERY,
+	SYS_LED_COLOR_PAIRING,
 };
 
 void set_led(enum sys_led_pattern led_pattern, int priority);
