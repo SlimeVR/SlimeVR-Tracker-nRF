@@ -48,6 +48,17 @@ static double ata[100]; // init calibration
 static double norm_sum;
 static double sample_count;
 
+static bool gyro_bias_is_unset(void);
+static void ensure_uncalibrated_indicator(bool active);
+static void suspend_uncalibrated_indicator(void);
+static void reset_auto_stillness_tracking(void);
+static bool auto_calibration_ready(void);
+
+static bool gyro_uncalibrated_indicator_active;
+static float auto_last_accel[3];
+static bool auto_last_accel_valid;
+static int64_t auto_stable_since;
+
 //#define DEBUG true
 
 #if DEBUG
@@ -117,6 +128,75 @@ void sensor_calibration_process_mag(float m[3])
 	apply_BAinv(m, magBAinv);
 }
 
+static bool gyro_bias_is_unset(void)
+{
+	for (int i = 0; i < 3; i++)
+	{
+		if (fabsf(gyroBias[i]) > 1e-4f)
+			return false;
+	}
+	return true;
+}
+
+static void ensure_uncalibrated_indicator(bool active)
+{
+	if (active)
+	{
+		if (!gyro_uncalibrated_indicator_active)
+		{
+			gyro_uncalibrated_indicator_active = true;
+			set_led(SYS_LED_PATTERN_UNCALIBRATED_ALERT, SYS_LED_PRIORITY_SENSOR);
+		}
+	}
+	else if (gyro_uncalibrated_indicator_active)
+	{
+		gyro_uncalibrated_indicator_active = false;
+		set_led(SYS_LED_PATTERN_OFF, SYS_LED_PRIORITY_SENSOR);
+	}
+}
+
+static void suspend_uncalibrated_indicator(void)
+{
+	gyro_uncalibrated_indicator_active = false;
+}
+
+static void reset_auto_stillness_tracking(void)
+{
+	auto_last_accel_valid = false;
+	auto_stable_since = 0;
+}
+
+static bool auto_calibration_ready(void)
+{
+	float accel[3];
+	if (sensor_wait_accel(accel, K_MSEC(200)))
+	{
+		reset_auto_stillness_tracking();
+		return false;
+	}
+
+	int64_t now = k_uptime_get();
+	if (!auto_last_accel_valid)
+	{
+		memcpy(auto_last_accel, accel, sizeof(auto_last_accel));
+		auto_last_accel_valid = true;
+		auto_stable_since = now;
+		return false;
+	}
+
+	if (!v_epsilon(accel, auto_last_accel, 0.05f))
+		auto_stable_since = now;
+	else if (!auto_stable_since)
+		auto_stable_since = now;
+
+	memcpy(auto_last_accel, accel, sizeof(auto_last_accel));
+
+	if (auto_stable_since && now - auto_stable_since >= 5000)
+		return true;
+
+	return false;
+}
+
 void sensor_calibration_update_sensor_ids(int imu)
 {
 	imu_id = imu;
@@ -135,22 +215,30 @@ void sensor_calibration_read(void)
 	memcpy(magBias, retained->magBias, sizeof(magBias));
 	memcpy(magBAinv, retained->magBAinv, sizeof(magBAinv));
 	memcpy(accBAinv, retained->accBAinv, sizeof(accBAinv));
+
+	ensure_uncalibrated_indicator(gyro_bias_is_unset());
+	reset_auto_stillness_tracking();
 }
 
 int sensor_calibration_validate(float *a_bias, float *g_bias, bool write)
 {
 	if (a_bias == NULL)
-		a_bias = accelBias;
+	        a_bias = accelBias;
 	if (g_bias == NULL)
 		g_bias = gyroBias;
 	float zero[3] = {0};
 	if (!v_epsilon(a_bias, zero, 0.5) || !v_epsilon(g_bias, zero, 50.0)) // check accel is <0.5G and gyro <50dps
 	{
-		sensor_calibration_clear(a_bias, g_bias, write);
-		LOG_WRN("Invalidated calibration");
-		LOG_WRN("The IMU may be damaged or calibration was not completed properly");
-		return -1;
+	        sensor_calibration_clear(a_bias, g_bias, write);
+	        LOG_WRN("Invalidated calibration");
+	        LOG_WRN("The IMU may be damaged or calibration was not completed properly");
+	        ensure_uncalibrated_indicator(true);
+	        reset_auto_stillness_tracking();
+	        return -1;
 	}
+	ensure_uncalibrated_indicator(gyro_bias_is_unset());
+	if (write)
+	        reset_auto_stillness_tracking();
 	return 0;
 }
 
@@ -212,6 +300,11 @@ void sensor_calibration_clear(float *a_bias, float *g_bias, bool write)
 	}
 
 	sensor_fusion_invalidate();
+	if (write && (a_bias == accelBias || g_bias == gyroBias))
+	{
+		ensure_uncalibrated_indicator(true);
+		reset_auto_stillness_tracking();
+	}
 }
 
 #if CONFIG_SENSOR_USE_6_SIDE_CALIBRATION
@@ -351,6 +444,9 @@ static void sensor_calibrate_imu()
 	LOG_INF("Calibrating main accelerometer and gyroscope zero rate offset");
 	LOG_INF("Rest the device on a stable surface");
 
+	suspend_uncalibrated_indicator();
+	reset_auto_stillness_tracking();
+
 	set_led(SYS_LED_PATTERN_LONG, SYS_LED_PRIORITY_SENSOR);
 	if (!wait_for_motion(false, 6)) // Wait for accelerometer to settle, timeout 3s
 	{
@@ -372,7 +468,8 @@ static void sensor_calibrate_imu()
 		if (err)
 		{
 			LOG_WRN("IMU specific calibration was not completed properly");
-			set_led(SYS_LED_PATTERN_OFF, SYS_LED_PRIORITY_SENSOR);
+			ensure_uncalibrated_indicator(true);
+			reset_auto_stillness_tracking();
 			return; // Calibration failed
 		}
 		LOG_INF("Finished IMU specific calibration");
@@ -383,12 +480,15 @@ static void sensor_calibrate_imu()
 
 	LOG_INF("Reading data");
 	sensor_calibration_clear(a_bias, g_bias, false);
+	set_led(SYS_LED_PATTERN_CALIBRATION_PROGRESS, SYS_LED_PRIORITY_SENSOR);
 	int err = sensor_offsetBias(a_bias, g_bias);
-	if (err) // This takes about 3s
+	if (err) // This takes about 12s
 	{
 		if (err == -1)
 			LOG_INF("Motion detected");
 		a_bias[0] = NAN; // invalidate calibration
+		ensure_uncalibrated_indicator(true);
+		reset_auto_stillness_tracking();
 	}
 	else
 	{
@@ -399,7 +499,8 @@ static void sensor_calibrate_imu()
 	}
 	if (sensor_calibration_validate(a_bias, g_bias, false))
 	{
-		set_led(SYS_LED_PATTERN_OFF, SYS_LED_PRIORITY_SENSOR);
+		ensure_uncalibrated_indicator(gyro_bias_is_unset());
+		reset_auto_stillness_tracking();
 		LOG_INF("Restoring previous calibration");
 #if !CONFIG_SENSOR_USE_6_SIDE_CALIBRATION
 		LOG_INF("Accelerometer bias: %.5f %.5f %.5f", (double)accelBias[0], (double)accelBias[1], (double)accelBias[2]);
@@ -419,7 +520,9 @@ static void sensor_calibrate_imu()
 	sys_write(MAIN_GYRO_BIAS_ID, &retained->gyroBias, gyroBias, sizeof(gyroBias));
 
 	LOG_INF("Finished calibration");
-	set_led(SYS_LED_PATTERN_ONESHOT_COMPLETE, SYS_LED_PRIORITY_SENSOR);
+	suspend_uncalibrated_indicator();
+	reset_auto_stillness_tracking();
+	set_led(SYS_LED_PATTERN_CALIBRATION_SUCCESS, SYS_LED_PRIORITY_SENSOR);
 }
 
 #if CONFIG_SENSOR_USE_6_SIDE_CALIBRATION
@@ -601,7 +704,7 @@ int sensor_offsetBias(float *dest1, float *dest2)
 		return -2; // Timeout
 	int64_t sampling_start_time = k_uptime_get();
 	int i = 0;
-	while (k_uptime_get() < sampling_start_time + 3000)
+	while (k_uptime_get() < sampling_start_time + 12000)
 	{
 		if (sensor_wait_accel(rawData, K_MSEC(1000)))
 			return -2; // Timeout
@@ -822,6 +925,34 @@ static void calibration_thread(void)
 	while (1)
 	{
 		int requested = sensor_calibration_request(0);
+
+		if (requested == 0)
+		{
+			if (gyro_bias_is_unset())
+			{
+				ensure_uncalibrated_indicator(true);
+				if (auto_calibration_ready())
+				{
+					if (sensor_calibration_request(1) == 0)
+					{
+						LOG_INF("Automatically starting gyro calibration after 5 seconds of stillness");
+						suspend_uncalibrated_indicator();
+						reset_auto_stillness_tracking();
+						continue;
+					}
+				}
+			}
+			else
+			{
+				ensure_uncalibrated_indicator(false);
+				reset_auto_stillness_tracking();
+			}
+		}
+		else
+		{
+			reset_auto_stillness_tracking();
+		}
+
 		switch (requested)
 		{
 		case 1:

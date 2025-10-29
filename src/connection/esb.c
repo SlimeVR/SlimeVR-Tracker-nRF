@@ -242,7 +242,7 @@ int esb_initialize(bool tx)
 		//config.retransmit_count = 0;
 		//config.tx_mode = ESB_TXMODE_MANUAL;
 		// config.payload_length = 32;
-		config.selective_auto_ack = true; // TODO: while pairing, should be set to false
+		config.selective_auto_ack = esb_paired;
 //		config.use_fast_ramp_up = true;
 	}
 	else
