@@ -87,6 +87,8 @@ static float max_gyro_speed_square;
 static bool mag_use_oneshot;
 static bool mag_skip_oneshot;
 
+static int64_t last_mag_update_time;
+
 static float accel_actual_time;
 static float gyro_actual_time;
 static float mag_actual_time;
@@ -684,6 +686,7 @@ int sensor_init(void)
 	LOG_INF("Initialized sensors");
 
 	// Setup fusion
+	last_mag_update_time = 0;
 	sensor_retained_read(); // TODO: useless
 	if (fusion_id == FUSION_VQF)
 		vqf_update_sensor_ids(sensor_imu_id);
@@ -695,7 +698,10 @@ int sensor_init(void)
 	}
 	else
 	{
-		sensor_fusion->init(gyro_actual_time, accel_actual_time, mag_initial_time); // TODO: using initial time since mag are not polled at the actual rate
+		float fusion_mag_time = mag_initial_time;
+		if (mag_available && mag_enabled && isfinite(mag_actual_time) && mag_actual_time > 0.0f)
+			fusion_mag_time = mag_actual_time;
+		sensor_fusion->init(gyro_actual_time, accel_actual_time, fusion_mag_time);
 	}
 
 	sensor_calibration_update_sensor_ids(sensor_imu_id);
@@ -829,9 +835,17 @@ void sensor_loop(void)
 #endif
 
 			// Read magnetometer
-			float raw_m[3];
+			float raw_m[3] = {0};
+			int64_t mag_sample_time = 0;
 			if (mag_available && mag_enabled)
+			{
 				sensor_mag->mag_read(raw_m); // reading mag last, and it will be processed last
+				mag_sample_time = k_uptime_get();
+			}
+			else
+			{
+				last_mag_update_time = 0;
+			}
 
 			if (reconfig) // TODO: get rid of reconfig?
 			{
@@ -955,8 +969,22 @@ void sensor_loop(void)
 				float m[] = {SENSOR_MAGNETOMETER_AXES_ALIGNMENT};
 
 				// Process fusion
+				float mag_dt = mag_actual_time;
+				if (!isfinite(mag_dt) || mag_dt <= 0.0f)
+					mag_dt = sensor_update_time_ms / 1000.0f;
+				if (mag_sample_time > 0 && last_mag_update_time > 0)
+				{
+					int64_t delta_ms = mag_sample_time - last_mag_update_time;
+					if (delta_ms > 0)
+						mag_dt = delta_ms / 1000.0f;
+				}
+
 				if (mag_calibrated)
-					sensor_fusion->update_mag(m, sensor_update_time_ms / 1000.0); // TODO: use actual time?
+					sensor_fusion->update_mag(m, mag_dt);
+
+				if (mag_sample_time == 0)
+					mag_sample_time = k_uptime_get();
+				last_mag_update_time = mag_sample_time;
 
 				v_rotate(m, q3, m); // magnetic field in local device frame, no other transformation will be done
 				connection_update_sensor_mag(m);
