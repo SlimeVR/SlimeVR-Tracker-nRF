@@ -175,39 +175,49 @@ static void led_resume(void)
 #endif
 
 #ifdef LED_RGB_COLOR
-static int led_pwm_period[4][3] = {
-	{CONFIG_LED_DEFAULT_COLOR_R, CONFIG_LED_DEFAULT_COLOR_G, CONFIG_LED_DEFAULT_COLOR_B}, // Default
-	{0, 10000, 0}, // Success
-	{10000, 0, 0}, // Error
-	{8000, 2000, 0}, // Charging
+static int led_pwm_period[6][3] = {
+        {CONFIG_LED_DEFAULT_COLOR_R, CONFIG_LED_DEFAULT_COLOR_G, CONFIG_LED_DEFAULT_COLOR_B}, // Default
+        {0, 10000, 0}, // Success
+        {10000, 0, 0}, // Error
+        {0, 10000, 0}, // Charging
+        {10000, 3000, 0}, // Low battery
+        {0, 0, 10000}, // Pairing
 };
 #elif defined(LED_TRI_COLOR)
-static int led_pwm_period[4][3] = {
-	{0, 0, 10000}, // Default
-	{0, 10000, 0}, // Success
-	{10000, 0, 0}, // Error
-	{6000, 4000, 0}, // Charging
+static int led_pwm_period[6][3] = {
+        {0, 0, 10000}, // Default
+        {0, 10000, 0}, // Success
+        {10000, 0, 0}, // Error
+        {0, 10000, 0}, // Charging
+        {9000, 4000, 0}, // Low battery
+        {0, 0, 10000}, // Pairing
 };
 #elif defined(LED_RG_COLOR)
-static int led_pwm_period[4][2] = {
-	{CONFIG_LED_DEFAULT_COLOR_R, CONFIG_LED_DEFAULT_COLOR_G}, // Default
-	{0, 10000}, // Success
-	{10000, 0}, // Error
-	{8000, 2000}, // Charging
+static int led_pwm_period[6][2] = {
+        {CONFIG_LED_DEFAULT_COLOR_R, CONFIG_LED_DEFAULT_COLOR_G}, // Default
+        {0, 10000}, // Success
+        {10000, 0}, // Error
+        {0, 10000}, // Charging
+        {9000, 3000}, // Low battery
+        {0, 10000}, // Pairing
 };
 #elif defined(LED_DUAL_COLOR)
-static int led_pwm_period[4][2] = {
-	{0, 10000}, // Default
-	{0, 10000}, // Success
-	{10000, 0}, // Error
-	{6000, 4000}, // Charging
+static int led_pwm_period[6][2] = {
+        {0, 10000}, // Default
+        {0, 10000}, // Success
+        {10000, 0}, // Error
+        {0, 10000}, // Charging
+        {9000, 4000}, // Low battery
+        {0, 10000}, // Pairing
 };
 #else
-static int led_pwm_period[4][1] = {
-	{10000}, // Default
-	{10000}, // Success
-	{10000}, // Error
-	{10000}, // Charging
+static int led_pwm_period[6][1] = {
+        {10000}, // Default
+        {10000}, // Success
+        {10000}, // Error
+        {10000}, // Charging
+        {10000}, // Low battery
+        {10000}, // Pairing
 };
 #endif
 
@@ -301,11 +311,27 @@ static void led_thread(void)
 			led_pin_set(SYS_LED_COLOR_DEFAULT, 10000, 10000);
 			k_thread_suspend(led_thread_id);
 			break;
-		case SYS_LED_PATTERN_SHORT:
-			led_pattern_state = (led_pattern_state + 1) % 2;
-			led_pin_set(SYS_LED_COLOR_DEFAULT, 10000, led_pattern_state * 10000);
-			k_msleep(led_pattern_state == 1 ? 100 : 900);
-			break;
+               case SYS_LED_PATTERN_SHORT: {
+                       const int pairing_step_time_ms = 5;
+                       const int pairing_fade_steps = 25;
+                       const int pairing_flash_steps = pairing_fade_steps * 2;
+                       const int pairing_cycle_steps = pairing_flash_steps * 2;
+                       int step = led_pattern_state % pairing_cycle_steps;
+                       int led_value = 0;
+
+                       if (step < pairing_fade_steps) {
+                               led_value = step * 10000 / (pairing_fade_steps - 1);
+                       } else if (step < pairing_flash_steps) {
+                               led_value = (pairing_flash_steps - 1 - step) * 10000 / (pairing_fade_steps - 1);
+                       }
+
+                       led_pin_set(SYS_LED_COLOR_PAIRING, 10000, led_value);
+
+                       led_pattern_state = (step + 1) % pairing_cycle_steps;
+                       k_msleep(pairing_step_time_ms);
+                       break;
+               }
+
 		case SYS_LED_PATTERN_LONG:
 			led_pattern_state = (led_pattern_state + 1) % 2;
 			led_pin_set(SYS_LED_COLOR_DEFAULT, 10000, led_pattern_state * 10000);
@@ -358,9 +384,9 @@ static void led_thread(void)
 			led_pin_set(SYS_LED_COLOR_SUCCESS, 2000, 10000);
 			k_thread_suspend(led_thread_id);
 			break;
-		case SYS_LED_PATTERN_LONG_PERSIST:
-			led_pattern_state = (led_pattern_state + 1) % 2;
-			led_pin_set(SYS_LED_COLOR_CHARGING, 2000, led_pattern_state * 10000);
+               case SYS_LED_PATTERN_LONG_PERSIST:
+                       led_pattern_state = (led_pattern_state + 1) % 2;
+                       led_pin_set(SYS_LED_COLOR_LOW_BATTERY, 2000, led_pattern_state * 10000);
 			k_msleep(500);
 			break;
 		case SYS_LED_PATTERN_PULSE_PERSIST:
