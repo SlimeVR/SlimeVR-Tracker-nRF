@@ -44,9 +44,6 @@ void connection_update_battery(
 void connection_update_status(int status);
 
 void connection_write_packet_0();
-void connection_write_packet_1();
-void connection_write_packet_2();
 void connection_write_packet_3();
-void connection_write_packet_4();
 
 #endif
