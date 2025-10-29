@@ -53,6 +53,7 @@ static uint8_t paired_addr[8] = {0};
 
 static bool esb_initialized = false;
 static bool esb_paired = false;
+static bool clk_fetch_warned;
 
 #define TX_ERROR_THRESHOLD 100
 
@@ -154,20 +155,25 @@ int clocks_start(void)
 		return err;
 	}
 
-	do
-	{
-		k_usleep(100);
-		err = sys_notify_fetch_result(&clk_cli.notify, &res);
-		if (!err && res)
-		{
+        do
+        {
+                k_usleep(100);
+                err = sys_notify_fetch_result(&clk_cli.notify, &res);
+                if (!err && res)
+                {
 			LOG_ERR("Clock could not be started: %d", res);
 			return res;
 		}
-		if (err && ++fetch_attempts > 10) {
-			LOG_WRN_ONCE("Unable to fetch Clock request result: %d", err);
-			return err;
-		}
-	} while (err);
+                if (err && ++fetch_attempts > 10)
+                {
+                        if (!clk_fetch_warned)
+                        {
+                                LOG_WRN("Unable to fetch Clock request result: %d", err);
+                                clk_fetch_warned = true;
+                        }
+                        return err;
+                }
+        } while (err);
 
 #if defined(NRF54L15_XXAA)
 	/* MLTPAN-20 */
