@@ -343,7 +343,7 @@ int sensor_scan(void)
 	{
 		if (mag_id >= (int)ARRAY_SIZE(sensor_mags) || sensor_mags[mag_id] == NULL || sensor_mags[mag_id] == &sensor_mag_none)
 		{
-			sensor_mag = &sensor_mag_none; 
+			sensor_mag = &sensor_mag_none;
 			mag_available = false;
 			LOG_ERR("Magnetometer not supported");
 		}
@@ -355,7 +355,7 @@ int sensor_scan(void)
 	}
 	else
 	{
-		sensor_mag = &sensor_mag_none; 
+		sensor_mag = &sensor_mag_none;
 		mag_available = false; // marked as not available
 	}
 
@@ -392,7 +392,7 @@ int sensor_request_scan(bool force)
 	k_thread_create(&sensor_thread_id, sensor_thread_id_stack, K_THREAD_STACK_SIZEOF(sensor_thread_id_stack), (k_thread_entry_t)sensor_scan_thread, NULL, NULL, NULL, SENSOR_SCAN_THREAD_PRIORITY, 0, K_NO_WAIT);
 	k_thread_join(&sensor_thread_id, K_FOREVER); // wait for the thread to finish
 	if (sensor_sensor_init && force)
-	{		
+	{
 		k_thread_create(&sensor_thread_id, sensor_thread_id_stack, K_THREAD_STACK_SIZEOF(sensor_thread_id_stack), (k_thread_entry_t)sensor_loop, NULL, NULL, NULL, SENSOR_LOOP_THREAD_PRIORITY, K_FP_REGS, K_NO_WAIT);
 		LOG_INF("Started sensor loop");
 	}
@@ -702,7 +702,7 @@ int sensor_init(void)
 	if (sensor_imu == &sensor_imu_bmi270) // bmi270 specific
 	{
 		LOG_INF("Applying gyroscope gain");
-		bmi_gain_apply(sensor_calibration_get_sensor_data());
+		bmi270_gain_apply(sensor_calibration_get_sensor_data());
 	}
 
 #if IMU_INT_EXISTS

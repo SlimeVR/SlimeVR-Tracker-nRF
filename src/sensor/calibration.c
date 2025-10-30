@@ -146,10 +146,14 @@ int sensor_calibration_validate(float *a_bias, float *g_bias, bool write)
 	float zero[3] = {0};
 	if (!v_epsilon(a_bias, zero, 0.5) || !v_epsilon(g_bias, zero, 50.0)) // check accel is <0.5G and gyro <50dps
 	{
+#if CONFIG_IGNORE_BAD_IMUS
+		LOG_WRN("This IMU is really bad :/");
+#else
 		sensor_calibration_clear(a_bias, g_bias, write);
 		LOG_WRN("Invalidated calibration");
 		LOG_WRN("The IMU may be damaged or calibration was not completed properly");
 		return -1;
+#endif
 	}
 	return 0;
 }
@@ -366,7 +370,7 @@ static void sensor_calibrate_imu()
 		LOG_INF("Suspending sensor thread");
 		main_imu_suspend();
 		LOG_INF("Running BMI270 component retrimming");
-		int err = bmi_crt(sensor_data); // will automatically reinitialize // TODO: this blocks sensor!
+		int err = bmi270_crt(sensor_data); // will automatically reinitialize // TODO: this blocks sensor!
 		LOG_INF("Resuming sensor thread");
 		main_imu_resume();
 		if (err)
@@ -564,7 +568,7 @@ static int check_sides(const float *a)
 }
 
 static void magneto_reset(void)
-{	
+{
 	magneto_progress = 0; // reusing ata, so guarantee cleared mag progress
 	last_magneto_progress = 0;
 	magneto_progress_time = 0;

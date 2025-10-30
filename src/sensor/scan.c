@@ -67,10 +67,29 @@ int sensor_scan_i2c(struct i2c_dt_spec *i2c_dev, uint8_t *i2c_dev_reg, int dev_a
 			// The first read on ICM-45686 can fail, so perform a dummy read on each address first
 			/* AN-000364
 			 * In I2C mode, after chip power-up, the host should perform one retry
-			 * on the very first I2C transaction if it receives a NACK 
+			 * on the very first I2C transaction if it receives a NACK
 			 */
 			uint8_t dummy;
 			i2c_reg_read_byte(dev, addr, 0x00, &dummy);
+
+			// QMC5883P wakeup - device won't respond in some cases
+			if (addr == 0x2C)
+			{
+				uint8_t wake_seq[2] = { 0x09, 0x01 };
+				int err = i2c_write(dev, wake_seq, sizeof(wake_seq), addr);
+				if (!err)
+				{
+					LOG_INF("QMC5883P wakeup sequence sent to 0x2C");
+					k_msleep(10);
+					uint8_t id_byte = 0;
+					if (i2c_reg_read_byte(dev, addr, 0x00, &id_byte) == 0)
+						LOG_INF("QMC5883P probe: WHOAMI=0x%02X at 0x2C", id_byte);
+				}
+				else
+				{
+					LOG_WRN("Failed to wake QMC5883P at 0x2C (err=%d)", err);
+				}
+			}
 
 			int id_cnt = id_count;
 			int id_ind = id_index;

@@ -168,7 +168,7 @@ config USE_ACTIVE_TIMEOUT
     help
         Delay IMU wake up state or user shutdown during activity.
 
-choice 
+choice
     prompt "Activity timeout mode"
     default SLEEP_ON_ACTIVE_TIMEOUT
     depends on USE_ACTIVE_TIMEOUT
@@ -263,6 +263,13 @@ config SENSOR_USE_VQF
         Based on Kalman filter.
 
 endchoice
+
+config IGNORE_BAD_IMUS
+    bool "Ignore the bad IMU warnings in calibration"
+    default n
+    help
+        For really poor IMUs, like the MPU6050, the X-Coord can be way off
+        This is used to ignore those warnings, and apply a bias
 
 config SENSOR_USE_6_SIDE_CALIBRATION
     bool "Use 6-side calibration"

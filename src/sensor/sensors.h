@@ -27,12 +27,14 @@
 
 #include "sensor_none.h"
 
+#include "imu/BMI160.h"
 #include "imu/BMI270.h"
 #include "imu/ICM42688.h"
 #include "imu/ICM45686.h"
 #include "imu/LSM6DSM.h"
 #include "imu/LSM6DSO.h"
 #include "imu/LSM6DSV.h"
+#include "imu/MPU6050.h"
 
 #include "mag/AK09940.h"
 #include "mag/BMM150.h"
@@ -42,6 +44,7 @@
 #include "mag/LIS2MDL.h"
 #include "mag/LIS3MDL.h"
 #include "mag/MMC5983MA.h"
+#include "mag/QMC5883P.h"
 #include "mag/QMC6309.h"
 
 #include "scan.h"
@@ -70,12 +73,12 @@ const char *dev_imu_names[] = {
 	"LSM6DSV16B/ISM330BX"
 };
 const sensor_imu_t *sensor_imus[] = {
-	&sensor_imu_none, // will not implement, too low quality
+	&sensor_imu_bmi160,
 	&sensor_imu_bmi270,
 	&sensor_imu_none,
-	&sensor_imu_none,  // cardinal sin
-	&sensor_imu_none,  // cardinal sin
-	&sensor_imu_none,  // cardinal sin
+	&sensor_imu_mpu6050, // why did I do this
+	&sensor_imu_none, // cardinal sin
+	&sensor_imu_none, // cardinal sin
 	&sensor_imu_none,
 	&sensor_imu_icm42688,
 	&sensor_imu_icm45686,
@@ -127,6 +130,7 @@ const char *dev_mag_names[] = {
 	"IST8320",
 	"IST8321",
 	"IIS2MDC/LIS2MDL",
+	"QMC5883P",
 	"LIS3MDL",
 	"MMC34160PJ",
 	"MMC3630KJ",
@@ -135,10 +139,10 @@ const char *dev_mag_names[] = {
 	"MMC5983MA"
 };
 const sensor_mag_t *sensor_mags[] = {
-	&sensor_mag_none, // HMC5883 will not implement, too low quality
+	&sensor_mag_none,
 	&sensor_mag_none, // QMC5883 not implemented
 	&sensor_mag_qmc6309,
-	&sensor_mag_none, // QMC6310
+	&sensor_mag_none,
 	&sensor_mag_none, // AK8963
 	&sensor_mag_none, // AK09916
 	&sensor_mag_ak09940,
@@ -149,6 +153,7 @@ const sensor_mag_t *sensor_mags[] = {
 	&sensor_mag_none, // IST8320
 	&sensor_mag_none, // IST8321
 	&sensor_mag_lis2mdl,
+	&sensor_mag_qmc5883p, // QMC5883P / HP5883
 	&sensor_mag_lis3mdl,
 	&sensor_mag_none, // MMC34160
 	&sensor_mag_none, // MMC3630
@@ -156,7 +161,7 @@ const sensor_mag_t *sensor_mags[] = {
 	&sensor_mag_none, // MMC5616
 	&sensor_mag_mmc5983ma
 };
-const int i2c_dev_mag_addr_count = 11;
+const int i2c_dev_mag_addr_count = 12;
 const uint8_t i2c_dev_mag_addr[] = {
 	1,	0x0C,
 	1,	0x0D,
@@ -166,6 +171,7 @@ const uint8_t i2c_dev_mag_addr[] = {
 	1,	0x19,
 	1,	0x1C,
 	1,	0x1E,
+    1,  0x2C,
 	1,	0x30,
 	1,	0x3C,
 	1,	0x7C
@@ -186,6 +192,7 @@ const uint8_t i2c_dev_mag_reg[] = {
 	3,	0x0A,
 		0x0F,
 		0x4F,
+	1,	0x00,
 	3,	0x20,
 		0x2F,
 		0x39,
@@ -208,6 +215,7 @@ const uint8_t i2c_dev_mag_id[] = {
 	1,	0x48, // reg 0x0A
 	1,	0x3D, // reg 0x0F
 	1,	0x40, // reg 0x4F
+	1,	0x80, // reg 0x00
 	1,	0x06, // reg 0x20
 	2,	0x0A,0x30, // reg 0x2F
 	2,	0x10,0x11, // reg 0x39
@@ -225,6 +233,7 @@ const int i2c_dev_mag[] = {
 	MAG_BMM150,
 	MAG_BMM350,
 	MAG_IST8306, MAG_IST8320, MAG_IST8321,
+	MAG_QMC5883P,
 	MAG_QMC6310,
 	MAG_LIS3MDL,
 	MAG_HMC5883L,
