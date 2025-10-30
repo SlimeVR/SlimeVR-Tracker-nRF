@@ -139,10 +139,10 @@ const char *dev_mag_names[] = {
 	"MMC5983MA"
 };
 const sensor_mag_t *sensor_mags[] = {
-	&sensor_mag_none,
+	&sensor_mag_none, // HMC5883 will not implement, too low quality
 	&sensor_mag_none, // QMC5883 not implemented
 	&sensor_mag_qmc6309,
-	&sensor_mag_none,
+	&sensor_mag_none, // QMC6310
 	&sensor_mag_none, // AK8963
 	&sensor_mag_none, // AK09916
 	&sensor_mag_ak09940,

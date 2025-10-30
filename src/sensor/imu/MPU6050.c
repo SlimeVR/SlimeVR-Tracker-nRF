@@ -9,7 +9,7 @@
 #define PACKET_SIZE 14
 
 static float accel_sensitivity = 2.0f / 32768.0f;  // default ±2 g
-static float gyro_sensitivity  = 250.0f / 32768.0f; // default ±250 °/s
+static float gyro_sensitivity  = 250.0f / 32768.0f; // default ±250°/s
 
 static uint8_t accel_fs = MPU6050_ACCEL_FS_2;
 static uint8_t gyro_fs  = MPU6050_GYRO_FS_250;
@@ -307,7 +307,7 @@ uint8_t mpu_setup_DRDY(uint16_t threshold)
 	return NRF_GPIO_PIN_PULLUP << 4 | NRF_GPIO_PIN_SENSE_LOW;
 }
 
-// This has made me rethink my wonderful idea of implementing this shitshow...
+// This has made me rethink my wonderful idea of implementing this... mess
 uint8_t mpu_setup_WOM(void)
 {
 	int err = 0;
