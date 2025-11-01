@@ -1,5 +1,6 @@
 #include "globals.h"
 #include "connection/connection.h"
+#include "console_colors.h"
 
 #include <zephyr/kernel.h>
 
@@ -21,9 +22,9 @@ void set_status(enum sys_status status, bool set) {
 		case SYS_STATUS_SENSOR_ERROR:
 			LOG_ERR("Sensor communication error");
 			break;
-		case SYS_STATUS_CONNECTION_ERROR:
-			LOG_WRN("Connection error");
-			break;
+                case SYS_STATUS_CONNECTION_ERROR:
+                        LOG_WRN(ANSI_COLOR_RED "Connection lost to receiver" ANSI_COLOR_RESET);
+                        break;
 		case SYS_STATUS_SYSTEM_ERROR:
 			LOG_ERR("General error");
 			break;

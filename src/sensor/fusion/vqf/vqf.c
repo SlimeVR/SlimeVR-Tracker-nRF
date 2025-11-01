@@ -32,6 +32,10 @@
 #define DEG_TO_RAD (M_PI / 180.0f)
 #endif
 
+#ifndef RAD_TO_DEG
+#define RAD_TO_DEG (180.0f / M_PI)
+#endif
+
 static uint8_t imu_id;
 
 static vqf_params_t params;
@@ -48,20 +52,20 @@ void vqf_update_sensor_ids(int imu)
 static void set_params()
 {
 	init_params(&params);
-	params.biasClip = 5.0f;
+        params.biasClip = 5.0f * DEG_TO_RAD;
 	params.tauMag = 10.0f; // best result for VQF from paper
 	// best result from optimizer
 	params.biasForgettingTime = 136.579346;
-	params.biasSigmaInit = 3.219453;
-	params.biasSigmaMotion = 0.348501;
-	params.biasSigmaRest = 0.063616;
+        params.biasSigmaInit = 3.219453f * DEG_TO_RAD;
+        params.biasSigmaMotion = 0.348501f * DEG_TO_RAD;
+        params.biasSigmaRest = 0.063616f * DEG_TO_RAD;
 	params.biasVerticalForgettingFactor = 0.007056;
 	params.motionBiasEstEnabled = true;
 	params.restBiasEstEnabled = true;
 	params.restFilterTau = 1.114532;
 	params.restMinT = 2.586910;
 	params.restThAcc = 1.418598;
-	params.restThGyr = 1.399189;
+        params.restThGyr = 1.399189f * DEG_TO_RAD;
 	params.tauAcc = 4.337983;
 }
 
@@ -125,12 +129,17 @@ void vqf_update(float *g, float *a, float *m, float time)
 
 void vqf_get_gyro_bias(float *g_off)
 {
-	getBiasEstimate(&state, &coeffs, g_off);
+        getBiasEstimate(&state, &coeffs, g_off);
+        for (int i = 0; i < 3; i++)
+                g_off[i] *= RAD_TO_DEG;
 }
 
 void vqf_set_gyro_bias(float *g_off)
 {
-	setBiasEstimate(&state, g_off, -1);
+        float bias_rad[3];
+        for (int i = 0; i < 3; i++)
+                bias_rad[i] = g_off[i] * DEG_TO_RAD;
+        setBiasEstimate(&state, bias_rad, -1);
 }
 
 void vqf_update_gyro_sanity(float *g, float *m)

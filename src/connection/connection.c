@@ -25,15 +25,30 @@
 #include "esb.h"
 #include "build_defines.h"
 #include "hid.h"
+#include "console_colors.h"
 
 #include <zephyr/kernel.h>
+#include <zephyr/spinlock.h>
+
+#include <math.h>
+#include <zephyr/sys/atomic.h>
 
 static uint8_t tracker_id, batt, batt_v, sensor_temp, imu_id, mag_id, tracker_status;
 static uint8_t tracker_svr_status = SVR_STATUS_OK;
 static float sensor_q[4], sensor_a[3], sensor_m[3];
 
+static struct k_spinlock sensor_lock;
+
 static uint8_t data_buffer[16] = {0};
 static int64_t last_data_time = 0;
+
+#define LATENCY_SPIKE_THRESHOLD_MS 30
+#define LATENCY_SPIKE_LOG_INTERVAL_MS 500
+#define LATENCY_LOG_INTERVAL_MS 5000
+
+static atomic_t current_latency_ms = ATOMIC_INIT(-1);
+static int64_t last_latency_spike_log_time = 0;
+static int64_t last_latency_periodic_log_time = 0;
 
 LOG_MODULE_REGISTER(connection, LOG_LEVEL_INF);
 
@@ -80,14 +95,54 @@ static int64_t quat_update_time = 0;
 static int64_t last_quat_time = 0;
 static bool send_precise_quat;
 
+static bool connection_validate_sample(const float *q, const float *a)
+{
+        float norm = q[0] * q[0] + q[1] * q[1] + q[2] * q[2] + q[3] * q[3];
+        if (fabsf(norm - 1.0f) > 0.1f) {
+                LOG_WRN("Rejecting quaternion with norm %f", norm);
+                return false;
+        }
+
+        for (int i = 0; i < 3; ++i) {
+                if (fabsf(a[i]) > 32.0f) {
+                        LOG_WRN("Rejecting accel[%d] = %f", i, a[i]);
+                        return false;
+                }
+        }
+
+        return true;
+}
+
 void connection_update_sensor_data(float *q, float *a, int64_t data_time)
 {
 	// data_time is in system ticks, nonzero means valid measurement
 	// TODO: use data_time to measure latency! the latency should be calculated up to before radio sent data
-	send_precise_quat = q_epsilon(q, sensor_q, 0.005);
-	memcpy(sensor_q, q, sizeof(sensor_q));
-	memcpy(sensor_a, a, sizeof(sensor_a));
-	quat_update_time = k_uptime_get();
+        struct k_spinlock_key key = k_spin_lock(&sensor_lock);
+        // data_time is in system ticks, nonzero means valid measurement
+        // TODO: use data_time to measure latency! the latency should be calculated up to before radio sent data
+        send_precise_quat = q_epsilon(q, sensor_q, 0.005);
+        memcpy(sensor_q, q, sizeof(sensor_q));
+        memcpy(sensor_a, a, sizeof(sensor_a));
+        quat_update_time = k_uptime_get();
+        k_spin_unlock(&sensor_lock, key);
+
+        if (data_time) {
+                int64_t now_ticks = k_uptime_ticks();
+                int64_t latency_ticks = now_ticks - data_time;
+                if (latency_ticks < 0)
+                        latency_ticks = 0;
+
+                int64_t latency_ms = k_ticks_to_ms_floor64(latency_ticks);
+                int64_t now_ms = k_uptime_get();
+
+                atomic_set(&current_latency_ms, (atomic_val_t)latency_ms);
+
+                if (latency_ms > LATENCY_SPIKE_THRESHOLD_MS &&
+                    now_ms - last_latency_spike_log_time > LATENCY_SPIKE_LOG_INTERVAL_MS) {
+                        last_latency_spike_log_time = now_ms;
+                        LOG_WRN(ANSI_COLOR_ORANGE "Latency spike detected: %lld ms" ANSI_COLOR_RESET, latency_ms);
+                }
+        }
 }
 
 static int64_t mag_update_time = 0;
@@ -95,8 +150,10 @@ static int64_t last_mag_time = 0;
 
 void connection_update_sensor_mag(float *m)
 {
-	memcpy(sensor_m, m, sizeof(sensor_m));
-	mag_update_time = k_uptime_get();
+        struct k_spinlock_key key = k_spin_lock(&sensor_lock);
+        memcpy(sensor_m, m, sizeof(sensor_m));
+        mag_update_time = k_uptime_get();
+        k_spin_unlock(&sensor_lock, key);
 }
 
 void connection_update_sensor_temp(float temp)
@@ -174,35 +231,35 @@ void connection_write_packet_0() // device info
 	hid_write_packet_n(data); // TODO:
 }
 
-void connection_write_packet_1() // full precision quat and accel
+static void connection_write_packet_1(const float *q, const float *a) // full precision quat and accel
 {
-	uint8_t data[16] = {0};
-	data[0] = 1; // packet 1
-	data[1] = tracker_id;
-	uint16_t *buf = (uint16_t *)&data[2];
-	buf[0] = TO_FIXED_15(sensor_q[1]); // ±1.0
-	buf[1] = TO_FIXED_15(sensor_q[2]);
-	buf[2] = TO_FIXED_15(sensor_q[3]);
-	buf[3] = TO_FIXED_15(sensor_q[0]);
-	buf[4] = TO_FIXED_7(sensor_a[0]); // range is ±256m/s² or ±26.1g 
-	buf[5] = TO_FIXED_7(sensor_a[1]);
-	buf[6] = TO_FIXED_7(sensor_a[2]);
+        uint8_t data[16] = {0};
+        data[0] = 1; // packet 1
+        data[1] = tracker_id;
+        uint16_t *buf = (uint16_t *)&data[2];
+        buf[0] = TO_FIXED_15(q[1]); // ±1.0
+        buf[1] = TO_FIXED_15(q[2]);
+        buf[2] = TO_FIXED_15(q[3]);
+        buf[3] = TO_FIXED_15(q[0]);
+        buf[4] = TO_FIXED_7(a[0]); // range is ±256m/s² or ±26.1g
+        buf[5] = TO_FIXED_7(a[1]);
+        buf[6] = TO_FIXED_7(a[2]);
 	memcpy(data_buffer, data, sizeof(data));
 	last_data_time = k_uptime_get(); // TODO: use ticks
 //	esb_write(data); // TODO: schedule in thread
 	hid_write_packet_n(data); // TODO:
 }
 
-void connection_write_packet_2() // reduced precision quat and accel with battery, temp, and rssi
+static void connection_write_packet_2(const float *q, const float *a) // reduced precision quat and accel with battery, temp, and rssi
 {
-	uint8_t data[16] = {0};
-	data[0] = 2; // packet 2
-	data[1] = tracker_id;
-	data[2] = batt;
-	data[3] = batt_v;
-	data[4] = sensor_temp; // temp
-	float v[3] = {0};
-	q_fem(sensor_q, v); // exponential map
+        uint8_t data[16] = {0};
+        data[0] = 2; // packet 2
+        data[1] = tracker_id;
+        data[2] = batt;
+        data[3] = batt_v;
+        data[4] = sensor_temp; // temp
+        float v[3] = {0};
+        q_fem(q, v); // exponential map
 	for (int i = 0; i < 3; i++)
 		v[i] = (v[i] + 1) / 2; // map -1-1 to 0-1
 	uint16_t v_buf[3] = {SATURATE_UINT10((1 << 10) * v[0]), SATURATE_UINT11((1 << 11) * v[1]), SATURATE_UINT11((1 << 11) * v[2])}; // fill 32 bits
@@ -217,10 +274,10 @@ void connection_write_packet_2() // reduced precision quat and accel with batter
 //	float q[4] = {0};
 //	q_iem(v, q); // inverse exponential map
 
-	uint16_t *buf = (uint16_t *)&data[9];
-	buf[0] = TO_FIXED_7(sensor_a[0]);
-	buf[1] = TO_FIXED_7(sensor_a[1]);
-	buf[2] = TO_FIXED_7(sensor_a[2]);
+        uint16_t *buf = (uint16_t *)&data[9];
+        buf[0] = TO_FIXED_7(a[0]);
+        buf[1] = TO_FIXED_7(a[1]);
+        buf[2] = TO_FIXED_7(a[2]);
 	data[15] = 0; // rssi (supplied by receiver)
 	memcpy(data_buffer, data, sizeof(data));
 	last_data_time = k_uptime_get(); // TODO: use ticks
@@ -242,19 +299,19 @@ void connection_write_packet_3() // status
 	hid_write_packet_n(data); // TODO:
 }
 
-void connection_write_packet_4() // full precision quat and magnetometer
+static void connection_write_packet_4(const float *q, const float *m) // full precision quat and magnetometer
 {
-	uint8_t data[16] = {0};
-	data[0] = 4; // packet 4
-	data[1] = tracker_id;
-	uint16_t *buf = (uint16_t *)&data[2];
-	buf[0] = TO_FIXED_15(sensor_q[1]);
-	buf[1] = TO_FIXED_15(sensor_q[2]);
-	buf[2] = TO_FIXED_15(sensor_q[3]);
-	buf[3] = TO_FIXED_15(sensor_q[0]);
-	buf[4] = TO_FIXED_10(sensor_m[0]); // range is ±32G
-	buf[5] = TO_FIXED_10(sensor_m[1]);
-	buf[6] = TO_FIXED_10(sensor_m[2]);
+        uint8_t data[16] = {0};
+        data[0] = 4; // packet 4
+        data[1] = tracker_id;
+        uint16_t *buf = (uint16_t *)&data[2];
+        buf[0] = TO_FIXED_15(q[1]);
+        buf[1] = TO_FIXED_15(q[2]);
+        buf[2] = TO_FIXED_15(q[3]);
+        buf[3] = TO_FIXED_15(q[0]);
+        buf[4] = TO_FIXED_10(m[0]); // range is ±32G
+        buf[5] = TO_FIXED_10(m[1]);
+        buf[6] = TO_FIXED_10(m[2]);
 	memcpy(data_buffer, data, sizeof(data));
 	last_data_time = k_uptime_get(); // TODO: use ticks
 //	esb_write(data); // TODO: schedule in thread
@@ -276,55 +333,66 @@ static int64_t last_status_time = 0;
 
 void connection_thread(void)
 {
-	// TODO: checking for connection_update events from sensor_loop, here we will time and send them out
-	while (1)
-	{
-		if (last_data_time != 0) // have valid data
-		{
-			last_data_time = 0;
-			esb_write(data_buffer);
-		}
-		// mag is higher priority (skip accel, quat is full precision)
-		else if (mag_update_time && k_uptime_get() - last_mag_time > 200)
-		{
-			mag_update_time = 0; // data has been sent
-			last_mag_time = k_uptime_get();
-			connection_write_packet_4();
-			continue;
-		}
-		// if time for info and precise quat not needed
-		else if (quat_update_time && !send_precise_quat && k_uptime_get() - last_info_time > 100)
-		{
-			quat_update_time = 0;
-			last_quat_time = k_uptime_get();
-			last_info_time = k_uptime_get();
-			connection_write_packet_2();
-			continue;
-		}
-		// send quat otherwise
-		else if (quat_update_time)
-		{
-			quat_update_time = 0;
-			last_quat_time = k_uptime_get();
-			connection_write_packet_1();
-			continue;
-		}
-		else if (k_uptime_get() - last_info_time > 100)
-		{
-			last_info_time = k_uptime_get();
-			connection_write_packet_0();
-			continue;
-		}
-		else if (k_uptime_get() - last_status_time > 1000)
-		{
-			last_status_time = k_uptime_get();
-			connection_write_packet_3();
-			continue;
-		}
-		else
-		{
-			connection_clocks_request_stop();
-		}
-		k_msleep(1); // TODO: should be getting timing from receiver, for now just send asap
-	}
+        // TODO: checking for connection_update events from sensor_loop, here we will time and send them out
+        while (1)
+        {
+                int64_t now = k_uptime_get();
+
+                if (last_data_time != 0) // have valid data
+                {
+                        last_data_time = 0;
+                        esb_write(data_buffer);
+                }
+                // mag is higher priority (skip accel, quat is full precision)
+                else if (mag_update_time && k_uptime_get() - last_mag_time > 200)
+                {
+                        mag_update_time = 0; // data has been sent
+                        last_mag_time = k_uptime_get();
+                        connection_write_packet_4();
+                        continue;
+                }
+                // if time for info and precise quat not needed
+                else if (quat_update_time && !send_precise_quat && k_uptime_get() - last_info_time > 100)
+                {
+                        quat_update_time = 0;
+                        last_quat_time = k_uptime_get();
+                        last_info_time = k_uptime_get();
+                        connection_write_packet_2();
+                        continue;
+                }
+                // send quat otherwise
+                else if (quat_update_time)
+                {
+                        quat_update_time = 0;
+                        last_quat_time = k_uptime_get();
+                        connection_write_packet_1();
+                        continue;
+                }
+                else if (k_uptime_get() - last_info_time > 100)
+                {
+                        last_info_time = k_uptime_get();
+                        connection_write_packet_0();
+                        continue;
+                }
+                else if (k_uptime_get() - last_status_time > 1000)
+                {
+                        last_status_time = k_uptime_get();
+                        connection_write_packet_3();
+                        continue;
+                }
+                else
+                {
+                        connection_clocks_request_stop();
+                }
+
+                if (now - last_latency_periodic_log_time > LATENCY_LOG_INTERVAL_MS) {
+                        int32_t latency_ms = (int32_t)atomic_get(&current_latency_ms);
+                        if (latency_ms >= 0) {
+                                LOG_INF("Current latency: %d ms", latency_ms);
+                        }
+                        last_latency_periodic_log_time = now;
+                }
+
+                k_msleep(1); // TODO: should be getting timing from receiver, for now just send asap
+        }
 }
