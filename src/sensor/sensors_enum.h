@@ -131,6 +131,7 @@ enum dev_imu {
 enum dev_mag {
 	MAG_HMC5883L,
 	MAG_QMC5883L,
+	MAG_QMC5883P,
 	MAG_QMC6309,
 	MAG_QMC6310,
 	MAG_AK8963,
