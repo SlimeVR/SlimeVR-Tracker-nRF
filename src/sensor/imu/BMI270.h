@@ -75,23 +75,23 @@
 #define RANGE_250  0x03
 #define RANGE_125  0x04
 
-int bmi_init(float clock_rate, float accel_time, float gyro_time, float *accel_actual_time, float *gyro_actual_time);
-void bmi_shutdown(void);
+int bmi270_init(float clock_rate, float accel_time, float gyro_time, float *accel_actual_time, float *gyro_actual_time);
+void bmi270_shutdown(void);
 
-void bmi_update_fs(float accel_range, float gyro_range, float *accel_actual_range, float *gyro_actual_range);
-int bmi_update_odr(float accel_time, float gyro_time, float *accel_actual_time, float *gyro_actual_time);
+void bmi270_update_fs(float accel_range, float gyro_range, float *accel_actual_range, float *gyro_actual_range);
+int bmi270_update_odr(float accel_time, float gyro_time, float *accel_actual_time, float *gyro_actual_time);
 
-uint16_t bmi_fifo_read(uint8_t *data, uint16_t len);
-int bmi_fifo_process(uint16_t index, uint8_t *data, float a[3], float g[3]);
-void bmi_accel_read(float a[3]);
-void bmi_gyro_read(float g[3]);
-float bmi_temp_read(void);
+uint16_t bmi270_fifo_read(uint8_t *data, uint16_t len);
+int bmi270_fifo_process(uint16_t index, uint8_t *data, float a[3], float g[3]);
+void bmi270_accel_read(float a[3]);
+void bmi270_gyro_read(float g[3]);
+float bmi270_temp_read(void);
 
-uint8_t bmi_setup_DRDY(uint16_t threshold);
-uint8_t bmi_setup_WOM(void);
+uint8_t bmi270_setup_DRDY(uint16_t threshold);
+uint8_t bmi270_setup_WOM(void);
 
-int bmi_crt(uint8_t *data);
-void bmi_gain_apply(uint8_t *data);
+int bmi270_crt(uint8_t *data);
+void bmi270_gain_apply(uint8_t *data);
 
 extern const sensor_imu_t sensor_imu_bmi270;
 
