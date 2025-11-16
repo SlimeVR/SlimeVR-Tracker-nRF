@@ -366,7 +366,7 @@ static void sensor_calibrate_imu()
 		LOG_INF("Suspending sensor thread");
 		main_imu_suspend();
 		LOG_INF("Running BMI270 component retrimming");
-		int err = bmi_crt(sensor_data); // will automatically reinitialize // TODO: this blocks sensor!
+		int err = bmi270_crt(sensor_data); // will automatically reinitialize // TODO: this blocks sensor!
 		LOG_INF("Resuming sensor thread");
 		main_imu_resume();
 		if (err)
@@ -564,7 +564,7 @@ static int check_sides(const float *a)
 }
 
 static void magneto_reset(void)
-{	
+{
 	magneto_progress = 0; // reusing ata, so guarantee cleared mag progress
 	last_magneto_progress = 0;
 	magneto_progress_time = 0;
