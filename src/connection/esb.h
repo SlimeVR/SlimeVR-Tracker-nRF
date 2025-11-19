@@ -38,6 +38,15 @@ extern bool send_data;
 extern uint16_t led_clock;
 extern uint32_t led_clock_offset;
 
+#define ESB_CONTROL_PREAMBLE 0xCD
+#define ESB_TEST_PREAMBLE 0xCF
+
+#define ESB_PACKET_CONTROL_PAIR_REQEST 1
+#define ESB_PACKET_CONTROL_PAIR_ACCEPT 2
+#define ESB_PACKET_CONTROL_DONGLE_STATUS 3
+#define ESB_PACKET_CONTROL_NO_WINDOWS 4
+#define ESB_PACKET_CONTROL_WINDOW_INFO 5
+
 void event_handler(struct esb_evt const *event);
 int clocks_start(void);
 void clocks_stop(void);
@@ -45,18 +54,38 @@ void clocks_request_start(uint32_t delay_us);
 void clocks_request_stop(uint32_t delay_us);
 int esb_initialize(bool);
 void esb_deinitialize(void);
+void fill_packets_stat(uint8_t *data);
 
 void esb_set_addr_discovery(void);
 void esb_set_addr_paired(void);
 
 void esb_set_pair(uint64_t addr);
 
-void esb_pair(void);
+int esb_get_frequency(void);
+
+bool esb_pair(void);
 void esb_reset_pair(void);
 void esb_clear_pair(void);
 
-void esb_write(uint8_t *data); // TODO: give packets some names
+void esb_write(uint8_t *data, uint8_t packet_sequnce); // TODO: give packets some names
 
 bool esb_ready(void);
+
+/*
+ * Note for the future:
+ *
+ * Best channels and frequencies to use:
+ * 20, 21, 22, 23, 24: 2420MHz to 2424Mhz - BT channels 8, 9, 10 outside of WiFi channels
+ * 48, 49, 50, 51, 52: 2448MHz to 2452Mhz - BT channels 21, 22, 23 outside of WiFi channels
+ * 72, 73, 74, 75, 76, 77, 78: 2472MHz to 2478Mhz - BT channels 33, 34, 35, 36 outside WiFi channels
+ * 82, 83: 2482Mhz to 2483Mhz - outside of used WiFi and BT spectrums
+ * Higher channels can be restricted by country.
+ * 
+ * TODO : Make a list of allowed channels by country
+ * 
+ * WARNING: Using nearby channels can lead to overlap, i.e. packets sent to Channel 20
+ * can be received by a device tuned to Channel 21, so it's recommended to
+ * ONLY USE EVEN CHANNELS
+ */
 
 #endif
