@@ -64,24 +64,12 @@ LOG_MODULE_REGISTER(esb_event, LOG_LEVEL_INF);
 static void esb_thread(void);
 K_THREAD_DEFINE(esb_thread_id, 512, esb_thread, NULL, NULL, NULL, ESB_THREAD_PRIORITY, 0, 0);
 
-uint64_t pairing_packets = 0;
-
 void event_handler(struct esb_evt const *event)
 {
 	switch (event->evt_id)
 	{
 	case ESB_EVENT_TX_SUCCESS:
-		if (!paired_addr[0]) // zero, not paired
-			pairing_packets++; // keep track of pairing state
-		if (tx_errors >= TX_ERROR_THRESHOLD && tx_errors < TX_ERROR_THRESHOLD + TX_ERROR_CLEAR_RATE && last_tx_fail == 0)
-		{
-			last_tx_success = 0; // reset last_tx_success on threshold reached
-			last_tx_fail = k_uptime_get();
-		}
-		if (tx_errors > TX_ERROR_CLEAR_RATE)
-			tx_errors -= TX_ERROR_CLEAR_RATE;
-		else
-			tx_errors = 0;
+		tx_errors = 0;
 		LOG_DBG("TX SUCCESS");
 		if (esb_paired)
 			clocks_stop();
@@ -105,8 +93,8 @@ void event_handler(struct esb_evt const *event)
 			LOG_DBG("rx len: %d, pipe: %d", rx_payload.length, rx_payload.pipe);
 			if (!paired_addr[0]) // zero, not paired
 			{
-				LOG_DBG("tx: %16llX rx: %16llX", *(uint64_t *)tx_payload_pair.data, *(uint64_t *)rx_payload.data);
-				if (rx_payload.length == 8 && tx_payload_pair.data[1] == 1) // ack to second packet in pairing burst
+				LOG_INF("tx: %16llX rx: %16llX", *(uint64_t *)tx_payload_pair.data, *(uint64_t *)rx_payload.data);
+				if (rx_payload.length == 8) // Potentially pairing packet, will try to parse it in the esb thread
 					memcpy(paired_addr, rx_payload.data, sizeof(paired_addr));
 			}
 			else
@@ -258,10 +246,10 @@ int esb_initialize(bool tx)
 		// config.bitrate = ESB_BITRATE_2MBPS;
 		// config.crc = ESB_CRC_16BIT;
 		config.tx_output_power = CONFIG_2_SETTINGS_READ(CONFIG_2_RADIO_TX_POWER);
-		// config.retransmit_delay = 600;
-		//config.retransmit_count = 0;
+		config.retransmit_delay = 435;
+		config.retransmit_count = 0;
 		//config.tx_mode = ESB_TXMODE_MANUAL;
-		// config.payload_length = 32;
+		config.payload_length = 32;
 		config.selective_auto_ack = true; // TODO: while pairing, should be set to false
 //		config.use_fast_ramp_up = true;
 	}
@@ -273,10 +261,10 @@ int esb_initialize(bool tx)
 		// config.bitrate = ESB_BITRATE_2MBPS;
 		// config.crc = ESB_CRC_16BIT;
 		config.tx_output_power = CONFIG_2_SETTINGS_READ(CONFIG_2_RADIO_TX_POWER);
-		// config.retransmit_delay = 600;
-		// config.retransmit_count = 3;
+		config.retransmit_delay = 435;
+		config.retransmit_count = 0;
 		// config.tx_mode = ESB_TXMODE_AUTO;
-		// config.payload_length = 32;
+		config.payload_length = 32;
 		config.selective_auto_ack = true;
 //		config.use_fast_ramp_up = true;
 	}
@@ -337,9 +325,7 @@ inline void esb_set_addr_paired(void)
 		if (addr_buffer[i] == 0x00 || addr_buffer[i] == 0x55 || addr_buffer[i] == 0xAA) // Avoid invalid addresses (see nrf datasheet)
 			addr_buffer[i] += 8;
 	}
-//	memcpy(base_addr_0, addr_buffer, sizeof(base_addr_0));
 	memcpy(base_addr_1, addr_buffer + 4, sizeof(base_addr_1));
-//	memcpy(addr_prefix, addr_buffer + 8, sizeof(addr_prefix));
 	memcpy(base_addr_0, discovery_base_addr_0, sizeof(base_addr_0));
 	memcpy(addr_prefix, discovery_addr_prefix, sizeof(addr_prefix));
 }
@@ -385,7 +371,7 @@ void esb_pair(void)
 		LOG_INF("Checksum: %02X", checksum);
 		tx_payload_pair.data[0] = checksum; // Use checksum to make sure packet is for this device
 		set_led(SYS_LED_PATTERN_SHORT, SYS_LED_PRIORITY_CONNECTION);
-		while (paired_addr[0] != checksum)
+		while (paired_addr[0] != checksum && ((*(uint64_t *)&paired_addr[0] >> 16) & 0xFFFFFFFFFFFF) != *addr)
 		{
 			int64_t time_begin = k_uptime_get();
 
@@ -404,28 +390,12 @@ void esb_pair(void)
 				paired_addr[0] = 0; // Packet not for this device
 			}
 
-//			esb_flush_rx();
-//			esb_flush_tx();
-
-			pairing_packets = 0;
-
 			// send pairing request
 			tx_payload_pair.data[1] = 0;
 			esb_write_payload(&tx_payload_pair);
 			k_usleep(100);
 			while (!esb_is_idle() && (k_uptime_get() < (time_begin + 10)))
 				k_usleep(1);
-
-			// receive ack data
-			tx_payload_pair.data[1] = 1;
-			if ((pairing_packets == 1) && (k_uptime_get() < (time_begin + 10)))
-				esb_write_payload(&tx_payload_pair);
-			k_usleep(100);
-			while (!esb_is_idle() && (k_uptime_get() < (time_begin + 10)))
-				k_usleep(1);
-
-			if (pairing_packets == 2)
-				LOG_INF("Pairing request received");
 
 			if (clock_status)
 				clocks_stop();
