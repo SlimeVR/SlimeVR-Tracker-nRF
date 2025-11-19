@@ -31,9 +31,13 @@
 #include <zephyr/sys/crc.h>
 
 #include "esb.h"
+#include "tdma.h"
+#include "util.h"
+#include "system/clock_control.h"
+
+#define ESB_CHANNEL 50
 
 uint8_t last_reset = 0;
-//const nrfx_timer_t m_timer = NRFX_TIMER_INSTANCE(1);
 bool esb_state = false;
 bool timer_state = false;
 bool send_data = false;
@@ -43,13 +47,25 @@ uint32_t led_clock_offset = 0;
 uint32_t tx_errors = 0;
 int64_t last_tx_success = 0;
 int64_t last_tx_fail = 0;
+uint8_t last_packet_sequence = 0;
 
 static struct esb_payload rx_payload;
 static struct esb_payload tx_payload = ESB_CREATE_PAYLOAD(0,
-														  0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
+														  0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
 static struct esb_payload tx_payload_pair = ESB_CREATE_PAYLOAD(0,
 														  0, 0, 0, 0, 0, 0, 0, 0);
 
+/*
+base_addr_p0: Base address for pipe 0, in big endian.
+base_addr_p1: Base address for pipe 1-7, in big endian (not used, set to dongle's address)
+pipe_prefixes: Address prefix for pipe 0 to 7.
+This was randomly generated
+*/
+static const uint8_t discovery_base_addr_0[4] = {0x62, 0x39, 0x8A, 0xF2};
+static const uint8_t discovery_base_addr_1[4] = {0x28, 0xFF, 0x50, 0xB8}; // Not used
+static const uint8_t discovery_addr_prefix[8] = {0xFE, 0xFF, 0x29, 0x27, 0x09, 0x02, 0xB2, 0xD6};
+
+static uint8_t base_addr_0[4], base_addr_1[4], addr_prefix[8] = {0};
 static uint8_t paired_addr[8] = {0};
 
 static bool esb_initialized = false;
@@ -64,24 +80,16 @@ LOG_MODULE_REGISTER(esb_event, LOG_LEVEL_INF);
 static void esb_thread(void);
 K_THREAD_DEFINE(esb_thread_id, 512, esb_thread, NULL, NULL, NULL, ESB_THREAD_PRIORITY, 0, 0);
 
-uint64_t pairing_packets = 0;
-
-//|type    |description
-//|TX  CRC8|pairing
-//|RX  CRC8|pairing
-
-//|b0      |b1      |b2      |b3      |b4      |b5      |b6      |b7      |b8      |b9      |b10     |b11     |b12     |b13     |b14     |b15     |
-//|type    |id      |packet data                                                                                                                  |
-//|TX  CRC8|ack     |device_addr                                          |
-//|RX  CRC8|ack     |recv_addr                                            |
+uint8_t packets_sent;
+uint8_t packets_received;
+uint8_t packets_failed;
+uint32_t packets_rssi;
 
 void event_handler(struct esb_evt const *event)
 {
 	switch (event->evt_id)
 	{
 	case ESB_EVENT_TX_SUCCESS:
-		if (!paired_addr[0]) // zero, not paired
-			pairing_packets++; // keep track of pairing state
 		if (tx_errors >= TX_ERROR_THRESHOLD && tx_errors < TX_ERROR_THRESHOLD + TX_ERROR_CLEAR_RATE && last_tx_fail == 0)
 		{
 			last_tx_success = 0; // reset last_tx_success on threshold reached
@@ -103,47 +111,77 @@ void event_handler(struct esb_evt const *event)
 			last_tx_fail = 0; // reset last_tx_fail on threshold reached
 			last_tx_success = k_uptime_get();
 		}
+		packets_failed++;
 		LOG_DBG("TX FAILED");
 		if (esb_paired)
 			clocks_stop();
 		break;
 	case ESB_EVENT_RX_RECEIVED:
-		// TODO: have to read rx until -ENODATA (or -EACCES/-EINVAL)
-		if (!esb_read_rx_payload(&rx_payload)) // zero, rx success
+		LOG_DBG("RX");
+		int err = 0;
+		while (!err) // zero, rx success
 		{
-			LOG_DBG("rx len: %d, pipe: %d", rx_payload.length, rx_payload.pipe);
-			if (!paired_addr[0]) // zero, not paired
-			{
-				LOG_DBG("tx: %16llX rx: %16llX", *(uint64_t *)tx_payload_pair.data, *(uint64_t *)rx_payload.data);
-				if (rx_payload.length == 8 && tx_payload_pair.data[1] == 1) // ack to second packet in pairing burst
-					memcpy(paired_addr, rx_payload.data, sizeof(paired_addr));
+			err = esb_read_rx_payload(&rx_payload);
+			if (err == -ENODATA) {
+				return;
+			} else if (err) {
+				LOG_ERR("Error while reading rx packet: %d", err);
+				return;
 			}
-			else
+			packets_received++;
+			packets_rssi += (uint8_t) rx_payload.rssi;
+			if (!paired_addr[0] && rx_payload.length == 8 && rx_payload.pipe == 0) // not paired
 			{
-				if (rx_payload.length == 4)
-				{
-					// TODO: Device should never receive packets if it is already paired, why is this packet received?
-					// This may be part of acknowledge
-//					if (!nrfx_timer_init_check(&m_timer))
-					{
-						LOG_WRN("Timer not initialized");
+				LOG_INF("tx: %16llX rx: %16llX", *(uint64_t *)tx_payload_pair.data, *(uint64_t *)rx_payload.data);
+				if (rx_payload.length == 8) // Potentially pairing packet, will try to parse it in the esb thread
+					memcpy(paired_addr, rx_payload.data, sizeof(paired_addr));
+				return;
+			}
+
+			if(rx_payload.data[0] == ESB_CONTROL_PREAMBLE) {
+				// Control packet received
+				switch(rx_payload.data[1]) {
+					case ESB_PACKET_CONTROL_NO_WINDOWS: // No Windows (4)
+						// TODO Enter error state and show LED to the user
 						break;
-					}
-					if (timer_state == false)
-					{
-//						nrfx_timer_resume(&m_timer);
-						timer_state = true;
-					}
-//					nrfx_timer_clear(&m_timer);
-					last_reset = 0;
-					led_clock = (rx_payload.data[0] << 8) + rx_payload.data[1]; // sync led flashes :)
-					led_clock_offset = 0;
-					LOG_DBG("RX, timer reset");
+					case ESB_PACKET_CONTROL_WINDOW_INFO: // Window Info (5)
+						uint8_t packet_number = rx_payload.data[7];
+						if(packet_number != last_packet_sequence) {
+							LOG_ERR("Window Info (5) packet number missmatch %d != %d", packet_number, last_packet_sequence);
+							break;
+						}
+						int32_t time = tdma_get_time();
+						int32_t packet_time = tdma_get_packet_time();
+						uint8_t window = rx_payload.data[2];
+						tdma_set_our_window(window);
+						int32_t received_time = *((uint32_t *) &rx_payload.data[3]);
+						
+						// See NTP algorithm
+						int32_t diff = ((received_time - packet_time) + (received_time - time)) / 2;
+						// int32_t roundtrip_time = time - packet_time;
+
+						tdma_update_timer_offset(diff);
+						// if(ABS(diff) != 0) 
+						// 	LOG_WRN("Our: %d, packet: %d, dongle's: %d, diff: %d, roundtrip: %d (was slot %d), clock 0x%08x", time, packet_time, received_time, diff, roundtrip_time, tdma_get_slot(packet_time), nrf_clock_lf_src_get(NRF_CLOCK));
+						break;
+				default:
+					LOG_INF("Control packet %d received", rx_payload.data[1]);
 				}
 			}
 		}
 		break;
 	}
+}
+
+void fill_packets_stat(uint8_t *data) {
+	data[8] = packets_sent;
+	data[9] = packets_received;
+	data[10] = packets_failed;
+	data[11] = packets_received == 0 ? 0 : packets_rssi / packets_received;
+	packets_sent = 0;
+	packets_received = 0;
+	packets_failed = 0;
+	packets_rssi = 0;
 }
 
 bool clock_status = false;
@@ -169,6 +207,7 @@ int clocks_start(void)
 {
 	if (clock_status)
 		return 0;
+
 	int err;
 	int res;
 	struct onoff_client clk_cli;
@@ -239,20 +278,6 @@ void clocks_request_stop(uint32_t delay_us)
 	k_thread_create(&clocks_stop_thread_id, clocks_stop_thread_id_stack, K_THREAD_STACK_SIZEOF(clocks_stop_thread_id), (k_thread_entry_t)clocks_stop, NULL, NULL, NULL, CLOCKS_STOP_THREAD_PRIORITY, 0, K_USEC(delay_us));
 }
 
-// this was randomly generated
-// TODO: I have no idea?
-// TODO: see esb information, check CONFIG_ESB_PIPE_COUNT
-/*
-base_addr_p0: Base address for pipe 0, in big endian.
-base_addr_p1: Base address for pipe 1-7, in big endian.
-pipe_prefixes: Address prefix for pipe 0 to 7.
-*/
-static const uint8_t discovery_base_addr_0[4] = {0x62, 0x39, 0x8A, 0xF2};
-static const uint8_t discovery_base_addr_1[4] = {0x28, 0xFF, 0x50, 0xB8}; // TODO: not used
-static const uint8_t discovery_addr_prefix[8] = {0xFE, 0xFF, 0x29, 0x27, 0x09, 0x02, 0xB2, 0xD6};
-
-static uint8_t base_addr_0[4], base_addr_1[4], addr_prefix[8] = {0};
-
 int esb_initialize(bool tx)
 {
 	int err;
@@ -267,12 +292,12 @@ int esb_initialize(bool tx)
 		// config.bitrate = ESB_BITRATE_2MBPS;
 		// config.crc = ESB_CRC_16BIT;
 		config.tx_output_power = CONFIG_2_SETTINGS_READ(CONFIG_2_RADIO_TX_POWER);
-		// config.retransmit_delay = 600;
-		//config.retransmit_count = 0;
-		//config.tx_mode = ESB_TXMODE_MANUAL;
-		// config.payload_length = 32;
-		config.selective_auto_ack = true; // TODO: while pairing, should be set to false
-//		config.use_fast_ramp_up = true;
+		config.retransmit_delay = 435;
+		config.retransmit_count = 1;
+		config.tx_mode = ESB_TXMODE_MANUAL;
+		config.payload_length = 32;
+		config.selective_auto_ack = true;
+		// config.use_fast_ramp_up = false;
 	}
 	else
 	{
@@ -282,31 +307,33 @@ int esb_initialize(bool tx)
 		// config.bitrate = ESB_BITRATE_2MBPS;
 		// config.crc = ESB_CRC_16BIT;
 		config.tx_output_power = CONFIG_2_SETTINGS_READ(CONFIG_2_RADIO_TX_POWER);
-		// config.retransmit_delay = 600;
-		// config.retransmit_count = 3;
+		config.retransmit_delay = 435;
+		config.retransmit_count = 0;
 		// config.tx_mode = ESB_TXMODE_AUTO;
-		// config.payload_length = 32;
+		config.payload_length = 32;
 		config.selective_auto_ack = true;
-//		config.use_fast_ramp_up = true;
+		// config.use_fast_ramp_up = false;
 	}
 
 	err = esb_init(&config);
 
 	if (!err)
+	{
 		esb_set_base_address_0(base_addr_0);
-
-	if (!err)
 		esb_set_base_address_1(base_addr_1);
-
-	if (!err)
 		esb_set_prefixes(addr_prefix, ARRAY_SIZE(addr_prefix));
-
-	if (err)
+		esb_set_rf_channel(ESB_CHANNEL);
+	}
+	else
 	{
 		LOG_ERR("ESB initialization failed: %d", err);
 		set_status(SYS_STATUS_CONNECTION_ERROR, true);
 		return err;
 	}
+
+	int32_t ch;
+	esb_get_rf_channel(&ch);
+	LOG_INF("Initialized ESB, %sX mode ch %d", tx ? "T" : "R", ch);
 
 	esb_initialized = true;
 	return 0;
@@ -346,9 +373,7 @@ inline void esb_set_addr_paired(void)
 		if (addr_buffer[i] == 0x00 || addr_buffer[i] == 0x55 || addr_buffer[i] == 0xAA) // Avoid invalid addresses (see nrf datasheet)
 			addr_buffer[i] += 8;
 	}
-//	memcpy(base_addr_0, addr_buffer, sizeof(base_addr_0));
 	memcpy(base_addr_1, addr_buffer + 4, sizeof(base_addr_1));
-//	memcpy(addr_prefix, addr_buffer + 8, sizeof(addr_prefix));
 	memcpy(base_addr_0, discovery_base_addr_0, sizeof(base_addr_0));
 	memcpy(addr_prefix, discovery_addr_prefix, sizeof(addr_prefix));
 }
@@ -372,7 +397,7 @@ void esb_set_pair(uint64_t addr)
 	sys_write(PAIRED_ID, retained->paired_addr, paired_addr, sizeof(paired_addr)); // Write new address and tracker id
 }
 
-void esb_pair(void)
+bool esb_pair(void)
 {
 	if (get_status(SYS_STATUS_CONNECTION_ERROR))
 		set_status(SYS_STATUS_CONNECTION_ERROR, false);
@@ -382,7 +407,8 @@ void esb_pair(void)
 		LOG_INF("Pairing");
 		esb_set_addr_discovery();
 		esb_initialize(true);
-//		timer_init(); // TODO: shouldn't be here!!!
+		const int64_t time_pairing_start = k_uptime_get();
+
 		tx_payload_pair.pipe = 0;
 		tx_payload_pair.noack = false;
 		uint64_t *addr = (uint64_t *)NRF_FICR->DEVICEADDR; // Use device address as unique identifier (although it is not actually guaranteed, see datasheet)
@@ -394,9 +420,11 @@ void esb_pair(void)
 		LOG_INF("Checksum: %02X", checksum);
 		tx_payload_pair.data[0] = checksum; // Use checksum to make sure packet is for this device
 		set_led(SYS_LED_PATTERN_SHORT, SYS_LED_PRIORITY_PAIR);
-		while (paired_addr[0] != checksum)
+		while (paired_addr[0] != checksum && ((*(uint64_t *)&paired_addr[0] >> 16) & 0xFFFFFFFFFFFF) != *addr)
 		{
 			int64_t time_begin = k_uptime_get();
+			if(time_pairing_start + CONFIG_3_SETTINGS_READ(CONFIG_3_CONNECTION_TIMEOUT_DELAY) < time_begin)
+				return false; // Pairing timeout
 
 			if (!esb_initialized)
 			{
@@ -413,28 +441,13 @@ void esb_pair(void)
 				paired_addr[0] = 0; // Packet not for this device
 			}
 
-//			esb_flush_rx();
-//			esb_flush_tx();
-
-			pairing_packets = 0;
-
 			// send pairing request
 			tx_payload_pair.data[1] = 0;
 			esb_write_payload(&tx_payload_pair);
+			esb_start_tx();
 			k_usleep(100);
 			while (!esb_is_idle() && (k_uptime_get() < (time_begin + 10)))
 				k_usleep(1);
-
-			// receive ack data
-			tx_payload_pair.data[1] = 1;
-			if ((pairing_packets == 1) && (k_uptime_get() < (time_begin + 10)))
-				esb_write_payload(&tx_payload_pair);
-			k_usleep(100);
-			while (!esb_is_idle() && (k_uptime_get() < (time_begin + 10)))
-				k_usleep(1);
-
-			if (pairing_packets == 2)
-				LOG_INF("Pairing request received");
 
 			if (clock_status)
 				clocks_stop();
@@ -459,6 +472,7 @@ void esb_pair(void)
 	esb_set_addr_paired();
 	esb_paired = true;
 	clocks_stop();
+	return true;
 }
 
 void esb_reset_pair(void)
@@ -479,12 +493,19 @@ void esb_clear_pair(void)
 	LOG_INF("Pairing data reset");
 }
 
-void esb_write(uint8_t *data)
+int esb_get_frequency(void) {
+	uint32_t channel;
+	esb_get_rf_channel(&channel);
+	return 2400UL + channel; // MHz
+}
+
+void esb_write(uint8_t *data, uint8_t packet_sequnce)
 {
 	if (!esb_initialized || !esb_paired)
 		return;
 	if (!clock_status)
 		clocks_start();
+	last_packet_sequence = packet_sequnce;
 	tx_payload.pipe = 1; // using base address 1
 #if defined(NRF54L15_XXAA) // TODO: esb halts with ack and tx fail
 	tx_payload.noack = true;
@@ -494,6 +515,13 @@ void esb_write(uint8_t *data)
 	memcpy(tx_payload.data, data, tx_payload.length);
 	esb_flush_tx(); // this will clear all transmissions even if they did not complete
 	esb_write_payload(&tx_payload); // Add transmission to queue
+	//k_usleep(1);
+	// Wait for our window to broadcast
+	while(!tdma_is_our_window())
+		k_sleep(Z_TIMEOUT_TICKS(1)); // Spin wait?
+	tdma_tx_started();
+	esb_start_tx();
+	packets_sent++;
 	send_data = true;
 }
 
@@ -511,12 +539,19 @@ static void esb_thread(void)
 	// Read paired address from retained
 	memcpy(paired_addr, retained->paired_addr, sizeof(paired_addr));
 
+	clocks_start();
+	clock_init_external();
+
 	while (1)
 	{
 		if (!esb_paired && (!use_hid || paired_addr[0] || (!get_status(SYS_STATUS_USB_CONNECTED) && k_uptime_get() - 750 > start_time))) // only automatically enter pairing while not potentially communicating by usb, however allow esb if already paired
 		{
-			esb_pair();
-			esb_initialize(true);
+			if(!esb_pair()) {
+				LOG_WRN("Pairing timeout");
+				sys_request_system_off(false);
+			} else {
+				esb_initialize(true);
+			}
 		}
 		if (tx_errors >= TX_ERROR_THRESHOLD)
 		{
