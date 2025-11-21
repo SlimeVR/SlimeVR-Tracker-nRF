@@ -21,6 +21,7 @@
 	THE SOFTWARE.
 */
 #include "tdma.h"
+#include <zephyr/kernel.h>
 
 uint8_t our_window = 0;
 uint32_t last_slot = 32757;
