@@ -31,6 +31,7 @@
 #include <zephyr/sys/crc.h>
 
 #include "esb.h"
+#include "tdma.h"
 
 uint8_t last_reset = 0;
 //const nrfx_timer_t m_timer = NRFX_TIMER_INSTANCE(1);
@@ -90,34 +91,30 @@ void event_handler(struct esb_evt const *event)
 		// TODO: have to read rx until -ENODATA (or -EACCES/-EINVAL)
 		if (!esb_read_rx_payload(&rx_payload)) // zero, rx success
 		{
-			LOG_DBG("rx len: %d, pipe: %d", rx_payload.length, rx_payload.pipe);
-			if (!paired_addr[0]) // zero, not paired
+			if (!paired_addr[0] && rx_payload.length == 8 && rx_payload.pipe == 0) // not paired
 			{
 				LOG_INF("tx: %16llX rx: %16llX", *(uint64_t *)tx_payload_pair.data, *(uint64_t *)rx_payload.data);
 				if (rx_payload.length == 8) // Potentially pairing packet, will try to parse it in the esb thread
 					memcpy(paired_addr, rx_payload.data, sizeof(paired_addr));
+				return;
 			}
-			else
-			{
-				if (rx_payload.length == 4)
-				{
-					// TODO: Device should never receive packets if it is already paired, why is this packet received?
-					// This may be part of acknowledge
-//					if (!nrfx_timer_init_check(&m_timer))
-					{
-						LOG_WRN("Timer not initialized");
+
+			if(rx_payload.data[0] == ESB_CONTROL_PREAMBLE) {
+				// Control packet received
+				switch(rx_payload.data[1]) {
+					case ESB_PACKET_CONTROL_NO_WINDOWS: // No Windows (4)
+						// TODO
 						break;
-					}
-					if (timer_state == false)
-					{
-//						nrfx_timer_resume(&m_timer);
-						timer_state = true;
-					}
-//					nrfx_timer_clear(&m_timer);
-					last_reset = 0;
-					led_clock = (rx_payload.data[0] << 8) + rx_payload.data[1]; // sync led flashes :)
-					led_clock_offset = 0;
-					LOG_DBG("RX, timer reset");
+					case ESB_PACKET_CONTROL_WINDOW_INFO: // Window Info (5)
+						uint32_t timer = tdma_get_timer_with_offsets_from_packet();
+						uint8_t window = rx_payload.data[2];
+						tdma_set_our_window(window);
+						uint32_t received_timer = *((uint32_t *) &rx_payload.data[3]);
+						int32_t diff = received_timer - timer;
+						tdma_update_timer_offset(diff);
+						break;
+				default:
+					LOG_INF("Control packet %d received", rx_payload.data[1]);
 				}
 			}
 		}
@@ -246,9 +243,9 @@ int esb_initialize(bool tx)
 		// config.bitrate = ESB_BITRATE_2MBPS;
 		// config.crc = ESB_CRC_16BIT;
 		config.tx_output_power = CONFIG_2_SETTINGS_READ(CONFIG_2_RADIO_TX_POWER);
-		config.retransmit_delay = 435;
+		config.retransmit_delay = 600;
 		config.retransmit_count = 0;
-		//config.tx_mode = ESB_TXMODE_MANUAL;
+		config.tx_mode = ESB_TXMODE_MANUAL;
 		config.payload_length = 32;
 		config.selective_auto_ack = true; // TODO: while pairing, should be set to false
 //		config.use_fast_ramp_up = true;
@@ -261,7 +258,7 @@ int esb_initialize(bool tx)
 		// config.bitrate = ESB_BITRATE_2MBPS;
 		// config.crc = ESB_CRC_16BIT;
 		config.tx_output_power = CONFIG_2_SETTINGS_READ(CONFIG_2_RADIO_TX_POWER);
-		config.retransmit_delay = 435;
+		config.retransmit_delay = 600;
 		config.retransmit_count = 0;
 		// config.tx_mode = ESB_TXMODE_AUTO;
 		config.payload_length = 32;
@@ -393,6 +390,7 @@ void esb_pair(void)
 			// send pairing request
 			tx_payload_pair.data[1] = 0;
 			esb_write_payload(&tx_payload_pair);
+			esb_start_tx();
 			k_usleep(100);
 			while (!esb_is_idle() && (k_uptime_get() < (time_begin + 10)))
 				k_usleep(1);
@@ -455,6 +453,13 @@ void esb_write(uint8_t *data)
 	memcpy(tx_payload.data, data, tx_payload.length);
 	esb_flush_tx(); // this will clear all transmissions even if they did not complete
 	esb_write_payload(&tx_payload); // Add transmission to queue
+	//k_usleep(1);
+	// Wait for our window to broadcast
+	while(!tdma_is_our_window())
+		k_sleep(Z_TIMEOUT_TICKS(1)); // Spin wait?
+	tdma_tx_started();
+	esb_start_tx();
+
 	send_data = true;
 }
 
