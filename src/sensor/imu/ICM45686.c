@@ -439,6 +439,148 @@ int icm45_ext_passthrough(bool passthrough)
 	return 0;
 }
 
+int icm45_ext_setup() {
+  int err = 0;
+  err |= ssi_reg_write_byte(SENSOR_INTERFACE_DEV_IMU, ICM45686_IOC_PAD_SCENARIO_AUX_OVRD, 0x17); // AUX1_MODE_OVRD, AUX1 in I2CM Master, AUX1_ENABLE_OVRD, AUX1 enabled
+  sensor_interface_ext_configure(&sensor_ext_icm45686);
+  return err;
+}
+
+int icm45_bank_write(const uint8_t bank, const uint8_t reg, const uint8_t *buf, uint32_t num_bytes)
+{
+  if (num_bytes == 0)
+  {
+    LOG_ERR("Invalid bank write size");
+    return -1;
+  }
+
+  int err = 0;
+  uint8_t ireg_buf[3];
+  ireg_buf[0] = bank;
+  ireg_buf[1] = reg;
+  ireg_buf[2] = buf[0];
+  err |= ssi_burst_write(SENSOR_INTERFACE_DEV_IMU, ICM45686_IREG_ADDR_15_8, ireg_buf, 3);
+  k_usleep(4);
+
+  for (uint32_t i = 1; i < num_bytes; i++) 
+  {
+    err |= ssi_reg_write_byte(SENSOR_INTERFACE_DEV_IMU, ICM45686_IREG_DATA, buf[i]);
+    k_usleep(4);
+  }
+
+  return err;
+}
+
+int icm45_bank_write_byte(const uint8_t bank, const uint8_t reg, const uint8_t value)
+{
+  return icm45_bank_write(bank, reg, &value, 1);
+}
+
+int icm45_bank_read(const uint8_t bank, const uint8_t reg, uint8_t *buf, uint32_t num_bytes) 
+{
+  if (num_bytes == 0)
+  {
+    LOG_ERR("Invalid bank read size");
+    return -1;
+  }
+
+  int err = 0;
+  uint8_t ireg_buf[2];
+  ireg_buf[0] = bank;
+  ireg_buf[1] = reg;
+  err |= ssi_burst_write(SENSOR_INTERFACE_DEV_IMU, ICM45686_IREG_ADDR_15_8, ireg_buf, 2);
+  k_usleep(4);
+
+  for (uint32_t i = 0; i < num_bytes; i++) 
+  {
+    err |= ssi_reg_read_byte(SENSOR_INTERFACE_DEV_IMU, ICM45686_IREG_DATA, &buf[i]);
+    k_usleep(4);
+  }
+  return err;
+}
+
+int icm45_bank_read_byte(const uint8_t bank, const uint8_t reg, uint8_t *value) {
+  return icm45_bank_read(bank, reg, value, 1);
+}
+
+int icm45_ext_write(const uint8_t addr, const uint8_t *buf, uint32_t num_bytes) 
+{
+  if (num_bytes > 6) 
+  {
+    LOG_ERR("Unsupported write");
+    return -1;
+  }
+
+  int err = 0;
+
+  err |= icm45_bank_write(ICM45686_IPREG_TOP1, ICM45686_I2CM_WR_DATA_0, buf, num_bytes);
+  err |= icm45_bank_write_byte(ICM45686_IPREG_TOP1, ICM45686_I2CM_COMMAND_0, 0x80 + num_bytes); // Last transaction, channel 0, write num_bytes bytes
+  err |= icm45_bank_write_byte(ICM45686_IPREG_TOP1, ICM45686_I2CM_CONTROL, 0x01); // No restarts, fast mode, start transaction
+
+  uint8_t last_status = 0;
+  err |= icm45_bank_read_byte(ICM45686_IPREG_TOP1, ICM45686_I2CM_STATUS, &last_status);
+  while (last_status & 0x01) // I2CM busy
+  {
+    err |= icm45_bank_read_byte(ICM45686_IPREG_TOP1, ICM45686_I2CM_STATUS, &last_status);
+  }
+
+  if (last_status != 0x02) // Not (just) "done"
+  {
+    LOG_ERR("I2CM error: %02x", last_status);
+    return -1;
+  }
+
+  uint8_t dev_status;
+  err |= icm45_bank_read_byte(ICM45686_IPREG_TOP1, ICM45686_I2CM_EXT_DEV_STATUS, &dev_status);
+
+  if (dev_status & 0x01) {
+    // Maybe log the nack?
+    return -1;
+  }
+
+  return err;
+}
+
+int icm45_ext_write_read(const uint8_t addr, const void *write_buf, size_t num_write, void *read_buf, size_t num_read) {
+  if (num_write != 1 || num_read < 1 || num_read > 15) 
+  {
+    LOG_ERR("Unsupported write_read");
+    return -1;
+  }
+
+  int err = 0;
+
+  uint8_t dev_profile_data[2] = {((const uint8_t *)write_buf)[0], addr};
+  err |= icm45_bank_write(ICM45686_IPREG_TOP1, ICM45686_DEV_PROFILE_0, dev_profile_data, 2);
+  err |= icm45_bank_write_byte(ICM45686_IPREG_TOP1, ICM45686_I2CM_COMMAND_0, 0x90 + num_read); // Last transaction, channel 0, read num_read bytes with register specified
+  err |= icm45_bank_write_byte(ICM45686_IPREG_TOP1, ICM45686_I2CM_CONTROL, 0x01); // No restarts, fast mode, start transaction
+
+  uint8_t last_status = 0;
+  err |= icm45_bank_read_byte(ICM45686_IPREG_TOP1, ICM45686_I2CM_STATUS, &last_status);
+  while (last_status & 0x01) // I2CM busy
+  {
+    err |= icm45_bank_read_byte(ICM45686_IPREG_TOP1, ICM45686_I2CM_STATUS, &last_status);
+  }
+
+  if (last_status != 0x02) // Not (just) "done"
+  {
+    LOG_ERR("I2CM error: %02x", last_status);
+    return -1;
+  }
+
+  uint8_t dev_status;
+  err |= icm45_bank_read_byte(ICM45686_IPREG_TOP1, ICM45686_I2CM_EXT_DEV_STATUS, &dev_status);
+
+  if (dev_status & 0x01) {
+    // Maybe log the nack?
+    return -1;
+  }
+
+  err |= icm45_bank_read(ICM45686_IPREG_TOP1, ICM45686_I2CM_RD_DATA_0, read_buf, num_read);
+
+  return err;
+}
+
 const sensor_imu_t sensor_imu_icm45686 = {
 	*icm45_init,
 	*icm45_shutdown,
@@ -455,6 +597,12 @@ const sensor_imu_t sensor_imu_icm45686 = {
 	*icm45_setup_DRDY,
 	*icm45_setup_WOM,
 	
-	*imu_none_ext_setup,
+	*icm45_ext_setup,
 	*icm45_ext_passthrough
+};
+
+const sensor_ext_ssi_t sensor_ext_icm45686 = {
+  *icm45_ext_write,
+  *icm45_ext_write_read,
+  15
 };
