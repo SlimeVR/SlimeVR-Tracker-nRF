@@ -384,7 +384,7 @@ static int64_t last_status2_time = 0;
 void connection_thread(void)
 {
 	bool use_button = !CONFIG_0_SETTINGS_READ(CONFIG_0_USER_EXTRA_ACTIONS); // TODO: until info2 has extra data, it can be disabled for now if extra actions overrides button
-	uint8_t data_copy[21];
+	uint8_t data_copy[17];
 	// TODO: checking for connection_update events from sensor_loop, here we will time and send them out
 	while (1)
 	{
@@ -394,9 +394,7 @@ void connection_thread(void)
 			last_data_time = 0;
 			memcpy(data_copy, data_buffer, sizeof(data_copy));
 			k_mutex_unlock(&data_buffer_mutex);
-			data_copy[20] = packet_sequence++;
-			uint32_t *crc_ptr = (uint32_t *)&data_copy[16];
-			*crc_ptr = crc32_k_4_2_update(0x93a409eb, data_copy, 16);
+			data_copy[16] = packet_sequence++;
 			esb_write(data_copy);
 		}
 		// mag is higher priority (skip accel, quat is full precision)
