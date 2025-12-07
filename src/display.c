@@ -110,6 +110,7 @@ static int write_char_to_bottom_buf(char c)
     bottom_line_offset += width + 1;
     if (c == 0x2d)
         bottom_line_offset++;
+    return 0;
 }
 
 static void display_bottom_str(char *s)
