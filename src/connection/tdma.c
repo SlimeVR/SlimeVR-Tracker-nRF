@@ -27,6 +27,7 @@ uint8_t our_window = 0;
 uint32_t last_slot = 0;
 int32_t timer_offset = 0;
 static const int32_t timer_offset_static = 0;
+static const int32_t timer_offset_packets = 0;
 uint32_t packet_sent_time = 0;
 
 LOG_MODULE_REGISTER(tdma, LOG_LEVEL_INF);
@@ -35,8 +36,8 @@ uint32_t tdma_get_time() {
     return (k_cycle_get_32() + timer_offset) & TDMA_TIMER_MASK;
 }
 
-uint32_t tdma_get_time_with_offsets() {
-    return (k_cycle_get_32() + timer_offset + timer_offset_static) & TDMA_TIMER_MASK;
+uint32_t tdma_get_static_offset() {
+    return timer_offset_static;
 }
 
 uint32_t tdma_get_packet_time() {
@@ -59,13 +60,15 @@ void tdma_set_our_window(uint8_t window) {
     our_window = window;
 }
 
-void tdma_update_timer_offset(int32_t diff) {
-    timer_offset = timer_offset + (diff + 1) / 2;
-	LOG_INF("New timer offset %d & %d", timer_offset, timer_offset_static);
+void tdma_update_timer_offset(int32_t delta) {
+	if(delta != 0) {
+		timer_offset = timer_offset + (delta + 1) / 2;
+		LOG_INF("New timer offset %d & %d", timer_offset, timer_offset_static);
+	}
 }
 
 bool tdma_is_our_window() {
-	int32_t timer = tdma_get_time_with_offsets();
+	uint32_t timer = tdma_get_time();
 	uint32_t current_slot = tdma_get_slot(timer);
 	if(last_slot == current_slot || current_slot < 24)
 		return false;
@@ -78,5 +81,5 @@ bool tdma_is_our_window() {
 }
 
 void tdma_tx_started() {
-    packet_sent_time = k_cycle_get_32();
+	packet_sent_time = k_cycle_get_32() + timer_offset_packets;
 }
