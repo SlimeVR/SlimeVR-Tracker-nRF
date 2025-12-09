@@ -395,7 +395,7 @@ void connection_thread(void)
 			memcpy(data_copy, data_buffer, sizeof(data_copy));
 			k_mutex_unlock(&data_buffer_mutex);
 			data_copy[16] = packet_sequence++;
-			esb_write(data_copy);
+			esb_write(data_copy, packet_sequence - 1);
 		}
 		// mag is higher priority (skip accel, quat is full precision)
 		else if (mag_update_time && k_uptime_get() - last_mag_time > 200)
