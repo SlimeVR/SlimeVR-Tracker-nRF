@@ -67,6 +67,7 @@ LOG_MODULE_REGISTER(esb_event, LOG_LEVEL_INF);
 static void esb_thread(void);
 K_THREAD_DEFINE(esb_thread_id, 512, esb_thread, NULL, NULL, NULL, ESB_THREAD_PRIORITY, 0, 0);
 
+
 void event_handler(struct esb_evt const *event)
 {
 	switch (event->evt_id)
@@ -120,12 +121,11 @@ void event_handler(struct esb_evt const *event)
 						int32_t received_time = *((uint32_t *) &rx_payload.data[3]);
 						
 						int32_t diff = ((received_time - packet_time) + (received_time - time)) / 2;
-						int32_t roundtrip_time = time - packet_time;
+						//int32_t roundtrip_time = time - packet_time;
 
-						int32_t new_offset = diff + roundtrip_time / 2;
-						if(ABS(diff) > 10)
-							LOG_WRN("Diff: %d, roundtrip: %d, offset: %d", diff, roundtrip_time, new_offset);
 						tdma_update_timer_offset(diff);
+						//if(ABS(diff) != 0) 
+						//	LOG_WRN("Our: %d, packet: %d, dongle's: %d, diff: %d, roundtrip: %d (was slot %d), clock 0x%08x", time, packet_time, received_time, diff, roundtrip_time, tdma_get_slot(packet_time), nrf_clock_lf_src_get(NRF_CLOCK));
 						break;
 				default:
 					LOG_INF("Control packet %d received", rx_payload.data[1]);
@@ -159,6 +159,7 @@ int clocks_start(void)
 {
 	if (clock_status)
 		return 0;
+
 	int err;
 	int res;
 	struct onoff_client clk_cli;
@@ -494,6 +495,15 @@ static void esb_thread(void)
 
 	// Read paired address from retained
 	memcpy(paired_addr, retained->paired_addr, sizeof(paired_addr));
+
+	clocks_start();
+
+	// Switch to external oscillator for LF clock for good TDMA precision
+	if(IS_ENABLED(CONFIG_CLOCK_CONTROL_NRF_K32SRC_XTAL)) {
+		nrf_clock_task_trigger(NRF_CLOCK, NRF_CLOCK_TASK_LFCLKSTOP);
+		nrf_clock_lf_src_set(NRF_CLOCK, NRF_CLOCK_LFCLK_XTAL_FULL_SWING);
+		nrf_clock_task_trigger(NRF_CLOCK, NRF_CLOCK_TASK_LFCLKSTART);
+	}
 
 	while (1)
 	{
