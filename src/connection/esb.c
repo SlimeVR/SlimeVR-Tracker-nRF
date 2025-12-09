@@ -32,6 +32,7 @@
 
 #include "esb.h"
 #include "tdma.h"
+#include "util.h"
 
 uint8_t last_reset = 0;
 //const nrfx_timer_t m_timer = NRFX_TIMER_INSTANCE(1);
@@ -44,6 +45,7 @@ uint32_t led_clock_offset = 0;
 uint32_t tx_errors = 0;
 int64_t last_tx_success = 0;
 int64_t last_tx_fail = 0;
+uint8_t last_packet_sequence = 0;
 
 static struct esb_payload rx_payload;
 static struct esb_payload tx_payload = ESB_CREATE_PAYLOAD(0,
@@ -106,11 +108,23 @@ void event_handler(struct esb_evt const *event)
 						// TODO
 						break;
 					case ESB_PACKET_CONTROL_WINDOW_INFO: // Window Info (5)
-						uint32_t timer = tdma_get_timer_with_offsets_from_packet();
+						uint8_t packet_number = rx_payload.data[7];
+						if(packet_number != last_packet_sequence) {
+							LOG_ERR("Window Info (5) packet number missmatch %d != %d", packet_number, last_packet_sequence);
+							break;
+						}
+						int32_t time = tdma_get_time();
+						int32_t packet_time = tdma_get_packet_time();
 						uint8_t window = rx_payload.data[2];
 						tdma_set_our_window(window);
-						uint32_t received_timer = *((uint32_t *) &rx_payload.data[3]);
-						int32_t diff = received_timer - timer;
+						int32_t received_time = *((uint32_t *) &rx_payload.data[3]);
+						
+						int32_t diff = ((received_time - packet_time) + (received_time - time)) / 2;
+						int32_t roundtrip_time = time - packet_time;
+
+						int32_t new_offset = diff + roundtrip_time / 2;
+						if(ABS(diff) > 10)
+							LOG_WRN("Diff: %d, roundtrip: %d, offset: %d", diff, roundtrip_time, new_offset);
 						tdma_update_timer_offset(diff);
 						break;
 				default:
@@ -278,7 +292,7 @@ int esb_initialize(bool tx)
 		esb_set_prefixes(addr_prefix, ARRAY_SIZE(addr_prefix));
 
 	if (!err)
-		esb_set_rf_channel(79);
+		esb_set_rf_channel(50);
 
 	if (err)
 	{
@@ -441,12 +455,13 @@ void esb_clear_pair(void)
 	LOG_INF("Pairing data reset");
 }
 
-void esb_write(uint8_t *data)
+void esb_write(uint8_t *data, uint8_t packet_sequnce)
 {
 	if (!esb_initialized || !esb_paired)
 		return;
 	if (!clock_status)
 		clocks_start();
+	last_packet_sequence = packet_sequnce;
 	tx_payload.pipe = 1; // using base address 1
 #if defined(NRF54L15_XXAA) // TODO: esb halts with ack and tx fail
 	tx_payload.noack = true;

@@ -64,7 +64,7 @@ void esb_pair(void);
 void esb_reset_pair(void);
 void esb_clear_pair(void);
 
-void esb_write(uint8_t *data); // TODO: give packets some names
+void esb_write(uint8_t *data, uint8_t packet_sequnce); // TODO: give packets some names
 
 bool esb_ready(void);
 

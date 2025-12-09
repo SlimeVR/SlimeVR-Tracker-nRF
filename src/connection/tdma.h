@@ -36,9 +36,9 @@
 	#assert "CONFIG_SYS_CLOCK_HW_CYCLES_PER_SEC is not equal TDMA_TIMER_SIZE"
 #endif
 
-uint32_t tdma_get_timer();
-uint32_t tdma_get_timer_with_offsets();
-uint32_t tdma_get_timer_with_offsets_from_packet();
+uint32_t tdma_get_time();
+uint32_t tdma_get_time_with_offsets();
+uint32_t tdma_get_packet_time();
 uint32_t tdma_get_slot(uint32_t timer);
 uint8_t tdma_get_window(uint32_t slot);
 bool tdma_is_dongle_window(uint32_t slot);
