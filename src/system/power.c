@@ -13,11 +13,13 @@
 #include <zephyr/sys/reboot.h>
 #include <hal/nrf_gpio.h>
 #include <zephyr/pm/device.h>
+#include <zephyr/drivers/clock_control/nrf_clock_control.h>
 
 #include "power.h"
 
 #define DFU_DBL_RESET_MEM 0x20007F7C
 #define DFU_DBL_RESET_APP 0x4ee5677e
+#define ADAFRUIT_BOOTLOADER CONFIG_BUILD_OUTPUT_UF2
 
 static uint32_t *dbl_reset_mem __attribute__((unused)) = ((uint32_t *)DFU_DBL_RESET_MEM); // retained
 
@@ -261,6 +263,12 @@ void sys_request_WOM(bool force, bool immediate)
 
 void sys_request_system_off(bool immediate)
 {
+	#ifdef ADAFRUIT_BOOTLOADER
+		// Reset LFCLK before getting into DFU
+		nrf_clock_task_trigger(NRF_CLOCK, NRF_CLOCK_TASK_LFCLKSTOP);
+		nrf_clock_lf_src_set(NRF_CLOCK, NRF_CLOCK_LFCLK_RC);
+		nrf_clock_task_trigger(NRF_CLOCK, NRF_CLOCK_TASK_LFCLKSTART);
+	#endif
 	if (immediate)
 	{
 		sys_system_off();
@@ -271,6 +279,12 @@ void sys_request_system_off(bool immediate)
 
 void sys_request_system_reboot(bool immediate)
 {
+#ifdef ADAFRUIT_BOOTLOADER
+	// Reset LFCLK before getting into DFU
+	nrf_clock_task_trigger(NRF_CLOCK, NRF_CLOCK_TASK_LFCLKSTOP);
+	nrf_clock_lf_src_set(NRF_CLOCK, NRF_CLOCK_LFCLK_RC);
+	nrf_clock_task_trigger(NRF_CLOCK, NRF_CLOCK_TASK_LFCLKSTART);
+#endif
 	if (immediate)
 	{
 		sys_system_reboot();
