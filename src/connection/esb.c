@@ -121,11 +121,11 @@ void event_handler(struct esb_evt const *event)
 						int32_t received_time = *((uint32_t *) &rx_payload.data[3]);
 						
 						int32_t diff = ((received_time - packet_time) + (received_time - time)) / 2;
-						//int32_t roundtrip_time = time - packet_time;
+						int32_t roundtrip_time = time - packet_time;
 
 						tdma_update_timer_offset(diff);
-						//if(ABS(diff) != 0) 
-						//	LOG_WRN("Our: %d, packet: %d, dongle's: %d, diff: %d, roundtrip: %d (was slot %d), clock 0x%08x", time, packet_time, received_time, diff, roundtrip_time, tdma_get_slot(packet_time), nrf_clock_lf_src_get(NRF_CLOCK));
+						if(ABS(diff) != 0) 
+							LOG_WRN("Our: %d, packet: %d, dongle's: %d, diff: %d, roundtrip: %d (was slot %d), clock 0x%08x", time, packet_time, received_time, diff, roundtrip_time, tdma_get_slot(packet_time), nrf_clock_lf_src_get(NRF_CLOCK));
 						break;
 				default:
 					LOG_INF("Control packet %d received", rx_payload.data[1]);
