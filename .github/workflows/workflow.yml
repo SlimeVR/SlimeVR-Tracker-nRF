@@ -95,9 +95,9 @@ jobs:
         # only for the arm-zephyr-eabi (Cortex-M) architecture, since we don't
         # need the other toolchains (xtensa, riscv, etc.)
         run: |
-          wget -q https://github.com/zephyrproject-rtos/sdk-ng/releases/download/v0.17.2/zephyr-sdk-0.17.2_linux-x86_64_minimal.tar.xz
-          tar xf zephyr-sdk-0.17.2_linux-x86_64_minimal.tar.xz -C ~/
-          ~/zephyr-sdk-0.17.2/setup.sh -c -t arm-zephyr-eabi
+          wget -q https://github.com/zephyrproject-rtos/sdk-ng/releases/download/v0.17.4/zephyr-sdk-0.17.4_linux-x86_64_minimal.tar.xz
+          tar xf zephyr-sdk-0.17.4_linux-x86_64_minimal.tar.xz -C ~/
+          ~/zephyr-sdk-0.17.4/setup.sh -c -t arm-zephyr-eabi
 
       - name: 📂 Cloning Triggered Repository/Branch
         run: |
@@ -140,7 +140,7 @@ jobs:
 
       - name: 💾 Upload Artifact - ${{ matrix.boards.boardname }}
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           # Artifact name
           name: ${{ matrix.boards.filename }}.${{ matrix.boards.fileformat }}
