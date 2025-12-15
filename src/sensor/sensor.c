@@ -195,8 +195,8 @@ int sensor_scan(void)
 	sensor_scan_read();
 	int imu_id = -1;
 #if SENSOR_IMU_SPI_EXISTS
-	// for SPI scan, set frequency of 10MHz, it will be set later by the driver initialization if needed
-	sensor_imu_spi_dev.config.frequency = MHZ(10);
+	// for SPI scan, set frequency of 8MHz, it will be set later by the driver initialization if needed
+	sensor_imu_spi_dev.config.frequency = MHZ(8);
 	LOG_INF("Scanning SPI bus for IMU");
 	imu_id = sensor_scan_imu_spi(&sensor_imu_spi_dev, &sensor_imu_dev_reg);
 	if (imu_id >= 0)
@@ -247,8 +247,8 @@ int sensor_scan(void)
 
 	int mag_id = -1;
 #if SENSOR_MAG_SPI_EXISTS
-	// for SPI scan, set frequency of 10MHz, it will be set later by the driver initialization if needed
-	sensor_mag_spi_dev.config.frequency = MHZ(10);
+	// for SPI scan, set frequency of 8MHz, it will be set later by the driver initialization if needed
+	sensor_mag_spi_dev.config.frequency = MHZ(8);
 	LOG_INF("Scanning SPI bus for magnetometer");
 	mag_id = sensor_scan_mag_spi(&sensor_mag_spi_dev, &sensor_mag_dev_reg);
 	if (mag_id >= 0)

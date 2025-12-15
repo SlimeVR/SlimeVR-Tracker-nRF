@@ -30,7 +30,7 @@ LOG_MODULE_REGISTER(ICM45686, LOG_LEVEL_DBG);
 int icm45_init(float clock_rate, float accel_time, float gyro_time, float *accel_actual_time, float *gyro_actual_time)
 {
 	// setup interface for SPI
-	if (!sensor_interface_spi_configure(SENSOR_INTERFACE_DEV_IMU, MHZ(24), 0))
+	if (!sensor_interface_spi_configure(SENSOR_INTERFACE_DEV_IMU, MHZ(32), 0))
 		fifo_multiplier_factor = FIFO_MULT_SPI; // SPI mode
 	else
 		fifo_multiplier_factor = FIFO_MULT; // I2C mode
