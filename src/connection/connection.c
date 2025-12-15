@@ -25,11 +25,12 @@
 #include "esb.h"
 #include "build_defines.h"
 #include "hid.h"
+#include "system/battery_tracker.h"
 
 #include <zephyr/kernel.h>
 #include <zephyr/sys/crc.h>
 
-static uint8_t tracker_id, batt, batt_v, sensor_temp, imu_id, mag_id, tracker_status;
+static uint8_t tracker_id, batt, batt_v, sensor_temp, imu_id, mag_id, tracker_status, tracker_button;
 static uint8_t tracker_svr_status = SVR_STATUS_OK;
 static float sensor_q[4], sensor_a[3], sensor_m[3];
 
@@ -152,12 +153,24 @@ void connection_update_status(int status)
 	tracker_svr_status = get_server_constant_tracker_status(status);
 }
 
+static int64_t button_update_time = 0;
+
+void connection_update_button(int button)
+{
+	tracker_button = button;
+	button_update_time = k_uptime_get();
+}
+
 //|b0      |b1      |b2      |b3      |b4      |b5      |b6      |b7      |b8      |b9      |b10     |b11     |b12     |b13     |b14     |b15     |
 //|type    |id      |packet data                                                                                                                  |
 //|0       |id      |batt    |batt_v  |temp    |brd_id  |mcu_id  |resv    |imu_id  |mag_id  |fw_date          |major   |minor   |patch   |rssi    |
 //|1       |id      |q0               |q1               |q2               |q3               |a0               |a1               |a2               |
 //|2       |id      |batt    |batt_v  |temp    |q_buf                              |a0               |a1               |a2               |rssi    |
 //|3	   |id      |svr_stat|status  |resv                                                                                              |rssi    |
+//|4       |id      |q0               |q1               |q2               |q3               |m0               |m1               |m2               |
+//|5	   |id      |runtime                                                                |resv                                        |rssi    |
+//|6       |id      |button  |resv                                                                                                       |rssi    |
+//|7       |id      |button  |resv             |q_buf                              |a0               |a1               |a2               |rssi    |
 
 void connection_write_packet_0() // device info
 {
@@ -281,6 +294,72 @@ void connection_write_packet_4() // full precision quat and magnetometer
 	hid_write_packet_n(data); // TODO:
 }
 
+void connection_write_packet_5() // runtime
+{
+	uint8_t data[16] = {0};
+	data[0] = 5; // packet 5
+	data[1] = tracker_id;
+	int64_t *buf = (int64_t *)&data[2];
+	buf[0] = k_ticks_to_us_floor64(sys_get_battery_remaining_time_estimate());
+	k_mutex_lock(&data_buffer_mutex, K_FOREVER);
+	memcpy(data_buffer, data, sizeof(data));
+	last_data_time = k_uptime_get(); // TODO: use ticks
+//	esb_write(data); // TODO: schedule in thread
+	k_mutex_unlock(&data_buffer_mutex);
+	hid_write_packet_n(data); // TODO:
+}
+
+void connection_write_packet_6() // reduced precision quat and accel with button
+{
+	uint8_t data[16] = {0};
+	data[0] = 6; // packet 6
+	data[1] = tracker_id;
+	data[2] = tracker_button;
+	data[15] = 0; // rssi (supplied by receiver)
+	k_mutex_lock(&data_buffer_mutex, K_FOREVER);
+	memcpy(data_buffer, data, sizeof(data));
+	last_data_time = k_uptime_get(); // TODO: use ticks
+	if (tracker_button && k_uptime_get() > button_update_time + 1000) // attempt to "hold" button presses for 1000 ms
+	{
+		tracker_button = 0;
+		button_update_time = 0;
+	}
+//	esb_write(data); // TODO: schedule in thread
+	k_mutex_unlock(&data_buffer_mutex);
+	hid_write_packet_n(data); // TODO:
+}
+
+void connection_write_packet_7() // button
+{
+	uint8_t data[16] = {0};
+	data[0] = 7; // packet 7
+	data[1] = tracker_id;
+	data[2] = tracker_button;
+	float v[3] = {0};
+	q_fem(sensor_q, v); // exponential map
+	for (int i = 0; i < 3; i++)
+		v[i] = (v[i] + 1) / 2; // map -1-1 to 0-1
+	uint16_t v_buf[3] = {SATURATE_UINT10((1 << 10) * v[0]), SATURATE_UINT11((1 << 11) * v[1]), SATURATE_UINT11((1 << 11) * v[2])}; // fill 32 bits
+	uint32_t *q_buf = (uint32_t *)&data[5];
+	*q_buf = v_buf[0] | (v_buf[1] << 10) | (v_buf[2] << 21);
+	uint16_t *buf = (uint16_t *)&data[9];
+	buf[0] = TO_FIXED_7(sensor_a[0]);
+	buf[1] = TO_FIXED_7(sensor_a[1]);
+	buf[2] = TO_FIXED_7(sensor_a[2]);
+	data[15] = 0; // rssi (supplied by receiver)
+	k_mutex_lock(&data_buffer_mutex, K_FOREVER);
+	memcpy(data_buffer, data, sizeof(data));
+	last_data_time = k_uptime_get(); // TODO: use ticks
+	if (tracker_button && k_uptime_get() > button_update_time + 1000) // attempt to "hold" button presses for 1000 ms
+	{
+		tracker_button = 0;
+		button_update_time = 0;
+	}
+//	esb_write(data); // TODO: schedule in thread
+	k_mutex_unlock(&data_buffer_mutex);
+	hid_write_packet_n(data); // TODO:
+}
+
 // TODO: get radio channel from receiver
 // TODO: new packet format
 
@@ -292,10 +371,13 @@ void connection_write_packet_4() // full precision quat and magnetometer
 // TODO: queue packets directly for HID, or maintain separate loop while connected by USB
 
 static int64_t last_info_time = 0;
+static int64_t last_info2_time = 0;
 static int64_t last_status_time = 0;
+static int64_t last_status2_time = 0;
 
 void connection_thread(void)
 {
+	bool use_button = !CONFIG_0_SETTINGS_READ(CONFIG_0_USER_EXTRA_ACTIONS); // TODO: until info2 has extra data, it can be disabled for now if extra actions overrides button
 	uint8_t data_copy[21];
 	// TODO: checking for connection_update events from sensor_loop, here we will time and send them out
 	while (1)
@@ -328,6 +410,15 @@ void connection_thread(void)
 			connection_write_packet_2();
 			continue;
 		}
+		// if time for info2 and precise quat not needed
+		else if (use_button && quat_update_time && !send_precise_quat && k_uptime_get() - last_info2_time > 100)
+		{
+			quat_update_time = 0;
+			last_quat_time = k_uptime_get();
+			last_info2_time = k_uptime_get();
+			connection_write_packet_7();
+			continue;
+		}
 		// send quat otherwise
 		else if (quat_update_time)
 		{
@@ -342,10 +433,22 @@ void connection_thread(void)
 			connection_write_packet_0();
 			continue;
 		}
+		else if (use_button && k_uptime_get() - last_info2_time > 100)
+		{
+			last_info2_time = k_uptime_get();
+			connection_write_packet_6();
+			continue;
+		}
 		else if (k_uptime_get() - last_status_time > 1000)
 		{
 			last_status_time = k_uptime_get();
 			connection_write_packet_3();
+			continue;
+		}
+		else if (k_uptime_get() - last_status2_time > 1000)
+		{
+			last_status2_time = k_uptime_get();
+			connection_write_packet_5();
 			continue;
 		}
 		else

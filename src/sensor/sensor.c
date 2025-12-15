@@ -591,7 +591,7 @@ static void sensor_update_sensor_state(void)
 			{
 				LOG_INF("No motion from sensors in %dm", CONFIG_3_SETTINGS_READ(CONFIG_3_ACTIVE_TIMEOUT_DELAY) / 60000);
 				// Queue power state request, it is possible for the request to be overridden so the thread may continue unaware
-				if (CONFIG_2_SETTINGS_READ(CONFIG_2_ACTIVE_TIMEOUT_MODE) == 0 && CONFIG_0_SETTINGS_READ(CONFIG_0_USE_IMU_WAKEUP))
+				if (CONFIG_2_SETTINGS_READ(CONFIG_2_ACTIVE_TIMEOUT_MODE) == 0 && CONFIG_0_SETTINGS_READ(CONFIG_0_USE_IMU_WAKE_UP))
 					sys_request_WOM(true, false);
 				// Queue power state request, thread will be suspended when entering system_off
 				if (CONFIG_2_SETTINGS_READ(CONFIG_2_ACTIVE_TIMEOUT_MODE) == 1 && CONFIG_0_SETTINGS_READ(CONFIG_0_USER_SHUTDOWN))
@@ -599,7 +599,7 @@ static void sensor_update_sensor_state(void)
 				sensor_timeout = SENSOR_SENSOR_TIMEOUT_ACTIVITY_ELAPSED; // only try to suspend once
 			}
 		}
-		if (CONFIG_1_SETTINGS_READ(CONFIG_1_USE_IMU_TIMEOUT) && CONFIG_0_SETTINGS_READ(CONFIG_0_USE_IMU_WAKEUP) && sensor_timeout == SENSOR_SENSOR_TIMEOUT_IMU && last_data_delta > imu_timeout) // No motion in ramp time
+		if (CONFIG_1_SETTINGS_READ(CONFIG_1_USE_IMU_TIMEOUT) && CONFIG_0_SETTINGS_READ(CONFIG_0_USE_IMU_WAKE_UP) && sensor_timeout == SENSOR_SENSOR_TIMEOUT_IMU && last_data_delta > imu_timeout) // No motion in ramp time
 		{
 			LOG_INF("No motion from sensors in %llds", imu_timeout / 1000);
 			// Queue power state request

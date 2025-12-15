@@ -333,6 +333,8 @@ static void button_thread(void)
 		{
 			if (!get_status(SYS_STATUS_BUTTON_PRESSED))
 				set_status(SYS_STATUS_BUTTON_PRESSED, true);
+			if (num_presses == 0 && !CONFIG_0_SETTINGS_READ(CONFIG_0_USER_EXTRA_ACTIONS))
+				connection_update_button(1);
 			num_presses++;
 			LOG_INF("Button pressed %d times", num_presses);
 			last_press_duration = 0;
@@ -343,8 +345,8 @@ static void button_thread(void)
 		{
 			LOG_INF("Button was pressed %d times", num_presses);
 			last_press = 0;
-			if (num_presses == 1)
-				sys_request_system_reboot(false);
+//			if (num_presses == 1)
+//				sys_request_system_reboot(false);
 			if (CONFIG_0_SETTINGS_READ(CONFIG_0_USER_EXTRA_ACTIONS)) // TODO: extra actions are default until server can send commands to trackers
 				sys_reset_mode(num_presses - 1);
 			num_presses = 0;
@@ -359,6 +361,10 @@ static void button_thread(void)
 				esb_reset_pair();
 				press_time = 0;
 				set_status(SYS_STATUS_BUTTON_PRESSED, false); // TODO: is needed?
+			}
+			else // shutting down or rebooting
+			{
+				k_thread_abort(button_thread_id);
 			}
 		}
 		k_msleep(20);
@@ -422,31 +428,40 @@ int sys_user_shutdown(void)
 {
 	int64_t start_time = k_uptime_get();
 	bool use_shutdown = CONFIG_0_SETTINGS_READ(CONFIG_0_USER_SHUTDOWN);
+	set_led(SYS_LED_PATTERN_OFF_FORCE, SYS_LED_PRIORITY_HIGHEST);
+	bool led_on = false;
+	while (button_read()) // If alternate button is available and still pressed, wait for the user to stop pressing the button
+	{
+		if (!led_on && k_uptime_get() - start_time > 500) // long pattern starts with led on, so delay pattern a bit
+		{
+			set_led(SYS_LED_PATTERN_LONG, SYS_LED_PRIORITY_HIGHEST);
+			led_on = 1;
+		}
+		if (k_uptime_get() - start_time > 4000) // held for over 5 seconds, cancel shutdown
+		{
+			set_led(SYS_LED_PATTERN_OFF, SYS_LED_PRIORITY_HIGHEST);
+			return 1;
+		}
+		k_msleep(1);
+	}
 	if (use_shutdown)
 	{
+		start_time = k_uptime_get();
 		LOG_INF("User shutdown requested");
-		reboot_counter_write(0);
 		set_led(SYS_LED_PATTERN_ONESHOT_POWEROFF, SYS_LED_PRIORITY_HIGHEST);
-	}
-	k_msleep(1500);
-	if (button_read()) // If alternate button is available and still pressed, wait for the user to stop pressing the button
-	{
-		set_led(SYS_LED_PATTERN_LONG, SYS_LED_PRIORITY_HIGHEST);
-		while (button_read())
+		reboot_counter_write(0); // shutdown flag
+		while (!button_read()) // waiting for pattern, if button is pressed again reboot immedately
 		{
-			if (k_uptime_get() - start_time > 4000) // held for over 5 seconds, cancel shutdown
+			if (k_uptime_get() - start_time > 1250) // length of pattern elapsed
 			{
-				set_led(SYS_LED_PATTERN_OFF, SYS_LED_PRIORITY_HIGHEST);
-				return 1;
+				sys_request_system_off(false);
+				return 0;
 			}
 			k_msleep(1);
 		}
-		set_led(SYS_LED_PATTERN_OFF_FORCE, SYS_LED_PRIORITY_HIGHEST);
 	}
-	if (use_shutdown)
-		sys_request_system_off(false);
-	else
-		sys_request_system_reboot(false);
+	set_led(SYS_LED_PATTERN_OFF_FORCE, SYS_LED_PRIORITY_HIGHEST);
+	sys_request_system_reboot(false);
 	return 0;
 }
 

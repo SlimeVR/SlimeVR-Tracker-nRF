@@ -34,6 +34,13 @@ config BATTERY_NO_MAPPING
 
 endchoice
 
+config BATTERY_LOW_RUNTIME_THRESHOLD
+    int "Low battery runtime threshold (ms)"
+    default 10800000
+    help
+      Trigger low battery when estimated runtime falls below threshold.
+      If estimated runtime is not available, low battery will trigger under 10% estimated state of charge.
+
 choice
 	prompt "Status LED color mapping"
     default LED_TRI_COLOR
@@ -168,7 +175,7 @@ config USE_ACTIVE_TIMEOUT
     help
         Delay IMU wake up state or user shutdown during activity.
 
-choice 
+choice
     prompt "Activity timeout mode"
     default SLEEP_ON_ACTIVE_TIMEOUT
     depends on USE_ACTIVE_TIMEOUT

@@ -24,7 +24,7 @@ const char *config_settings_names[] = {
 	"user_extra_actions", // 0
 	"ignore_reset",
 	"user_shutdown",
-	"use_imu_wakeup",
+	"use_imu_wake_up",
 	"delay_sleep_on_status",
 	"connection_over_hid",
 	"sensor_use_low_power_2", // 1
@@ -49,13 +49,14 @@ const char *config_settings_names[] = {
 	"imu_timeout_ramp_max",
 	"active_timeout_threshold",
 	"active_timeout_delay",
+	"battery_low_runtime_threshold"
 };
 
 const bool config_0_settings_defaults[16] = {
 	IS_ENABLED(CONFIG_USER_EXTRA_ACTIONS),
 	IS_ENABLED(CONFIG_IGNORE_RESET),
 	IS_ENABLED(CONFIG_USER_SHUTDOWN),
-	IS_ENABLED(CONFIG_USE_IMU_WAKEUP),
+	IS_ENABLED(CONFIG_USE_IMU_WAKE_UP),
 	IS_ENABLED(CONFIG_DELAY_SLEEP_ON_STATUS),
 	IS_ENABLED(CONFIG_CONNECTION_OVER_HID),
 };
@@ -133,6 +134,7 @@ const int32_t config_3_settings_defaults[16] = {
 #else
 	900000,
 #endif
+	CONFIG_BATTERY_LOW_RUNTIME_THRESHOLD,
 };
 
 LOG_MODULE_REGISTER(config, LOG_LEVEL_INF);
