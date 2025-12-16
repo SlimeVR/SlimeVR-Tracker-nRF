@@ -454,6 +454,12 @@ void esb_clear_pair(void)
 	LOG_INF("Pairing data reset");
 }
 
+int esb_get_frequency(void) {
+	uint32_t channel;
+	esb_get_rf_channel(&channel);
+	return 2400UL + channel; // MHz
+}
+
 void esb_write(uint8_t *data, uint8_t packet_sequnce)
 {
 	if (!esb_initialized || !esb_paired)

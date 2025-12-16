@@ -60,6 +60,8 @@ void esb_set_addr_paired(void);
 
 void esb_set_pair(uint64_t addr);
 
+int esb_get_frequency(void);
+
 void esb_pair(void);
 void esb_reset_pair(void);
 void esb_clear_pair(void);
