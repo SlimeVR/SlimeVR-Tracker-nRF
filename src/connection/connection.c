@@ -267,6 +267,10 @@ void connection_write_packet_3() // status
 	data[1] = tracker_id;
 	data[2] = tracker_svr_status;
 	data[3] = tracker_status;
+	// data[4] - packets received (filled by dongle)
+	// data[5] - packets lost (filled by dongle)
+	// data[6] - windows hit (filled by dongle)
+	// data[7] - windows missed (filled by dongle)
 	data[15] = 0; // rssi (supplied by receiver)
 	k_mutex_lock(&data_buffer_mutex, K_FOREVER);
 	memcpy(data_buffer, data, sizeof(data));
@@ -459,6 +463,6 @@ void connection_thread(void)
 		{
 			connection_clocks_request_stop();
 		}
-		k_msleep(1); // TODO: should be getting timing from receiver, for now just send asap
+		k_msleep(1);
 	}
 }
