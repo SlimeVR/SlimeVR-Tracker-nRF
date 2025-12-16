@@ -265,6 +265,8 @@ int esb_initialize(bool tx)
 		config.payload_length = 32;
 		config.selective_auto_ack = true; // TODO: while pairing, should be set to false
 //		config.use_fast_ramp_up = true;
+		config.selective_auto_ack = true;
+		// config.use_fast_ramp_up = false;
 	}
 	else
 	{
@@ -279,24 +281,19 @@ int esb_initialize(bool tx)
 		// config.tx_mode = ESB_TXMODE_AUTO;
 		config.payload_length = 32;
 		config.selective_auto_ack = true;
-//		config.use_fast_ramp_up = true;
+		// config.use_fast_ramp_up = false;
 	}
 
 	err = esb_init(&config);
 
 	if (!err)
+	{
 		esb_set_base_address_0(base_addr_0);
-
-	if (!err)
 		esb_set_base_address_1(base_addr_1);
-
-	if (!err)
 		esb_set_prefixes(addr_prefix, ARRAY_SIZE(addr_prefix));
-
-	if (!err)
 		esb_set_rf_channel(50);
-
-	if (err)
+	}
+	else
 	{
 		LOG_ERR("ESB initialization failed: %d", err);
 		set_status(SYS_STATUS_CONNECTION_ERROR, true);
