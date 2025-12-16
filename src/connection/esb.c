@@ -34,6 +34,8 @@
 #include "tdma.h"
 #include "util.h"
 
+#define ESB_CHANNEL 53
+
 uint8_t last_reset = 0;
 //const nrfx_timer_t m_timer = NRFX_TIMER_INSTANCE(1);
 bool esb_state = false;
@@ -263,8 +265,6 @@ int esb_initialize(bool tx)
 		config.retransmit_count = 0;
 		config.tx_mode = ESB_TXMODE_MANUAL;
 		config.payload_length = 32;
-		config.selective_auto_ack = true; // TODO: while pairing, should be set to false
-//		config.use_fast_ramp_up = true;
 		config.selective_auto_ack = true;
 		// config.use_fast_ramp_up = false;
 	}
@@ -291,7 +291,7 @@ int esb_initialize(bool tx)
 		esb_set_base_address_0(base_addr_0);
 		esb_set_base_address_1(base_addr_1);
 		esb_set_prefixes(addr_prefix, ARRAY_SIZE(addr_prefix));
-		esb_set_rf_channel(50);
+		esb_set_rf_channel(ESB_CHANNEL);
 	}
 	else
 	{
@@ -299,6 +299,10 @@ int esb_initialize(bool tx)
 		set_status(SYS_STATUS_CONNECTION_ERROR, true);
 		return err;
 	}
+
+	int32_t ch;
+	esb_get_rf_channel(&ch);
+	LOG_INF("Initialized ESB, %sX mode ch %d", tx ? "T" : "R", ch);
 
 	esb_initialized = true;
 	return 0;

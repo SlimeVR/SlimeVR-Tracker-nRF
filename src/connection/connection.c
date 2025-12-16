@@ -401,6 +401,12 @@ void connection_thread(void)
 			data_copy[16] = packet_sequence++;
 			esb_write(data_copy, packet_sequence - 1);
 		}
+		else if (k_uptime_get() - last_status_time > 1000)
+		{
+			last_status_time = k_uptime_get();
+			connection_write_packet_3();
+			continue;
+		}
 		// mag is higher priority (skip accel, quat is full precision)
 		else if (mag_update_time && k_uptime_get() - last_mag_time > 200)
 		{
@@ -435,7 +441,7 @@ void connection_thread(void)
 			connection_write_packet_1();
 			continue;
 		}
-		else if (k_uptime_get() - last_info_time > 100)
+		else if (k_uptime_get() - last_info_time > 500)
 		{
 			last_info_time = k_uptime_get();
 			connection_write_packet_0();
