@@ -25,7 +25,7 @@ static int asic_init(void);
 static int upload_config_file(void);
 static int factor_zx_read(void);
 
-int bmi_init(float clock_rate, float accel_time, float gyro_time, float *accel_actual_time, float *gyro_actual_time)
+int bmi270_init(float clock_rate, float accel_time, float gyro_time, float *accel_actual_time, float *gyro_actual_time)
 {
 	// setup interface for SPI
 	sensor_interface_spi_configure(SENSOR_INTERFACE_DEV_IMU, MHZ(10), 1);
@@ -38,7 +38,7 @@ int bmi_init(float clock_rate, float accel_time, float gyro_time, float *accel_a
 	last_gyro_odr = 0xff; // reset last odr
 	err |= ssi_reg_write_byte(SENSOR_INTERFACE_DEV_IMU, BMI270_ACC_RANGE, accel_fs);
 	err |= ssi_reg_write_byte(SENSOR_INTERFACE_DEV_IMU, BMI270_GYR_RANGE, gyro_fs);
-	err |= bmi_update_odr(accel_time, gyro_time, accel_actual_time, gyro_actual_time);
+	err |= bmi270_update_odr(accel_time, gyro_time, accel_actual_time, gyro_actual_time);
 	err |= ssi_reg_write_byte(SENSOR_INTERFACE_DEV_IMU, BMI270_FIFO_CONFIG_0, 0x00); // do not return sensortime frame
 	err |= ssi_reg_write_byte(SENSOR_INTERFACE_DEV_IMU, BMI270_FIFO_CONFIG_1, 0xC0); // enable a+g data in FIFO, don't store header
 	if (err)
@@ -46,7 +46,7 @@ int bmi_init(float clock_rate, float accel_time, float gyro_time, float *accel_a
 	return (err < 0 ? err : 0);
 }
 
-void bmi_shutdown(void) // this does not reset the device, to avoid clearing the config
+void bmi270_shutdown(void) // this does not reset the device, to avoid clearing the config
 {
 	last_accel_odr = 0xff; // reset last odr
 	last_gyro_odr = 0xff; // reset last odr
@@ -56,7 +56,7 @@ void bmi_shutdown(void) // this does not reset the device, to avoid clearing the
 		LOG_ERR("Communication error");
 }
 
-void bmi_update_fs(float accel_range, float gyro_range, float *accel_actual_range, float *gyro_actual_range)
+void bmi270_update_fs(float accel_range, float gyro_range, float *accel_actual_range, float *gyro_actual_range)
 {
 	if (accel_range > 8)
 	{
@@ -107,7 +107,7 @@ void bmi_update_fs(float accel_range, float gyro_range, float *accel_actual_rang
 	*gyro_actual_range = gyro_range;
 }
 
-int bmi_update_odr(float accel_time, float gyro_time, float *accel_actual_time, float *gyro_actual_time)
+int bmi270_update_odr(float accel_time, float gyro_time, float *accel_actual_time, float *gyro_actual_time)
 {
 	int ODR;
 	uint8_t acc_odr;
@@ -260,7 +260,7 @@ int bmi_update_odr(float accel_time, float gyro_time, float *accel_actual_time, 
 }
 
 // TODO: gyro rotation data is delayed for some reason, accelerometer still responds instantly
-uint16_t bmi_fifo_read(uint8_t *data, uint16_t len)
+uint16_t bmi270_fifo_read(uint8_t *data, uint16_t len)
 {
 	int err = 0;
 	uint16_t total = 0;
@@ -292,7 +292,7 @@ static const uint8_t overread[2] = {0x00, 0x80};
 static const uint8_t invalid_accel[6] = {0x01, 0x7F, 0x00, 0x80, 0x00, 0x80};
 static const uint8_t invalid_gyro[6] = {0x02, 0x7F, 0x00, 0x80, 0x00, 0x80};
 
-int bmi_fifo_process(uint16_t index, uint8_t *data, float a[3], float g[3])
+int bmi270_fifo_process(uint16_t index, uint8_t *data, float a[3], float g[3])
 {
 	index *= PACKET_SIZE;
 	if (!memcmp(&data[index], overread, sizeof(overread)))
@@ -323,7 +323,7 @@ int bmi_fifo_process(uint16_t index, uint8_t *data, float a[3], float g[3])
 	return 0;
 }
 
-void bmi_accel_read(float a[3])
+void bmi270_accel_read(float a[3])
 {
 	uint8_t rawAccel[6];
 	int err = ssi_burst_read(SENSOR_INTERFACE_DEV_IMU, BMI270_DATA_8, &rawAccel[0], 6);
@@ -340,7 +340,7 @@ void bmi_accel_read(float a[3])
 	a[2] = a_bmi[2];
 }
 
-void bmi_gyro_read(float g[3])
+void bmi270_gyro_read(float g[3])
 {
 	uint8_t rawGyro[6];
 	int err = ssi_burst_read(SENSOR_INTERFACE_DEV_IMU, BMI270_DATA_14, &rawGyro[0], 6);
@@ -359,7 +359,7 @@ void bmi_gyro_read(float g[3])
 	g[2] = g_bmi[2];
 }
 
-float bmi_temp_read(void)
+float bmi270_temp_read(void)
 {
 	uint8_t rawTemp[2];
 	int err = ssi_burst_read(SENSOR_INTERFACE_DEV_IMU, BMI270_TEMPERATURE_0, &rawTemp[0], 2);
@@ -375,7 +375,7 @@ float bmi_temp_read(void)
 	return temp;
 }
 
-uint8_t bmi_setup_DRDY(uint16_t threshold)
+uint8_t bmi270_setup_DRDY(uint16_t threshold)
 {
 	uint8_t buf[2];
 	threshold *= PACKET_SIZE; // byte threshold
@@ -390,7 +390,7 @@ uint8_t bmi_setup_DRDY(uint16_t threshold)
 	return NRF_GPIO_PIN_PULLUP << 4 | NRF_GPIO_PIN_SENSE_LOW; // active low
 }
 
-uint8_t bmi_setup_WOM(void) // TODO: seems too sensitive? try to match icm at least // TODO: half working.
+uint8_t bmi270_setup_WOM(void) // TODO: seems too sensitive? try to match icm at least // TODO: half working.
 {
 	uint8_t config[4] = {0};
 	uint16_t *ptr = (uint16_t *)config; // bmi is little endian
@@ -481,7 +481,7 @@ static int factor_zx_read(void)
 }
 
 // from https://github.com/SlimeVR/SlimeVR-Tracker-ESP/blob/main/src/sensors/softfusion/drivers/bmi270.h
-int bmi_crt(uint8_t *data)
+int bmi270_crt(uint8_t *data)
 {
 	uint8_t status;
 	uint8_t acc_odr = last_accel_odr; // store last odr
@@ -538,7 +538,7 @@ int bmi_crt(uint8_t *data)
 	// in case of SPI, where CS pin must trigger rising edge for BMI to enable interface
 	err |= ssi_reg_read_byte(SENSOR_INTERFACE_DEV_IMU, 0x00, &tmp);
 	k_usleep(200);
-	bmi_init(0, 0, 0, 0, 0);
+	bmi270_init(0, 0, 0, 0, 0);
 	if (acc_odr != 0)
 		err |= ssi_reg_write_byte(SENSOR_INTERFACE_DEV_IMU, BMI270_ACC_CONF, 0xA0 | acc_odr);
 	if (gyr_odr != 0)
@@ -555,7 +555,7 @@ int bmi_crt(uint8_t *data)
 	return 0;
 }
 
-void bmi_gain_apply(uint8_t *data)
+void bmi270_gain_apply(uint8_t *data)
 {
 	if (data[0] == 1) // flag for valid gain
 	{
@@ -565,21 +565,21 @@ void bmi_gain_apply(uint8_t *data)
 }
 
 const sensor_imu_t sensor_imu_bmi270 = {
-	*bmi_init,
-	*bmi_shutdown,
+	*bmi270_init,
+	*bmi270_shutdown,
 
-	*bmi_update_fs,
-	*bmi_update_odr,
+	*bmi270_update_fs,
+	*bmi270_update_odr,
 
-	*bmi_fifo_read,
-	*bmi_fifo_process,
-	*bmi_accel_read,
-	*bmi_gyro_read,
-	*bmi_temp_read,
+	*bmi270_fifo_read,
+	*bmi270_fifo_process,
+	*bmi270_accel_read,
+	*bmi270_gyro_read,
+	*bmi270_temp_read,
 
-	*bmi_setup_DRDY,
-	*bmi_setup_WOM,
-
+	*bmi270_setup_DRDY,
+	*bmi270_setup_WOM,
+	
 	*imu_none_ext_setup,
 	*imu_none_ext_passthrough
 };

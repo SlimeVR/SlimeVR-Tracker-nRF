@@ -355,7 +355,7 @@ static void sensor_calibrate_imu()
 		LOG_INF("Suspending sensor thread");
 		main_imu_suspend();
 		LOG_INF("Running BMI270 component retrimming");
-		int err = bmi_crt(sensor_data); // will automatically reinitialize // TODO: this blocks sensor!
+		int err = bmi270_crt(sensor_data); // will automatically reinitialize // TODO: this blocks sensor!
 		LOG_INF("Resuming sensor thread");
 		main_imu_resume();
 		if (err)
