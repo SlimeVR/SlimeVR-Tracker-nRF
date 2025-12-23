@@ -43,8 +43,6 @@ LOG_MODULE_REGISTER(connection, LOG_LEVEL_INF);
 static void connection_thread(void);
 K_THREAD_DEFINE(connection_thread_id, 512, connection_thread, NULL, NULL, NULL, CONNECTION_THREAD_PRIORITY, K_FP_REGS, 0);
 
-K_MUTEX_DEFINE(data_buffer_mutex);
-
 void connection_clocks_request_start(void)
 {
 	clocks_request_start(0);
@@ -194,11 +192,8 @@ void connection_write_packet_0() // device info
 	data[13] = FW_VERSION_MINOR & 255; // fw_minor
 	data[14] = FW_VERSION_PATCH & 255; // fw_patch
 	data[15] = 0; // rssi (supplied by receiver)
-	k_mutex_lock(&data_buffer_mutex, K_FOREVER);
 	memcpy(data_buffer, data, sizeof(data));
 	last_data_time = k_uptime_get(); // TODO: use ticks
-//	esb_write(data); // TODO: schedule in thread
-	k_mutex_unlock(&data_buffer_mutex);
 	hid_write_packet_n(data); // TODO:
 }
 
@@ -215,11 +210,8 @@ void connection_write_packet_1() // full precision quat and accel
 	buf[4] = TO_FIXED_7(sensor_a[0]); // range is ±256m/s² or ±26.1g
 	buf[5] = TO_FIXED_7(sensor_a[1]);
 	buf[6] = TO_FIXED_7(sensor_a[2]);
-	k_mutex_lock(&data_buffer_mutex, K_FOREVER);
 	memcpy(data_buffer, data, sizeof(data));
 	last_data_time = k_uptime_get(); // TODO: use ticks
-//	esb_write(data); // TODO: schedule in thread
-	k_mutex_unlock(&data_buffer_mutex);
 	hid_write_packet_n(data); // TODO:
 }
 
@@ -252,11 +244,8 @@ void connection_write_packet_2() // reduced precision quat and accel with batter
 	buf[1] = TO_FIXED_7(sensor_a[1]);
 	buf[2] = TO_FIXED_7(sensor_a[2]);
 	data[15] = 0; // rssi (supplied by receiver)
-	k_mutex_lock(&data_buffer_mutex, K_FOREVER);
 	memcpy(data_buffer, data, sizeof(data));
 	last_data_time = k_uptime_get(); // TODO: use ticks
-//	esb_write(data); // TODO: schedule in thread
-	k_mutex_unlock(&data_buffer_mutex);
 	hid_write_packet_n(data); // TODO:
 }
 
@@ -272,11 +261,8 @@ void connection_write_packet_3() // status
 	// data[6] - windows hit (filled by dongle)
 	// data[7] - windows missed (filled by dongle)
 	data[15] = 0; // rssi (supplied by receiver)
-	k_mutex_lock(&data_buffer_mutex, K_FOREVER);
 	memcpy(data_buffer, data, sizeof(data));
 	last_data_time = k_uptime_get(); // TODO: use ticks
-//	esb_write(data); // TODO: schedule in thread
-	k_mutex_unlock(&data_buffer_mutex);
 	hid_write_packet_n(data); // TODO:
 }
 
@@ -293,11 +279,8 @@ void connection_write_packet_4() // full precision quat and magnetometer
 	buf[4] = TO_FIXED_10(sensor_m[0]); // range is ±32G
 	buf[5] = TO_FIXED_10(sensor_m[1]);
 	buf[6] = TO_FIXED_10(sensor_m[2]);
-	k_mutex_lock(&data_buffer_mutex, K_FOREVER);
 	memcpy(data_buffer, data, sizeof(data));
 	last_data_time = k_uptime_get(); // TODO: use ticks
-//	esb_write(data); // TODO: schedule in thread
-	k_mutex_unlock(&data_buffer_mutex);
 	hid_write_packet_n(data); // TODO:
 }
 
@@ -394,10 +377,8 @@ void connection_thread(void)
 	{
 		if (last_data_time != 0) // have valid data
 		{
-			k_mutex_lock(&data_buffer_mutex, K_FOREVER);
 			last_data_time = 0;
 			memcpy(data_copy, data_buffer, sizeof(data_copy));
-			k_mutex_unlock(&data_buffer_mutex);
 			data_copy[16] = packet_sequence++;
 			esb_write(data_copy, packet_sequence - 1);
 		}
