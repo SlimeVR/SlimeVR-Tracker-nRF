@@ -53,6 +53,15 @@
 // User Bank IPREG_TOP1
 #define ICM45686_IPREG_TOP1                0xA2 // MSB
 
+#define ICM45686_I2CM_COMMAND_0            0x06
+#define ICM45686_DEV_PROFILE_0             0x0e
+#define ICM45686_DEV_PROFILE_1             0x0f
+#define ICM45686_I2CM_CONTROL              0x16
+#define ICM45686_I2CM_STATUS               0x18
+#define ICM45686_I2CM_EXT_DEV_STATUS       0x1a
+#define ICM45686_I2CM_RD_DATA_0            0x1b
+#define ICM45686_I2CM_WR_DATA_0            0x33
+
 #define ICM45686_SMC_CONTROL_0             0x58
 
 #define ICM45686_SREG_CTRL                 0x67
