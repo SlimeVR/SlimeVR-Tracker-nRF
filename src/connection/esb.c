@@ -34,10 +34,9 @@
 #include "tdma.h"
 #include "util.h"
 
-#define ESB_CHANNEL 53
+#define ESB_CHANNEL 72
 
 uint8_t last_reset = 0;
-//const nrfx_timer_t m_timer = NRFX_TIMER_INSTANCE(1);
 bool esb_state = false;
 bool timer_state = false;
 bool send_data = false;
@@ -68,7 +67,6 @@ LOG_MODULE_REGISTER(esb_event, LOG_LEVEL_INF);
 
 static void esb_thread(void);
 K_THREAD_DEFINE(esb_thread_id, 512, esb_thread, NULL, NULL, NULL, ESB_THREAD_PRIORITY, 0, 0);
-
 
 void event_handler(struct esb_evt const *event)
 {
