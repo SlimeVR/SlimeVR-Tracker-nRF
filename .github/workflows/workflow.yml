@@ -5,6 +5,7 @@ on:
   push:
     branches:
       - main
+      - rebase-attempt
   create:
   workflow_dispatch:
 
