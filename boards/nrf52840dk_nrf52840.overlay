@@ -32,7 +32,7 @@
 	chosen {
 		zephyr,console = &cdc_acm_uart0;
 		zephyr,shell-uart = &cdc_acm_uart0;
-		zephyr,display = &ssd1306;
+		zephyr,display = &nice_view;
 	};
 
 	pwmleds {
@@ -106,6 +106,28 @@
 };
 
 &spi3 {
+	status = "okay";
+    cs-gpios = <&arduino_header 14 GPIO_ACTIVE_HIGH>;
+    pinctrl-0 = <&spi2_default>;
+    pinctrl-1 = <&spi2_sleep>;
+    nice_view: ls0xx@0 {
+        compatible = "sharp,ls0xx";
+		spi-max-frequency = <DT_FREQ_M(8)>;
+        reg = <0>;
+        width = <160>;
+        height = <68>;
+    };
+};
+
+/delete-node/ &qspi;
+/delete-node/ &spi2;
+
+/*
+&spi3 {
+	status = "okay";
+    cs-gpios = <&arduino_header 16 GPIO_ACTIVE_LOW>;
+    pinctrl-0 = <&spi3_default>;
+    pinctrl-1 = <&spi3_sleep>;
 	imu_spi: imu_spi@0 {
 		compatible = "vnd,spi-device";
 		spi-max-frequency = <DT_FREQ_M(32)>;
@@ -113,6 +135,7 @@
 		reg = <0>;
 	};
 };
+*/
 
 &usbd {
 	cdc_acm_uart0: cdc_acm_uart0 {

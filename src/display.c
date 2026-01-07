@@ -7,6 +7,20 @@
 #include <zephyr/device.h>
 #include <stdio.h>
 
+static uint8_t clear_buf_ls[68 * 160 / 8];
+static uint8_t buf0_ls[68 * 160 / 8];
+static uint8_t buf1_ls[68 * 160 / 8];
+static uint8_t buf2_ls[68 * 160 / 8];
+static uint8_t buf3_ls[68 * 160 / 8];
+static uint8_t buf4_ls[68 * 160 / 8];
+
+const struct display_buffer_descriptor ls_desc = {
+	.buf_size = 68 * 160 / 8,
+	.width = 160,
+	.height = 68,
+	.pitch = 160,
+};
+
 static uint8_t clear_buf[2 * 128];
 
 static uint8_t top_line_buf[2 * 96];
@@ -41,13 +55,13 @@ static const struct device *dev = DEVICE_DT_GET(DT_CHOSEN(zephyr_display));
 LOG_MODULE_REGISTER(display, LOG_LEVEL_INF);
 
 static void display_status_thread(void);
-K_THREAD_DEFINE(display_status_thread_id, 512, display_status_thread, NULL, NULL, NULL, 8, 0, 0);
+//K_THREAD_DEFINE(display_status_thread_id, 512, display_status_thread, NULL, NULL, NULL, 8, 0, 0);
 
 static void display_runtime_thread(void);
-K_THREAD_DEFINE(display_runtime_thread_id, 512, display_runtime_thread, NULL, NULL, NULL, 8, 0, 0);
+//K_THREAD_DEFINE(display_runtime_thread_id, 512, display_runtime_thread, NULL, NULL, NULL, 8, 0, 0);
 
 static void display_thread(void);
-K_THREAD_DEFINE(display_thread_id, 512, display_thread, NULL, NULL, NULL, 8, 0, 0);
+K_THREAD_DEFINE(display_thread_id, 4096, display_thread, NULL, NULL, NULL, 8, 0, 0);
 
 static int write_char_to_top_buf(char c)
 {
@@ -274,6 +288,55 @@ static void display_runtime_thread(void)
 
 static void display_thread(void)
 {
-	display_blanking_off(dev);
+/*
+    for (int i = 0; i < 68 / 2; i++)
+    {
+        memset(buf0_ls + 160 * (i * 2) / 8, 0b10101010, 160 / 8);
+        memset(buf0_ls + 160 * (i * 2 + 1) / 8, 0b01010101, 160 / 8);
+    }
+    for (int i = 0; i < 68 / 2; i++)
+    {
+        memset(buf1_ls + 160 * (i * 2) / 8, 0b01010101, 160 / 8);
+        memset(buf1_ls + 160 * (i * 2 + 1) / 8, 0b10101010, 160 / 8);
+    }
+*/
+    uint64_t start;
+    uint64_t diff;
+    for (int i = 0; i < 68; i++)
+    {
+        memset(buf0_ls + 20 * i, 0xff, 4);
+        memset(buf1_ls + 20 * i, 0xff, 8);
+        memset(buf2_ls + 20 * i, 0xff, 12);
+        memset(buf3_ls + 20 * i, 0xff, 16);
+    }
+    while (1)
+    {
+        // frame taking ~33ms, or about 30hz
+        start = k_uptime_ticks();
+        display_write(dev, 0, 0, &ls_desc, buf0_ls);
+        diff = k_ticks_to_us_floor64(k_uptime_ticks() - start);
+        if (diff < 2083)
+            k_usleep(2083 - diff);
+        start = k_uptime_ticks();
+        display_write(dev, 0, 0, &ls_desc, buf1_ls);
+        diff = k_ticks_to_us_floor64(k_uptime_ticks() - start);
+        if (diff < 2083)
+            k_usleep(2083 - diff);
+        start = k_uptime_ticks();
+        display_write(dev, 0, 0, &ls_desc, buf2_ls);
+        diff = k_ticks_to_us_floor64(k_uptime_ticks() - start);
+        if (diff < 2083)
+            k_usleep(2083 - diff);
+        start = k_uptime_ticks();
+        display_write(dev, 0, 0, &ls_desc, buf3_ls);
+        diff = k_ticks_to_us_floor64(k_uptime_ticks() - start);
+        if (diff < 2083)
+            k_usleep(2083 - diff);
+        start = k_uptime_ticks();
+        display_write(dev, 0, 0, &ls_desc, buf4_ls);
+        diff = k_ticks_to_us_floor64(k_uptime_ticks() - start);
+        if (diff < 2083)
+            k_usleep(2083 - diff);
+    }
 //    display_set_contrast(dev, 0);
 }
