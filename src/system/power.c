@@ -503,7 +503,7 @@ static void power_thread(void)
 		case -2:
 			last_valid_temp = -1;
 			chg_temp_warn = true;
-			break:
+			break;
 		case -1:
 			if (last_valid_temp == -1)
 				last_valid_temp = k_uptime_get();
