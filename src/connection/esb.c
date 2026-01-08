@@ -34,7 +34,7 @@
 #include "tdma.h"
 #include "util.h"
 
-#define ESB_CHANNEL 72
+#define ESB_CHANNEL 83
 
 uint8_t last_reset = 0;
 bool esb_state = false;
