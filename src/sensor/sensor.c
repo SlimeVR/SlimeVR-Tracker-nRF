@@ -714,7 +714,7 @@ int sensor_init(void)
 	if (sensor_imu == &sensor_imu_bmi270) // bmi270 specific
 	{
 		LOG_INF("Applying gyroscope gain");
-		bmi_gain_apply(sensor_calibration_get_sensor_data());
+		bmi270_gain_apply(sensor_calibration_get_sensor_data());
 	}
 
 #if IMU_INT_EXISTS
