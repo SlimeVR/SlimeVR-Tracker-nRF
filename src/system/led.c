@@ -337,8 +337,8 @@ static void led_thread(void)
 
 		case SYS_LED_PATTERN_ONESHOT_POWERON:
 			led_pattern_state++;
-			led_pin_set(SYS_LED_COLOR_DEFAULT, 10000, !(led_pattern_state % 2) * 10000);
-			if (led_pattern_state == 7)
+			led_pin_set(SYS_LED_COLOR_ERROR, 10000, !(led_pattern_state % 2) * 10000);
+			if (led_pattern_state == 3)
 				set_led(SYS_LED_PATTERN_OFF, SYS_LED_PRIORITY_HIGHEST);
 			else
 				k_msleep(200);

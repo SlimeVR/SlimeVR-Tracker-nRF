@@ -364,7 +364,7 @@ void esb_set_pair(uint64_t addr)
 	sys_write(PAIRED_ID, retained->paired_addr, paired_addr, sizeof(paired_addr)); // Write new address and tracker id
 }
 
-void esb_pair(void)
+bool esb_pair(void)
 {
 	if (get_status(SYS_STATUS_CONNECTION_ERROR))
 		set_status(SYS_STATUS_CONNECTION_ERROR, false);
@@ -374,7 +374,8 @@ void esb_pair(void)
 		LOG_INF("Pairing");
 		esb_set_addr_discovery();
 		esb_initialize(true);
-//		timer_init(); // TODO: shouldn't be here!!!
+		const int64_t time_pairing_start = k_uptime_get();
+
 		tx_payload_pair.pipe = 0;
 		tx_payload_pair.noack = false;
 		uint64_t *addr = (uint64_t *)NRF_FICR->DEVICEADDR; // Use device address as unique identifier (although it is not actually guaranteed, see datasheet)
@@ -389,6 +390,8 @@ void esb_pair(void)
 		while (paired_addr[0] != checksum && ((*(uint64_t *)&paired_addr[0] >> 16) & 0xFFFFFFFFFFFF) != *addr)
 		{
 			int64_t time_begin = k_uptime_get();
+			if(time_pairing_start + CONFIG_3_SETTINGS_READ(CONFIG_3_CONNECTION_TIMEOUT_DELAY) < time_begin)
+				return false; // Pairing timeout
 
 			if (!esb_initialized)
 			{
@@ -436,6 +439,7 @@ void esb_pair(void)
 	esb_set_addr_paired();
 	esb_paired = true;
 	clocks_stop();
+	return true;
 }
 
 void esb_reset_pair(void)
@@ -515,8 +519,12 @@ static void esb_thread(void)
 	{
 		if (!esb_paired && (!use_hid || (!get_status(SYS_STATUS_USB_CONNECTED) && k_uptime_get() - 750 > start_time))) // only automatically enter pairing while not potentially communicating by usb
 		{
-			esb_pair();
-			esb_initialize(true);
+			if(!esb_pair()) {
+				LOG_WRN("Pairing timeout");
+				sys_request_system_off(false);
+			} else {
+				esb_initialize(true);
+			}
 		}
 		if (tx_errors >= TX_ERROR_THRESHOLD)
 		{
