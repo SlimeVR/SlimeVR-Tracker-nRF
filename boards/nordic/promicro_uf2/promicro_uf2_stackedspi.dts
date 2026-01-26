@@ -1,0 +1,55 @@
+// Copyright (c) 2024 Nordic Semiconductor ASA
+// SPDX-License-Identifier: Apache-2.0
+
+/dts-v1/;
+#include "promicro_uf2.dts"
+
+&pinctrl {
+	spi3_default: spi3_default {
+		/delete-node/ group1;
+		group1 {
+			psels = <NRF_PSEL(SPIM_MISO, 0, 11)>,
+					<NRF_PSEL(SPIM_MOSI, 0, 24)>,
+					<NRF_PSEL(SPIM_SCK, 0, 22)>;
+		};
+	};
+
+	spi3_sleep: spi3_sleep {
+		/delete-node/ group1;
+		group1 {
+			psels = <NRF_PSEL(SPIM_MISO, 0, 11)>,
+					<NRF_PSEL(SPIM_MOSI, 0, 24)>,
+					<NRF_PSEL(SPIM_SCK, 0, 22)>;
+			low-power-enable;
+		};
+	};
+};
+
+/ {
+	buttons {
+		/delete-node/ button0;
+		button0: button_0 {
+			gpios = <&gpio0 6 (GPIO_PULL_UP | GPIO_ACTIVE_LOW)>;
+		};
+	};
+
+	aliases {
+		sw0 = &button0;
+	};
+
+	zephyr,user {
+		/delete-property/ int0-gpios;
+		/delete-property/ vcc-gpios;
+		int0-gpios = <&gpio0 2 0>;
+		clk-gpios = <&gpio1 11 GPIO_OPEN_DRAIN>;
+		vcc-gpios = <&gpio0 17 GPIO_OPEN_SOURCE>;
+		gnd-gpios = <&gpio0 20 GPIO_OPEN_DRAIN>;
+	};
+};
+
+/delete-node/ &i2c0;
+
+&spi3 {
+	/delete-property/ cs-gpios;
+	cs-gpios = <&gpio1 0 GPIO_ACTIVE_LOW>;
+};
