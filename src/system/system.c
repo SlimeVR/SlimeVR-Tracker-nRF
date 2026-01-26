@@ -245,7 +245,7 @@ void sys_clear(void)
 	static bool reset_confirm = false;
 	if (!reset_confirm)
 	{
-		printk("Resetting NVS and retained will clear all pairing, sensor calibration data, and battery calibration data. Are you sure?\n");
+		printk("Resetting NVS and retained will clear all pairing, sensor calibration data, and battery calibration data. Please resend the command to confirm.\n");
 		reset_confirm = true;
 		return;
 	}

@@ -246,7 +246,7 @@ void config_settings_reset_all(void)
 	static bool reset_confirm = false;
 	if (!reset_confirm)
 	{
-		printk("Resetting device settings will clear all user-defined settings to the firmware defaults. Are you sure?\n");
+		printk("Resetting device settings will clear all user-defined settings to the firmware defaults. Please resend the command to confirm.\n");
 		reset_confirm = true;
 		return;
 	}

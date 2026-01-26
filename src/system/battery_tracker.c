@@ -544,7 +544,7 @@ void sys_reset_battery_tracker(void)
 	static bool reset_confirm = false;
 	if (!reset_confirm)
 	{
-		printk("Resetting battery tracker will clear all battery calibration data. Are you sure?\n");
+		printk("Resetting battery tracker will clear all battery calibration data. Please resend the command to confirm.\n");
 		reset_confirm = true;
 		return;
 	}
