@@ -54,6 +54,7 @@ void clocks_request_start(uint32_t delay_us);
 void clocks_request_stop(uint32_t delay_us);
 int esb_initialize(bool);
 void esb_deinitialize(void);
+void fill_packets_stat(uint8_t *data);
 
 void esb_set_addr_discovery(void);
 void esb_set_addr_paired(void);

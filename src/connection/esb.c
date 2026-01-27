@@ -68,6 +68,10 @@ LOG_MODULE_REGISTER(esb_event, LOG_LEVEL_INF);
 static void esb_thread(void);
 K_THREAD_DEFINE(esb_thread_id, 512, esb_thread, NULL, NULL, NULL, ESB_THREAD_PRIORITY, 0, 0);
 
+uint8_t packets_received;
+uint8_t packets_failed;
+uint32_t packets_rssi;
+
 void event_handler(struct esb_evt const *event)
 {
 	switch (event->evt_id)
@@ -86,6 +90,7 @@ void event_handler(struct esb_evt const *event)
 			last_tx_fail = 0; // reset last_tx_fail on threshold reached
 			last_tx_success = k_uptime_get();
 		}
+		packets_failed++;
 		LOG_DBG("TX FAILED");
 		if (esb_paired)
 			clocks_stop();
@@ -94,6 +99,8 @@ void event_handler(struct esb_evt const *event)
 		// TODO: have to read rx until -ENODATA (or -EACCES/-EINVAL)
 		if (!esb_read_rx_payload(&rx_payload)) // zero, rx success
 		{
+			packets_received++;
+			packets_rssi += (uint8_t) rx_payload.rssi;
 			if (!paired_addr[0] && rx_payload.length == 8 && rx_payload.pipe == 0) // not paired
 			{
 				LOG_INF("tx: %16llX rx: %16llX", *(uint64_t *)tx_payload_pair.data, *(uint64_t *)rx_payload.data);
@@ -106,7 +113,7 @@ void event_handler(struct esb_evt const *event)
 				// Control packet received
 				switch(rx_payload.data[1]) {
 					case ESB_PACKET_CONTROL_NO_WINDOWS: // No Windows (4)
-						// TODO
+						// TODO Enter error state and show LED to the user
 						break;
 					case ESB_PACKET_CONTROL_WINDOW_INFO: // Window Info (5)
 						uint8_t packet_number = rx_payload.data[7];
@@ -135,6 +142,17 @@ void event_handler(struct esb_evt const *event)
 		}
 		break;
 	}
+}
+
+void fill_packets_stat(uint8_t *data) {
+	data[8] = packets_sent;
+	data[9] = packets_received;
+	data[10] = packets_failed;
+	data[11] = packets_received == 0 ? 0 : packets_rssi / packets_received;
+	packets_sent = 0;
+	packets_received = 0;
+	packets_failed = 0;
+	packets_rssi = 0;
 }
 
 bool clock_status = false;
@@ -488,7 +506,7 @@ void esb_write(uint8_t *data, uint8_t packet_sequnce)
 		k_sleep(Z_TIMEOUT_TICKS(1)); // Spin wait?
 	tdma_tx_started();
 	esb_start_tx();
-
+	packets_sent++;
 	send_data = true;
 }
 
