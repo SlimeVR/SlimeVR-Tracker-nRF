@@ -68,6 +68,7 @@ LOG_MODULE_REGISTER(esb_event, LOG_LEVEL_INF);
 static void esb_thread(void);
 K_THREAD_DEFINE(esb_thread_id, 512, esb_thread, NULL, NULL, NULL, ESB_THREAD_PRIORITY, 0, 0);
 
+uint8_t packets_sent;
 uint8_t packets_received;
 uint8_t packets_failed;
 uint32_t packets_rssi;
