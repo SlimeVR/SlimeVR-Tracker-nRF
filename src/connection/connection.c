@@ -260,6 +260,11 @@ void connection_write_packet_3() // status
 	// data[5] - packets lost (filled by dongle)
 	// data[6] - windows hit (filled by dongle)
 	// data[7] - windows missed (filled by dongle)
+	fill_packets_stat(data); // Fills 4 fields below
+	// data[8] - packets sent (by the tracker)
+	// data[9] - packets received (by the tracker)
+	// data[10] - packets failed (by the tracker)
+	// data[11] - average rssi (received by the tracker)
 	data[15] = 0; // rssi (supplied by receiver)
 	memcpy(data_buffer, data, sizeof(data));
 	last_data_time = k_uptime_get(); // TODO: use ticks
@@ -382,7 +387,8 @@ void connection_thread(void)
 			data_copy[16] = packet_sequence++;
 			esb_write(data_copy, packet_sequence - 1);
 		}
-		else if (k_uptime_get() - last_status_time > 1000)
+		// Didn't send status in 2 seconds, prioritize it
+		else if (k_uptime_get() - last_status_time > 2000)
 		{
 			last_status_time = k_uptime_get();
 			connection_write_packet_3();
@@ -420,6 +426,12 @@ void connection_thread(void)
 			quat_update_time = 0;
 			last_quat_time = k_uptime_get();
 			connection_write_packet_1();
+			continue;
+		}
+		else if (k_uptime_get() - last_status_time > 1000)
+		{
+			last_status_time = k_uptime_get();
+			connection_write_packet_3();
 			continue;
 		}
 		else if (k_uptime_get() - last_info_time > 500)
