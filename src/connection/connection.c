@@ -478,12 +478,6 @@ void connection_thread(void)
 			connection_write_packet_6();
 			continue;
 		}
-		else if (k_uptime_get() - last_status_time > 1000)
-		{
-			last_status_time = k_uptime_get();
-			connection_write_packet_3();
-			continue;
-		}
 		else if (k_uptime_get() - last_status2_time > 1000)
 		{
 			last_status2_time = k_uptime_get();
