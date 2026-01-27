@@ -299,11 +299,9 @@ void connection_write_packet_5() // runtime
 		buf[0] = k_ticks_to_us_floor64(sys_get_battery_remaining_time_estimate());
 	else
 		buf[0] = -1; // no valid reading yet, but previous estimate may still be valid
-	k_mutex_lock(&data_buffer_mutex, K_FOREVER);
 	memcpy(data_buffer, data, sizeof(data));
 	last_data_time = k_uptime_get(); // TODO: use ticks
 //	esb_write(data); // TODO: schedule in thread
-	k_mutex_unlock(&data_buffer_mutex);
 	hid_write_packet_n(data); // TODO:
 }
 
@@ -314,7 +312,6 @@ void connection_write_packet_6() // reduced precision quat and accel with button
 	data[1] = tracker_id;
 	data[2] = tracker_button;
 	data[15] = 0; // rssi (supplied by receiver)
-	k_mutex_lock(&data_buffer_mutex, K_FOREVER);
 	memcpy(data_buffer, data, sizeof(data));
 	last_data_time = k_uptime_get(); // TODO: use ticks
 	if (tracker_button && k_uptime_get() > button_update_time + 1000) // attempt to "hold" button presses for 1000 ms
@@ -323,7 +320,6 @@ void connection_write_packet_6() // reduced precision quat and accel with button
 		button_update_time = 0;
 	}
 //	esb_write(data); // TODO: schedule in thread
-	k_mutex_unlock(&data_buffer_mutex);
 	hid_write_packet_n(data); // TODO:
 }
 
@@ -345,7 +341,6 @@ void connection_write_packet_7() // button
 	buf[1] = TO_FIXED_7(sensor_a[1]);
 	buf[2] = TO_FIXED_7(sensor_a[2]);
 	data[15] = 0; // rssi (supplied by receiver)
-	k_mutex_lock(&data_buffer_mutex, K_FOREVER);
 	memcpy(data_buffer, data, sizeof(data));
 	last_data_time = k_uptime_get(); // TODO: use ticks
 	if (tracker_button && k_uptime_get() > button_update_time + 1000) // attempt to "hold" button presses for 1000 ms
@@ -354,7 +349,6 @@ void connection_write_packet_7() // button
 		button_update_time = 0;
 	}
 //	esb_write(data); // TODO: schedule in thread
-	k_mutex_unlock(&data_buffer_mutex);
 	hid_write_packet_n(data); // TODO:
 }
 
@@ -444,12 +438,6 @@ void connection_thread(void)
 		{
 			last_info2_time = k_uptime_get();
 			connection_write_packet_6();
-			continue;
-		}
-		else if (k_uptime_get() - last_status_time > 1000)
-		{
-			last_status_time = k_uptime_get();
-			connection_write_packet_3();
 			continue;
 		}
 		else if (k_uptime_get() - last_status2_time > 1000)
