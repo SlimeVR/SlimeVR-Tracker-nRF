@@ -14,3 +14,5 @@ board:
       - name: 'spi'
       - name: 'smspi'
       - name: 'chrysalis'
+      - name: 'stackedi2c'
+      - name: 'stackedspi'
