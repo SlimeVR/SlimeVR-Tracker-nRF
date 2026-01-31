@@ -62,7 +62,7 @@ void tdma_set_our_window(uint8_t window) {
 void tdma_update_timer_offset(int32_t delta) {
 	if(delta != 0) {
 		timer_offset = timer_offset + (delta + 1) / 2;
-		LOG_INF("New timer offset %d & %d", timer_offset, timer_offset_static);
+		//LOG_INF("New timer offset %d & %d", timer_offset, timer_offset_static);
 	}
 }
 

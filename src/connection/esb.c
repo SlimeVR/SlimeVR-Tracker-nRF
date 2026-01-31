@@ -78,7 +78,15 @@ void event_handler(struct esb_evt const *event)
 	switch (event->evt_id)
 	{
 	case ESB_EVENT_TX_SUCCESS:
-		tx_errors = 0;
+		if (tx_errors >= TX_ERROR_THRESHOLD && tx_errors < TX_ERROR_THRESHOLD + TX_ERROR_CLEAR_RATE && last_tx_fail == 0)
+		{
+			last_tx_success = 0; // reset last_tx_success on threshold reached
+			last_tx_fail = k_uptime_get();
+		}
+		if (tx_errors > TX_ERROR_CLEAR_RATE)
+			tx_errors -= TX_ERROR_CLEAR_RATE;
+		else
+			tx_errors = 0;
 		LOG_DBG("TX SUCCESS");
 		if (esb_paired)
 			clocks_stop();
