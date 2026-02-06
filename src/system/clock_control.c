@@ -24,18 +24,86 @@
 
 #include <zephyr/drivers/clock_control/nrf_clock_control.h>
 #include <hal/nrf_gpio.h>
+#include <hal/nrf_clock.h>
 
-void clock_pre_shutdown() {
+void clock_pre_shutdown()
+{
+    // Prevent interrupts during clock transition (kernel timing depends on LFCLK)
+    unsigned int key = irq_lock();
+
+    // Request LFCLK stop (likely times out — RTC holds the request, this is expected)
     nrf_clock_task_trigger(NRF_CLOCK, NRF_CLOCK_TASK_LFCLKSTOP);
+
+    // Wait up to 5ms for stop (won't happen while RTC is active, just a formality)
+    uint32_t waited_us = 0;
+    while (nrf_clock_lf_is_running(NRF_CLOCK) && (waited_us < 5000))
+    {
+        k_busy_wait(100); // 100µs steps, uses HFCLK so safe under irq_lock
+        waited_us += 100;
+    }
+
+    // LFCLKSTARTED is a latched event — clear it so we can detect the new transition
+    nrf_clock_event_clear(NRF_CLOCK, NRF_CLOCK_EVENT_LFCLKSTARTED);
+
+    // Select internal RC as new LFCLK source
     nrf_clock_lf_src_set(NRF_CLOCK, NRF_CLOCK_LFCLK_RC);
+
+    // Trigger glitchless shadow transition — hardware keeps external running until RC is stable
     nrf_clock_task_trigger(NRF_CLOCK, NRF_CLOCK_TASK_LFCLKSTART);
+
+    // Wait up to 5ms for RC to take over (RC startup is ~600µs, 5ms gives 8x margin)
+    waited_us = 0;
+    while (!nrf_clock_event_check(NRF_CLOCK, NRF_CLOCK_EVENT_LFCLKSTARTED) && (waited_us < 5000))
+    {
+        k_busy_wait(100);
+        waited_us += 100;
+    }
+
+    // Clean up event flag
+    nrf_clock_event_clear(NRF_CLOCK, NRF_CLOCK_EVENT_LFCLKSTARTED);
+
+    // Restore interrupts — kernel timer now running on RC safely
+    irq_unlock(key);
 }
 
-void clock_init_external() {
-	// Switch to external oscillator for LF clock for good TDMA precision
-	#if defined(NRF_CLOCK_USE_EXTERNAL_LFCLK_SOURCES) || defined(__NRFX_DOXYGEN__)
-		nrf_clock_task_trigger(NRF_CLOCK, NRF_CLOCK_TASK_LFCLKSTOP);
-		nrf_clock_lf_src_set(NRF_CLOCK, NRF_CLOCK_LFCLK_XTAL_FULL_SWING);
-		nrf_clock_task_trigger(NRF_CLOCK, NRF_CLOCK_TASK_LFCLKSTART);
-	#endif
+void clock_init_external()
+{
+#if defined(NRF_CLOCK_USE_EXTERNAL_LFCLK_SOURCES) || defined(__NRFX_DOXYGEN__)
+    // Prevent interrupts during clock transition
+    unsigned int key = irq_lock();
+
+    // Request LFCLK stop (likely times out — RTC holds the request, this is expected)
+    nrf_clock_task_trigger(NRF_CLOCK, NRF_CLOCK_TASK_LFCLKSTOP);
+
+    // Wait up to 5ms for stop
+    uint32_t waited_us = 0;
+    while (nrf_clock_lf_is_running(NRF_CLOCK) && (waited_us < 5000))
+    {
+        k_busy_wait(100);
+        waited_us += 100;
+    }
+
+    // LFCLKSTARTED is a latched event — clear it so we can detect the new transition
+    nrf_clock_event_clear(NRF_CLOCK, NRF_CLOCK_EVENT_LFCLKSTARTED);
+
+    // Select external full swing TCXO as new LFCLK source
+    nrf_clock_lf_src_set(NRF_CLOCK, NRF_CLOCK_LFCLK_XTAL_FULL_SWING);
+
+    // Trigger glitchless shadow transition — hardware keeps RC running until TCXO locks
+    nrf_clock_task_trigger(NRF_CLOCK, NRF_CLOCK_TASK_LFCLKSTART);
+
+    // Wait up to 5ms for TCXO to take over
+    waited_us = 0;
+    while (!nrf_clock_event_check(NRF_CLOCK, NRF_CLOCK_EVENT_LFCLKSTARTED) && (waited_us < 5000))
+    {
+        k_busy_wait(100);
+        waited_us += 100;
+    }
+
+    // Clean up event flag
+    nrf_clock_event_clear(NRF_CLOCK, NRF_CLOCK_EVENT_LFCLKSTARTED);
+
+    // Restore interrupts
+    irq_unlock(key);
+#endif
 }
