@@ -1,3 +1,25 @@
+/*
+	SlimeVR Code is placed under the MIT license
+	Copyright (c) 2025 SlimeVR Contributors
+
+	Permission is hereby granted, free of charge, to any person obtaining a copy
+	of this software and associated documentation files (the "Software"), to deal
+	in the Software without restriction, including without limitation the rights
+	to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+	copies of the Software, and to permit persons to whom the Software is
+	furnished to do so, subject to the following conditions:
+
+	The above copyright notice and this permission notice shall be included in
+	all copies or substantial portions of the Software.
+
+	THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+	IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+	FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+	AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+	LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+	OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+	THE SOFTWARE.
+*/
 #include "globals.h"
 #include "sensor/sensor.h"
 #include "battery.h"
@@ -16,6 +38,7 @@
 #include <zephyr/drivers/clock_control/nrf_clock_control.h>
 
 #include "power.h"
+#include "clock_control.h"
 
 #define DFU_DBL_RESET_MEM 0x20007F7C
 #define DFU_DBL_RESET_APP 0x4ee5677e
@@ -167,6 +190,7 @@ static void configure_system_off(void)
 		LOG_WRN("Entering new power state while sensor error is raised");
 	if (get_status(SYS_STATUS_SYSTEM_ERROR))
 		LOG_WRN("Entering new power state while system error is raised");
+	clock_pre_shutdown();
 	main_imu_suspend();
 	sensor_shutdown();
 	set_led(SYS_LED_PATTERN_OFF_FORCE, SYS_LED_PRIORITY_HIGHEST);
@@ -263,12 +287,6 @@ void sys_request_WOM(bool force, bool immediate)
 
 void sys_request_system_off(bool immediate)
 {
-	#ifdef ADAFRUIT_BOOTLOADER
-		// Reset LFCLK before getting into DFU
-		nrf_clock_task_trigger(NRF_CLOCK, NRF_CLOCK_TASK_LFCLKSTOP);
-		nrf_clock_lf_src_set(NRF_CLOCK, NRF_CLOCK_LFCLK_RC);
-		nrf_clock_task_trigger(NRF_CLOCK, NRF_CLOCK_TASK_LFCLKSTART);
-	#endif
 	if (immediate)
 	{
 		sys_system_off();
@@ -279,12 +297,6 @@ void sys_request_system_off(bool immediate)
 
 void sys_request_system_reboot(bool immediate)
 {
-#ifdef ADAFRUIT_BOOTLOADER
-	// Reset LFCLK before getting into DFU
-	nrf_clock_task_trigger(NRF_CLOCK, NRF_CLOCK_TASK_LFCLKSTOP);
-	nrf_clock_lf_src_set(NRF_CLOCK, NRF_CLOCK_LFCLK_RC);
-	nrf_clock_task_trigger(NRF_CLOCK, NRF_CLOCK_TASK_LFCLKSTART);
-#endif
 	if (immediate)
 	{
 		sys_system_reboot();

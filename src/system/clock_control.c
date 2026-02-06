@@ -1,6 +1,6 @@
 /*
 	SlimeVR Code is placed under the MIT license
-	Copyright (c) 2025 SlimeVR Contributors
+	Copyright (c) 2026 SlimeVR Contributors
 
 	Permission is hereby granted, free of charge, to any person obtaining a copy
 	of this software and associated documentation files (the "Software"), to deal
@@ -20,16 +20,22 @@
 	OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 	THE SOFTWARE.
 */
-#ifndef SLIMENRF_SYSTEM_POWER
-#define SLIMENRF_SYSTEM_POWER
+#include "clock_control.h"
 
-void sys_interface_suspend(void);
-void sys_interface_resume(void);
+#include <zephyr/drivers/clock_control/nrf_clock_control.h>
+#include <hal/nrf_gpio.h>
 
-void sys_request_WOM(bool, bool);
-void sys_request_system_off(bool);
-void sys_request_system_reboot(bool);
+void clock_pre_shutdown() {
+    nrf_clock_task_trigger(NRF_CLOCK, NRF_CLOCK_TASK_LFCLKSTOP);
+    nrf_clock_lf_src_set(NRF_CLOCK, NRF_CLOCK_LFCLK_RC);
+    nrf_clock_task_trigger(NRF_CLOCK, NRF_CLOCK_TASK_LFCLKSTART);
+}
 
-bool vin_read(void);
-
-#endif
+void clock_init_external() {
+	// Switch to external oscillator for LF clock for good TDMA precision
+	#if defined(NRF_CLOCK_USE_EXTERNAL_LFCLK_SOURCES) || defined(__NRFX_DOXYGEN__)
+		nrf_clock_task_trigger(NRF_CLOCK, NRF_CLOCK_TASK_LFCLKSTOP);
+		nrf_clock_lf_src_set(NRF_CLOCK, NRF_CLOCK_LFCLK_XTAL_FULL_SWING);
+		nrf_clock_task_trigger(NRF_CLOCK, NRF_CLOCK_TASK_LFCLKSTART);
+	#endif
+}

@@ -1,6 +1,6 @@
 /*
 	SlimeVR Code is placed under the MIT license
-	Copyright (c) 2025 SlimeVR Contributors
+	Copyright (c) 2026 SlimeVR Contributors
 
 	Permission is hereby granted, free of charge, to any person obtaining a copy
 	of this software and associated documentation files (the "Software"), to deal
@@ -20,16 +20,8 @@
 	OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 	THE SOFTWARE.
 */
-#ifndef SLIMENRF_SYSTEM_POWER
-#define SLIMENRF_SYSTEM_POWER
+#pragma once
 
-void sys_interface_suspend(void);
-void sys_interface_resume(void);
+void clock_pre_shutdown();
 
-void sys_request_WOM(bool, bool);
-void sys_request_system_off(bool);
-void sys_request_system_reboot(bool);
-
-bool vin_read(void);
-
-#endif
+void clock_init_external();

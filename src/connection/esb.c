@@ -33,8 +33,9 @@
 #include "esb.h"
 #include "tdma.h"
 #include "util.h"
+#include "system/clock_control.h"
 
-#define ESB_CHANNEL 83
+#define ESB_CHANNEL 78
 
 uint8_t last_reset = 0;
 bool esb_state = false;
@@ -534,13 +535,7 @@ static void esb_thread(void)
 	memcpy(paired_addr, retained->paired_addr, sizeof(paired_addr));
 
 	clocks_start();
-
-	// Switch to external oscillator for LF clock for good TDMA precision
-	#if defined(NRF_CLOCK_USE_EXTERNAL_LFCLK_SOURCES) || defined(__NRFX_DOXYGEN__)
-		nrf_clock_task_trigger(NRF_CLOCK, NRF_CLOCK_TASK_LFCLKSTOP);
-		nrf_clock_lf_src_set(NRF_CLOCK, NRF_CLOCK_LFCLK_XTAL_FULL_SWING);
-		nrf_clock_task_trigger(NRF_CLOCK, NRF_CLOCK_TASK_LFCLKSTART);
-	#endif
+	clock_init_external();
 
 	while (1)
 	{
