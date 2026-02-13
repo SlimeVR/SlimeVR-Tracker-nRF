@@ -23,7 +23,7 @@
 #include "clock_control.h"
 
 #include <zephyr/drivers/clock_control/nrf_clock_control.h>
-#include <hal/nrf_gpio.h>
+#include <hal/nrf_clock.h>
 
 void clock_pre_shutdown() {
     nrf_clock_task_trigger(NRF_CLOCK, NRF_CLOCK_TASK_LFCLKSTOP);
