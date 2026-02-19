@@ -25,17 +25,43 @@
 #include <zephyr/drivers/clock_control/nrf_clock_control.h>
 #include <hal/nrf_clock.h>
 
-void clock_pre_shutdown() {
+// Safely switch LF clock source
+void clock_switch(nrf_clock_lfclk_t source) {
+	unsigned int key = irq_lock();
+
     nrf_clock_task_trigger(NRF_CLOCK, NRF_CLOCK_TASK_LFCLKSTOP);
-    nrf_clock_lf_src_set(NRF_CLOCK, NRF_CLOCK_LFCLK_RC);
+
+	uint32_t waited_us = 0;
+    while (nrf_clock_lf_is_running(NRF_CLOCK) && (waited_us < 5000)) {
+        k_busy_wait(100);
+        waited_us += 100;
+    }
+
+	nrf_clock_event_clear(NRF_CLOCK, NRF_CLOCK_EVENT_LFCLKSTARTED);
+
+    nrf_clock_lf_src_set(NRF_CLOCK, source);
     nrf_clock_task_trigger(NRF_CLOCK, NRF_CLOCK_TASK_LFCLKSTART);
+
+	waited_us = 0;
+    while (nrf_clock_lf_is_running(NRF_CLOCK) && (waited_us < 5000)) {
+        k_busy_wait(100);
+        waited_us += 100;
+    }
+
+	nrf_clock_event_clear(NRF_CLOCK, NRF_CLOCK_EVENT_LFCLKSTARTED);
+
+	irq_unlock(key);
 }
 
+// Switch to RC clock before shut down to avoid any problems with the bootloader
+void clock_pre_shutdown() {
+	clock_switch(NRF_CLOCK_LFCLK_RC);
+}
+
+// Switch to external oscillator for LF clock for good TDMA precision
 void clock_init_external() {
-	// Switch to external oscillator for LF clock for good TDMA precision
 	#if defined(NRF_CLOCK_USE_EXTERNAL_LFCLK_SOURCES) || defined(__NRFX_DOXYGEN__)
-		nrf_clock_task_trigger(NRF_CLOCK, NRF_CLOCK_TASK_LFCLKSTOP);
-		nrf_clock_lf_src_set(NRF_CLOCK, NRF_CLOCK_LFCLK_XTAL_FULL_SWING);
-		nrf_clock_task_trigger(NRF_CLOCK, NRF_CLOCK_TASK_LFCLKSTART);
+		clock_switch(NRF_CLOCK_LFCLK_XTAL_FULL_SWING);
 	#endif
 }
+
