@@ -35,7 +35,7 @@
 #include "util.h"
 #include "system/clock_control.h"
 
-#define ESB_CHANNEL 21
+#define ESB_CHANNEL 20
 
 uint8_t last_reset = 0;
 bool esb_state = false;

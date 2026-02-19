@@ -72,7 +72,8 @@ void esb_write(uint8_t *data, uint8_t packet_sequnce); // TODO: give packets som
 bool esb_ready(void);
 
 /*
- * 		Note for the future:
+ * Note for the future:
+ *
  * Best channels and frequencies to use:
  * 20, 21, 22, 23, 24: 2420MHz to 2424Mhz - BT channels 8, 9, 10 outside of WiFi channels
  * 48, 49, 50, 51, 52: 2448MHz to 2452Mhz - BT channels 21, 22, 23 outside of WiFi channels
@@ -81,6 +82,10 @@ bool esb_ready(void);
  * Higher channels can be restricted by country.
  * 
  * TODO : Make a list of allowed channels by country
+ * 
+ * WARNING: Using nearby channels can lead to overlap, i.e. packets sent to Channel 20
+ * can be received by a device tuned to Channel 21, so it's recommended to
+ * ONLY USE EVEN CHANNELS
  */
 
 #endif
