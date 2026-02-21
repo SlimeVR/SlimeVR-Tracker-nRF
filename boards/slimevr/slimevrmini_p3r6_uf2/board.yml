@@ -3,6 +3,7 @@
 
 board:
   name: slimevrmini_p3r6_uf2
+  full_name: smol P3R6
   vendor: slimevr
   socs:
     - name: nrf52833
