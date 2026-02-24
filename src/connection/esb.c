@@ -35,7 +35,7 @@
 #include "util.h"
 #include "system/clock_control.h"
 
-#define ESB_CHANNEL 20
+#define ESB_CHANNEL 50
 
 uint8_t last_reset = 0;
 bool esb_state = false;
@@ -55,6 +55,17 @@ static struct esb_payload tx_payload = ESB_CREATE_PAYLOAD(0,
 static struct esb_payload tx_payload_pair = ESB_CREATE_PAYLOAD(0,
 														  0, 0, 0, 0, 0, 0, 0, 0);
 
+/*
+base_addr_p0: Base address for pipe 0, in big endian.
+base_addr_p1: Base address for pipe 1-7, in big endian (not used, set to dongle's address)
+pipe_prefixes: Address prefix for pipe 0 to 7.
+This was randomly generated
+*/
+static const uint8_t discovery_base_addr_0[4] = {0x62, 0x39, 0x8A, 0xF2};
+static const uint8_t discovery_base_addr_1[4] = {0x28, 0xFF, 0x50, 0xB8}; // Not used
+static const uint8_t discovery_addr_prefix[8] = {0xFE, 0xFF, 0x29, 0x27, 0x09, 0x02, 0xB2, 0xD6};
+
+static uint8_t base_addr_0[4], base_addr_1[4], addr_prefix[8] = {0};
 static uint8_t paired_addr[8] = {0};
 
 static bool esb_initialized = false;
@@ -106,9 +117,17 @@ void event_handler(struct esb_evt const *event)
 			clocks_stop();
 		break;
 	case ESB_EVENT_RX_RECEIVED:
-		// TODO: have to read rx until -ENODATA (or -EACCES/-EINVAL)
-		if (!esb_read_rx_payload(&rx_payload)) // zero, rx success
+		LOG_DBG("RX");
+		int err = 0;
+		while (!err) // zero, rx success
 		{
+			err = esb_read_rx_payload(&rx_payload);
+			if (err == -ENODATA) {
+				return;
+			} else if (err) {
+				LOG_ERR("Error while reading rx packet: %d", err);
+				return;
+			}
 			packets_received++;
 			packets_rssi += (uint8_t) rx_payload.rssi;
 			if (!paired_addr[0] && rx_payload.length == 8 && rx_payload.pipe == 0) // not paired
@@ -259,20 +278,6 @@ void clocks_request_stop(uint32_t delay_us)
 	k_thread_create(&clocks_stop_thread_id, clocks_stop_thread_id_stack, K_THREAD_STACK_SIZEOF(clocks_stop_thread_id), (k_thread_entry_t)clocks_stop, NULL, NULL, NULL, CLOCKS_STOP_THREAD_PRIORITY, 0, K_USEC(delay_us));
 }
 
-// this was randomly generated
-// TODO: I have no idea?
-// TODO: see esb information, check CONFIG_ESB_PIPE_COUNT
-/*
-base_addr_p0: Base address for pipe 0, in big endian.
-base_addr_p1: Base address for pipe 1-7, in big endian.
-pipe_prefixes: Address prefix for pipe 0 to 7.
-*/
-static const uint8_t discovery_base_addr_0[4] = {0x62, 0x39, 0x8A, 0xF2};
-static const uint8_t discovery_base_addr_1[4] = {0x28, 0xFF, 0x50, 0xB8}; // TODO: not used
-static const uint8_t discovery_addr_prefix[8] = {0xFE, 0xFF, 0x29, 0x27, 0x09, 0x02, 0xB2, 0xD6};
-
-static uint8_t base_addr_0[4], base_addr_1[4], addr_prefix[8] = {0};
-
 int esb_initialize(bool tx)
 {
 	int err;
@@ -287,8 +292,8 @@ int esb_initialize(bool tx)
 		// config.bitrate = ESB_BITRATE_2MBPS;
 		// config.crc = ESB_CRC_16BIT;
 		config.tx_output_power = CONFIG_2_SETTINGS_READ(CONFIG_2_RADIO_TX_POWER);
-		config.retransmit_delay = 600;
-		config.retransmit_count = 0;
+		config.retransmit_delay = 435;
+		config.retransmit_count = 1;
 		config.tx_mode = ESB_TXMODE_MANUAL;
 		config.payload_length = 32;
 		config.selective_auto_ack = true;
@@ -302,7 +307,7 @@ int esb_initialize(bool tx)
 		// config.bitrate = ESB_BITRATE_2MBPS;
 		// config.crc = ESB_CRC_16BIT;
 		config.tx_output_power = CONFIG_2_SETTINGS_READ(CONFIG_2_RADIO_TX_POWER);
-		config.retransmit_delay = 600;
+		config.retransmit_delay = 435;
 		config.retransmit_count = 0;
 		// config.tx_mode = ESB_TXMODE_AUTO;
 		config.payload_length = 32;

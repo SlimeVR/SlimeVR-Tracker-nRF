@@ -26,7 +26,7 @@
 uint8_t our_window = 0;
 uint32_t last_slot = 0;
 int32_t timer_offset = 0;
-static const int32_t timer_offset_static = 5;
+static const int32_t timer_offset_static = 3;
 uint32_t packet_sent_time = 0;
 
 LOG_MODULE_REGISTER(tdma, LOG_LEVEL_INF);
@@ -48,11 +48,11 @@ uint32_t tdma_get_slot(uint32_t timer) {
 }
 
 uint8_t tdma_get_window(uint32_t slot) {
-    return (slot - 24) % 10;
+    return (slot - TDMA_DONGLE_SLOTS) % TDMA_MAX_TRACKERS;
 }
 
 bool tdma_is_dongle_window(uint32_t slot) {
-    return slot < 24;
+    return slot < TDMA_DONGLE_SLOTS;
 }
 
 void tdma_set_our_window(uint8_t window) {
@@ -69,7 +69,7 @@ void tdma_update_timer_offset(int32_t delta) {
 bool tdma_is_our_window() {
 	uint32_t timer = tdma_get_time_with_static_offset();
 	uint32_t current_slot = tdma_get_slot(timer);
-	if(last_slot == current_slot || current_slot < 24)
+	if(last_slot == current_slot || current_slot < TDMA_DONGLE_SLOTS)
 		return false;
 	uint8_t current_window = tdma_get_window(current_slot);
 	if(current_window == our_window) {
