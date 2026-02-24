@@ -293,6 +293,7 @@ void connection_write_packet_3() // status
 	// data[9] - packets received (by the tracker)
 	// data[10] - packets failed (by the tracker)
 	// data[11] - average rssi (received by the tracker)
+	// data[11] - repeat packets (filled by dongle)
 	data[15] = 0; // rssi (supplied by receiver)
 	memcpy(data_buffer, data, sizeof(data));
 	last_data_time = k_uptime_get(); // TODO: use ticks
