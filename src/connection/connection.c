@@ -121,6 +121,13 @@ void connection_update_sensor_temp(float temp)
 		sensor_temp = ((temp - 25) * 2 + 128.5f); // -38.5 - +88.5 -> 1-255
 }
 
+static int64_t timeout_time = INT64_MAX;
+
+void connection_update_sensor_timeout_time(int64_t timeout)
+{
+	timeout_time = timeout;
+}
+
 void connection_update_battery(bool battery_available, bool plugged, bool charged, uint32_t battery_pptt, int battery_mV) // format for packet send
 {
 	if (!battery_available) // No battery, and voltage is <=1500mV
@@ -164,6 +171,13 @@ void connection_update_button(int button)
 	button_update_time = k_uptime_get();
 }
 
+static bool shutdown = false;
+
+void connection_set_shutdown(void)
+{
+	shutdown = true;
+}
+
 //|b0      |b1      |b2      |b3      |b4      |b5      |b6      |b7      |b8      |b9      |b10     |b11     |b12     |b13     |b14     |b15     |
 //|type    |id      |packet data                                                                                                                  |
 //|0       |id      |batt    |batt_v  |temp    |brd_id  |mcu_id  |resv    |imu_id  |mag_id  |fw_date          |major   |minor   |patch   |rssi    |
@@ -172,8 +186,10 @@ void connection_update_button(int button)
 //|3	   |id      |svr_stat|status  |resv                                                                                              |rssi    |
 //|4       |id      |q0               |q1               |q2               |q3               |m0               |m1               |m2               |
 //|5	   |id      |runtime                                                                |resv                                        |rssi    |
-//|6       |id      |button  |resv                                                                                                       |rssi    |
-//|7       |id      |button  |resv             |q_buf                              |a0               |a1               |a2               |rssi    |
+//|6       |id      |button  |sleeptime        |                                                                                         |rssi    |
+//|7       |id      |button  |sleeptime        |q_buf                              |a0               |a1               |a2               |rssi    |
+
+// runtime is in microseconds (overkill), sleeptime is in milliseconds (overkill but less)
 
 void connection_write_packet_0() // device info
 {
@@ -315,12 +331,19 @@ void connection_write_packet_5() // runtime
 	hid_write_packet_n(data); // TODO:
 }
 
-void connection_write_packet_6() // reduced precision quat and accel with button
+void connection_write_packet_6() // reduced precision quat and accel with button and sleep time
 {
 	uint8_t data[16] = {0};
 	data[0] = 6; // packet 6
 	data[1] = tracker_id;
 	data[2] = tracker_button;
+	uint16_t *buf = (uint16_t *)&data[3];
+	if (shutdown)
+		buf = 1;
+	else
+		buf = timeout_time < 1 ? 1 : timeout_time;
+	if (k_ticks_to_ms_floor64(sys_get_battery_remaining_time_estimate()) < 60000 && timeout_time == UINT16_MAX)
+		timeout_time = UINT16_MAX - 1;
 	data[15] = 0; // rssi (supplied by receiver)
 	k_mutex_lock(&data_buffer_mutex, K_FOREVER);
 	memcpy(data_buffer, data, sizeof(data));
@@ -335,12 +358,19 @@ void connection_write_packet_6() // reduced precision quat and accel with button
 	hid_write_packet_n(data); // TODO:
 }
 
-void connection_write_packet_7() // button
+void connection_write_packet_7() // button and sleep time
 {
 	uint8_t data[16] = {0};
 	data[0] = 7; // packet 7
 	data[1] = tracker_id;
 	data[2] = tracker_button;
+	uint16_t *buf = (uint16_t *)&data[3];
+	if (shutdown)
+		buf = 1;
+	else
+		buf = timeout_time < 1 ? 1 : timeout_time;
+	if (k_ticks_to_ms_floor64(sys_get_battery_remaining_time_estimate()) < 60000 && timeout_time == UINT16_MAX)
+		timeout_time = UINT16_MAX - 1;
 	float v[3] = {0};
 	q_fem(sensor_q, v); // exponential map
 	for (int i = 0; i < 3; i++)
@@ -383,7 +413,6 @@ static int64_t last_status2_time = 0;
 
 void connection_thread(void)
 {
-	bool use_button = !CONFIG_0_SETTINGS_READ(CONFIG_0_USER_EXTRA_ACTIONS); // TODO: until info2 has extra data, it can be disabled for now if extra actions overrides button
 	uint8_t data_copy[21];
 	// TODO: checking for connection_update events from sensor_loop, here we will time and send them out
 	while (1)
@@ -417,7 +446,7 @@ void connection_thread(void)
 			continue;
 		}
 		// if time for info2 and precise quat not needed
-		else if (use_button && quat_update_time && !send_precise_quat && k_uptime_get() - last_info2_time > 100)
+		else if (quat_update_time && !send_precise_quat && k_uptime_get() - last_info2_time > 100)
 		{
 			quat_update_time = 0;
 			last_quat_time = k_uptime_get();
@@ -439,7 +468,7 @@ void connection_thread(void)
 			connection_write_packet_0();
 			continue;
 		}
-		else if (use_button && k_uptime_get() - last_info2_time > 100)
+		else if (k_uptime_get() - last_info2_time > 100)
 		{
 			last_info2_time = k_uptime_get();
 			connection_write_packet_6();

@@ -35,15 +35,18 @@ void connection_update_sensor_ids(int imu_id, int mag_id);
 void connection_update_sensor_data(float *q, float *a, int64_t data_time); // ticks
 void connection_update_sensor_mag(float *m);
 void connection_update_sensor_temp(float temp);
+void connection_update_sensor_timeout_time(int64_t timeout);
 void connection_update_battery(bool battery_available, bool plugged, bool charged, uint32_t battery_pptt, int battery_mV);
 void connection_update_status(int status);
 void connection_update_button(int button);
 
-void connection_write_packet_0();
-void connection_write_packet_1();
-void connection_write_packet_2();
-void connection_write_packet_3();
-void connection_write_packet_4();
-void connection_write_packet_5();
+void connection_set_shutdown(void);
+
+void connection_write_packet_0(void);
+void connection_write_packet_1(void);
+void connection_write_packet_2(void);
+void connection_write_packet_3(void);
+void connection_write_packet_4(void);
+void connection_write_packet_5(void);
 
 #endif
