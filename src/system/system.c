@@ -339,7 +339,7 @@ static void button_thread(void)
 			last_press_duration = 0;
 			last_press = k_uptime_get();
 		}
-		if (last_press && k_uptime_get() - last_press > 1000)
+		if (last_press && k_uptime_get() - last_press > 400)
 		{
 			LOG_INF("Button was pressed %d times", num_presses);
 			last_press = 0;
@@ -347,6 +347,8 @@ static void button_thread(void)
 //				sys_request_system_reboot(false);
 			if (CONFIG_0_SETTINGS_READ(CONFIG_0_USER_EXTRA_ACTIONS)) // TODO: extra actions are default until server can send commands to trackers
 				sys_reset_mode(num_presses - 1);
+			else
+				connection_update_button(MIN(num_presses, 2)); // only single or double press
 			num_presses = 0;
 			set_status(SYS_STATUS_BUTTON_PRESSED, false);
 		}

@@ -348,7 +348,7 @@ void connection_write_packet_6() // reduced precision quat and accel with button
 	k_mutex_lock(&data_buffer_mutex, K_FOREVER);
 	memcpy(data_buffer, data, sizeof(data));
 	last_data_time = k_uptime_get(); // TODO: use ticks
-	if (tracker_button && k_uptime_get() > button_update_time + 1000) // attempt to "hold" button presses for 1000 ms
+	if (tracker_button && k_uptime_get() > button_update_time + 1000) // attempt to send button press for 1000 ms
 	{
 		tracker_button = 0;
 		button_update_time = 0;
@@ -386,7 +386,7 @@ void connection_write_packet_7() // button and sleep time
 	k_mutex_lock(&data_buffer_mutex, K_FOREVER);
 	memcpy(data_buffer, data, sizeof(data));
 	last_data_time = k_uptime_get(); // TODO: use ticks
-	if (tracker_button && k_uptime_get() > button_update_time + 1000) // attempt to "hold" button presses for 1000 ms
+	if (tracker_button && k_uptime_get() > button_update_time + 1000) // attempt to send button press for 1000 ms
 	{
 		tracker_button = 0;
 		button_update_time = 0;
