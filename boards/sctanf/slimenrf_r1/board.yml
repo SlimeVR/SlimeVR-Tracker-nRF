@@ -3,6 +3,7 @@
 
 board:
   name: slimenrf_r1
+  full_name: SlimeNRF R1
   vendor: sctanf
   socs:
     - name: nrf52840

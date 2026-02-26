@@ -3,6 +3,7 @@
 
 board:
   name: slimevrmini_p4r9_uf2
+  full_name: Butterfly P4R9
   vendor: slimevr
   socs:
     - name: nrf52833

@@ -85,6 +85,7 @@ static int64_t last_temp_time = -1000;
 
 static int64_t last_suspend_attempt_time = 0;
 static int64_t last_data_time;
+static int64_t sensor_timeout_time = INT64_MAX;
 
 static float max_gyro_speed_square;
 static bool mag_use_oneshot;
@@ -622,6 +623,21 @@ static void sensor_update_sensor_state(void)
 			sys_request_WOM(false, false);
 			sensor_timeout = SENSOR_SENSOR_TIMEOUT_IMU_ELAPSED; // only try to suspend once
 		}
+		// Update timeout estimate
+		switch (sensor_timeout)
+		{
+		case SENSOR_SENSOR_TIMEOUT_ACTIVITY:
+			connection_update_sensor_timeout_time(CONFIG_3_SETTINGS_READ(CONFIG_3_ACTIVE_TIMEOUT_DELAY) - last_data_delta);
+			break;
+		case SENSOR_SENSOR_TIMEOUT_IMU:
+			if (CONFIG_1_SETTINGS_READ(CONFIG_1_USE_IMU_TIMEOUT) && CONFIG_0_SETTINGS_READ(CONFIG_0_USE_IMU_WAKE_UP))
+			{
+				connection_update_sensor_timeout_time(imu_timeout - last_data_delta);
+				break;
+			}
+		default:
+			connection_update_sensor_timeout_time(INT64_MAX);
+		}
 	}
 	else
 	{
@@ -631,6 +647,7 @@ static void sensor_update_sensor_state(void)
 		if (sensor_timeout == SENSOR_SENSOR_TIMEOUT_IMU_ELAPSED) // Resetting IMU timeout
 			sensor_timeout = SENSOR_SENSOR_TIMEOUT_IMU;
 		sensor_mode = SENSOR_SENSOR_MODE_LOW_NOISE;
+		connection_update_sensor_timeout_time(INT64_MAX);
 	}
 }
 

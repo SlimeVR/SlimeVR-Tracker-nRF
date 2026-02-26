@@ -3,6 +3,7 @@
 
 board:
   name: mochi_uf2
+  full_name: Mochi
   vendor: mocha-elec
   socs:
     - name: nrf52833

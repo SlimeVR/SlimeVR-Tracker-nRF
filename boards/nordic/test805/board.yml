@@ -3,6 +3,7 @@
 
 board:
   name: test805
+  full_name: test805
   vendor: nordic
   socs:
     - name: nrf52805
