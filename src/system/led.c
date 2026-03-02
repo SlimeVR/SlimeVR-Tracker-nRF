@@ -20,6 +20,13 @@ K_THREAD_DEFINE(led_thread_id, 512, led_thread, NULL, NULL, NULL, LED_THREAD_PRI
 static const struct gpio_dt_spec led_en = GPIO_DT_SPEC_GET(ZEPHYR_USER_NODE, led_en_gpios);
 #endif
 
+#if CONFIG_LED_STRIP
+#define LED_STRIP_EXISTS true
+#include <zephyr/drivers/led_strip.h>
+#define STRIP_NODE DT_ALIAS(led_strip)
+static const struct device *const strip = DEVICE_DT_GET(STRIP_NODE);
+#endif
+
 #if DT_NODE_HAS_PROP(ZEPHYR_USER_NODE, led_gpios)
 #define LED_EXISTS true
 static const struct gpio_dt_spec led = GPIO_DT_SPEC_GET(ZEPHYR_USER_NODE, led_gpios);
@@ -34,8 +41,9 @@ static const struct gpio_dt_spec led0 = GPIO_DT_SPEC_GET(DT_ALIAS(led0), gpios);
 #endif
 #endif
 #ifndef LED_EXISTS
+#ifndef LED_STRIP_EXISTS
 #warning "LED GPIO does not exist"
-//static const struct gpio_dt_spec led = {0};
+#endif
 #endif
 #if DT_NODE_EXISTS(DT_ALIAS(led1))
 #define LED1_EXISTS true
@@ -54,7 +62,9 @@ static const struct gpio_dt_spec led3 = GPIO_DT_SPEC_GET(DT_ALIAS(led3), gpios);
 #define PWM_LED_EXISTS true
 static const struct pwm_dt_spec pwm_led = PWM_DT_SPEC_GET(DT_ALIAS(pwm_led0));
 #else
+#ifndef LED_STRIP_EXISTS
 #warning "PWM LED node does not exist"
+#endif
 #endif
 #if DT_NODE_EXISTS(DT_ALIAS(pwm_led1))
 #define PWM_LED1_EXISTS true
@@ -68,15 +78,17 @@ static const struct pwm_dt_spec pwm_led2 = PWM_DT_SPEC_GET(DT_ALIAS(pwm_led2));
 static enum sys_led_pattern current_led_pattern;
 static int current_priority;
 
-#if LED_EXISTS
+#if LED_EXISTS || LED_STRIP_EXISTS
 static enum sys_led_pattern led_patterns[SYS_LED_PATTERN_DEPTH] = {[0 ... (SYS_LED_PATTERN_DEPTH - 1)] = SYS_LED_PATTERN_OFF};
 static int led_pattern_state;
 
 static int led_pin_init(void)
 {
 	LOG_DBG("led_pin_init");
+#if LED_EXISTS
 	gpio_pin_configure_dt(&led, GPIO_OUTPUT);
 	gpio_pin_set_dt(&led, 0);
+#endif
 #if LED0_EXISTS
 	gpio_pin_configure_dt(&led0, GPIO_OUTPUT);
 	gpio_pin_set_dt(&led0, 0);
@@ -101,7 +113,9 @@ SYS_INIT(led_pin_init, APPLICATION, CONFIG_APPLICATION_INIT_PRIORITY);
 static void led_pin_reset(void)
 {
 	LOG_DBG("led_pin_reset");
+#if LED_EXISTS
 	gpio_pin_configure_dt(&led, GPIO_DISCONNECTED);
+#endif
 #if LED0_EXISTS
 	gpio_pin_configure_dt(&led0, GPIO_DISCONNECTED);
 #endif
@@ -119,6 +133,9 @@ static void led_pin_reset(void)
 static void led_suspend(void)
 {
 	LOG_DBG("led_suspend");
+#ifdef LED_STRIP_EXISTS
+	pm_device_action_run(strip, PM_DEVICE_ACTION_SUSPEND);
+#endif
 #ifdef PWM_LED_EXISTS
 	pm_device_action_run(pwm_led.dev, PM_DEVICE_ACTION_SUSPEND);
 #endif
@@ -144,6 +161,9 @@ static void led_resume(void)
 	gpio_pin_configure_dt(&led_en, GPIO_OUTPUT);
 	gpio_pin_set_dt(&led_en, 1);
 #endif
+#ifdef LED_STRIP_EXISTS
+	pm_device_action_run(strip, PM_DEVICE_ACTION_RESUME);
+#endif
 #ifdef PWM_LED_EXISTS
 	pm_device_action_run(pwm_led.dev, PM_DEVICE_ACTION_RESUME);
 #endif
@@ -156,11 +176,13 @@ static void led_resume(void)
 	led_pin_init();
 }
 
+#ifdef LED_STRIP_EXISTS
+#define LED_RGB_COLOR
+#else
 #ifdef CONFIG_LED_RGB_COLOR
 #define LED_RGB_COLOR
 #define LED_RG_COLOR
 #endif
-
 #if PWM_LED_EXISTS && PWM_LED1_EXISTS && PWM_LED2_EXISTS
 #define LED_TRI_COLOR
 #else
@@ -171,6 +193,7 @@ static void led_resume(void)
 #else
 #undef LED_RG_COLOR
 #undef LED_DUAL_COLOR
+#endif
 #endif
 #endif
 
@@ -229,7 +252,23 @@ static void led_pin_set(enum sys_led_color color, int brightness_pptt, int value
 		value_pptt = 0;
 	else if (value_pptt > 10000)
 		value_pptt = 10000;
-#if PWM_LED_EXISTS
+#if LED_STRIP_EXISTS
+	static struct led_rgb pixel[1];
+	value_pptt = value_pptt * brightness_pptt / 10000;
+	if (led_pwm_period[color][0] < 0) // read user color
+	{
+		pixel[0].r = 255 * (CONFIG_2_SETTINGS_READ(CONFIG_2_LED_DEFAULT_COLOR_R) * value_pptt / 10000) / 10000;
+		pixel[0].g = 255 * (CONFIG_2_SETTINGS_READ(CONFIG_2_LED_DEFAULT_COLOR_G) * value_pptt / 10000) / 10000;
+		pixel[0].b = 255 * (CONFIG_2_SETTINGS_READ(CONFIG_2_LED_DEFAULT_COLOR_B) * value_pptt / 10000) / 10000;
+	}
+	else
+	{
+		pixel[0].r = 255 * (led_pwm_period[color][0] * value_pptt / 10000) / 10000;
+		pixel[0].g = 255 * (led_pwm_period[color][1] * value_pptt / 10000) / 10000;
+		pixel[0].b = 255 * (led_pwm_period[color][2] * value_pptt / 10000) / 10000;
+	}
+	led_strip_update_rgb(strip, pixel, 1);
+#elif PWM_LED_EXISTS
 	value_pptt = value_pptt * brightness_pptt / 10000;
 	// only supporting color if PWM is supported
 	if (led_pwm_period[color][0] < 0) // read user color
@@ -262,7 +301,7 @@ void set_led(enum sys_led_pattern led_pattern, int priority)
 {
 	LOG_DBG("set_led: current_led_pattern %d, current_priority %d", current_led_pattern, current_priority);
 	LOG_DBG("set_led: pattern %d, priority %d", led_pattern, priority);
-#if LED_EXISTS
+#if LED_EXISTS || LED_STRIP_EXISTS
 	if (led_pattern <= SYS_LED_PATTERN_OFF && k_current_get() == led_thread_id)
 		led_patterns[current_priority] = led_pattern;
 	else
@@ -306,7 +345,7 @@ void set_led(enum sys_led_pattern led_pattern, int priority)
 
 static void led_thread(void)
 {
-#if !LED_EXISTS
+#if !LED_EXISTS && !LED_STRIP_EXISTS
 	LOG_WRN("LED GPIO does not exist");
 	return;
 #else
