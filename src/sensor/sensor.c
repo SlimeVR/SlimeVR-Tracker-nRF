@@ -383,7 +383,7 @@ int sensor_request_scan(bool force)
 		return 0; // already initialized
 	main_imu_suspend();
 	k_thread_abort(&sensor_thread_id); // stop the sensor thread // TODO: may need to handle fusion state
-	LOG_INF("Aborted sensor thread");
+	LOG_INF("Stopped sensor thread");
 	main_suspended = false;
 	sensor_sensor_init = false;
 	if (force)
