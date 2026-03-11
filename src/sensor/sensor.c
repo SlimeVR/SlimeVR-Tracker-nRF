@@ -533,7 +533,7 @@ static void set_update_time_ms(int time_ms)
 #if IMU_INT_EXISTS
 	float fifo_threshold = time_ms / 1000.0f / sensor_actual_time; // target loop rate
 	sensor_fifo_threshold = fifo_threshold;
-	LOG_INF("FIFO THS/WM/WTM: %.2f -> %d", (double)fifo_threshold, sensor_fifo_threshold);
+	LOG_DBG("FIFO THS/WM/WTM: %.2f -> %d", (double)fifo_threshold, sensor_fifo_threshold);
 	sensor_imu->setup_DRDY(sensor_fifo_threshold); // do not need to reset pin config
 #endif
 	sensor_update_time_ms = time_ms; // TODO: terrible naming
@@ -738,12 +738,12 @@ int sensor_init(void)
 	// Setup interrupt
 	float fifo_threshold = sensor_update_time_ms / 1000.0f / sensor_actual_time; // target loop rate
 	sensor_fifo_threshold = fifo_threshold;
-	LOG_INF("FIFO THS/WM/WTM: %.2f -> %d", (double)fifo_threshold, sensor_fifo_threshold);
+	LOG_DBG("FIFO THS/WM/WTM: %.2f -> %d", (double)fifo_threshold, sensor_fifo_threshold);
 	uint8_t pin_config = sensor_imu->setup_DRDY(sensor_fifo_threshold);
 	if (pin_config == 0)
 		return -1;
 	uint32_t int0_gpios = NRF_DT_GPIOS_TO_PSEL(ZEPHYR_USER_NODE, int0_gpios);
-	LOG_INF("FIFO THS/WM/WTM GPIO pin: %u, config: %u", int0_gpios, pin_config);
+	LOG_DBG("FIFO THS/WM/WTM GPIO pin: %u, config: %u", int0_gpios, pin_config);
 	uint32_t pull_flags = ((pin_config >> 4) == NRF_GPIO_PIN_PULLDOWN ? GPIO_PULL_DOWN : 0) | ((pin_config >> 4) == NRF_GPIO_PIN_PULLUP ? GPIO_PULL_UP : 0);
 	gpio_pin_configure_dt(&int0, GPIO_INPUT | pull_flags);
 	uint32_t int_flags = ((pin_config & 0xF) == NRF_GPIO_PIN_SENSE_LOW ? GPIO_INT_EDGE_FALLING : 0) | ((pin_config & 0xF) == NRF_GPIO_PIN_SENSE_HIGH ? GPIO_INT_EDGE_RISING : 0);
@@ -856,10 +856,11 @@ void sensor_loop(void)
 			if (mag_available && mag_enabled)
 				sensor_mag->mag_read(raw_m); // reading mag last, and it will be processed last
 
+			int16_t last_sensor_fifo_threshold = sensor_fifo_threshold;
+
 			if (reconfig) // TODO: get rid of reconfig?
 			{
 				// Changing FIFO threshold here should be fine since FIFO is empty now
-				// TODO: causing warnings since packet processing and loop timing still expects previous update_time
 				switch (sensor_mode)
 				{
 				case SENSOR_SENSOR_MODE_LOW_NOISE:
@@ -1017,8 +1018,8 @@ void sensor_loop(void)
 			}
 
 			// Also check if expected number of timesteps when using FIFO threshold, if FIFO threshold is being used
-			if (sensor_fifo_threshold && processed_timesteps && processed_timesteps != sensor_fifo_threshold)
-				LOG_WRN("Expected %d timestep%s, got %d", sensor_fifo_threshold, sensor_fifo_threshold == 1 ? "" : "s", processed_timesteps);
+			if (last_sensor_fifo_threshold && processed_timesteps && processed_timesteps != last_sensor_fifo_threshold)
+				LOG_WRN("Expected %d timestep%s, got %d", last_sensor_fifo_threshold, last_sensor_fifo_threshold == 1 ? "" : "s", processed_timesteps);
 
 			// Update fusion gyro sanity? // TODO: use to detect drift and correct or suspend tracking
 //			sensor_fusion->update_gyro_sanity(g, m);
