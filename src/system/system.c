@@ -438,7 +438,7 @@ int sys_user_shutdown(void)
 	{
 		if (k_uptime_get() - start_time > 650) // length of pattern elapsed
 		{
-			sys_request_system_off(false);
+			sys_request_system_silent_off(false); // pattern already played
 			return 0;
 		}
 		k_msleep(1);

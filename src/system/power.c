@@ -48,7 +48,7 @@ static int64_t last_valid_temp = -1;
 LOG_MODULE_REGISTER(power, LOG_LEVEL_INF);
 
 static void sys_WOM(bool force);
-static void sys_system_off(void);
+static void sys_system_off(bool silent);
 static void sys_system_reboot(void);
 
 static int sys_power_state_request(int id);
@@ -263,7 +263,7 @@ void sys_request_system_off(bool immediate)
 {
 	if (immediate)
 	{
-		sys_system_off();
+		sys_system_off(false);
 		return;
 	}
 	sys_power_state_request(3);
@@ -277,6 +277,16 @@ void sys_request_system_reboot(bool immediate)
 		return;
 	}
 	sys_power_state_request(4);
+}
+
+void sys_request_system_silent_off(bool immediate)
+{
+	if (immediate)
+	{
+		sys_system_off(true);
+		return;
+	}
+	sys_power_state_request(5);
 }
 
 static void sys_WOM(bool force) // TODO: if IMU interrupt does not exist what does the system do?
@@ -325,10 +335,13 @@ static void sys_WOM(bool force) // TODO: if IMU interrupt does not exist what do
 #endif
 }
 
-static void sys_system_off(void) // TODO: add timeout
+static void sys_system_off(bool silent) // TODO: add timeout
 {
 	LOG_INF("System off requested");
 	configure_system_off(); // Common subsystem shutdown and prepare sense pins
+	int64_t start_time = k_uptime_get();
+	if (!silent) // indicate shutdown is happening
+		set_led(SYS_LED_PATTERN_ONESHOT_POWEROFF, SYS_LED_PRIORITY_HIGHEST);
 	// Clear sensor addresses
 	sensor_scan_clear();
 	LOG_INF("Requested sensor scan on next boot");
@@ -347,7 +360,16 @@ static void sys_system_off(void) // TODO: add timeout
 	LOG_INF("Powering off nRF");
 	sys_update_battery_tracker(current_battery_pptt, device_plugged);
 //	retained_update();
-	wait_for_logging();
+	if (!silent)
+	{
+		while (k_uptime_get() - start_time < 650) // wait for pattern to complete
+			k_msleep(1);
+		set_led(SYS_LED_PATTERN_OFF_FORCE, SYS_LED_PRIORITY_HIGHEST);
+	}
+	else
+	{
+		wait_for_logging();
+	}
 #if ADAFRUIT_BOOTLOADER // if using Adafruit bootloader, always skip dfu for next boot
 	(*dbl_reset_mem) = DFU_DBL_RESET_APP; // Skip DFU
 #endif
@@ -488,10 +510,13 @@ static void power_thread(void)
 			sys_WOM(true);
 			break;
 		case 3:
-			sys_system_off();
+			sys_system_off(false);
 			break;
 		case 4:
 			sys_system_reboot();
+			break;
+		case 5:
+			sys_system_off(true);
 			break;
 		default:
 			break;
