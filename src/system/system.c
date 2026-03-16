@@ -16,9 +16,10 @@
 
 static struct nvs_fs fs;
 
-#define NVS_PARTITION		storage_partition
-#define NVS_PARTITION_DEVICE	FIXED_PARTITION_DEVICE(NVS_PARTITION)
-#define NVS_PARTITION_OFFSET	FIXED_PARTITION_OFFSET(NVS_PARTITION)
+#define NVS_PARTITION storage_partition
+#define NVS_PARTITION_DEVICE FIXED_PARTITION_DEVICE(NVS_PARTITION)
+#define NVS_PARTITION_OFFSET FIXED_PARTITION_OFFSET(NVS_PARTITION)
+#define NVS_PARTITION_SIZE FIXED_PARTITION_SIZE(NVS_PARTITION)
 
 LOG_MODULE_REGISTER(system, LOG_LEVEL_INF);
 
@@ -259,6 +260,14 @@ void sys_clear(void)
 	nvs_init = false;
 	reset_confirm = false;
 	LOG_INF("NVS and retained reset");
+}
+
+void sys_nvs_stats(void)
+{
+	sys_nvs_init();
+	printk("Storage partition: %u bytes\n", NVS_PARTITION_SIZE);
+	printk("Allocated NVS: %u * %u = %u bytes\n", fs.sector_size, fs.sector_count, fs.sector_size * fs.sector_count);
+	printk("NVS free: %d bytes, max: %d bytes\n", nvs_calc_free_space(&fs), nvs_sector_max_data_size(&fs));
 }
 
 // return 0 if clock applied, -1 if failed (because there is no clk_en or clk_out)
