@@ -267,10 +267,9 @@ jobs:
 
       - name: 🔨 Build SlimeVR-Tracker-nRF - ${{ matrix.boards.boardname }}
         id: build-firmware
-        if: always()
         run: |
           cd zephyr-workspace
-          sed -i "/printk(FW_STRING);/a printk(\"Repo: ${{ needs.setup.outputs.repo }} | Branch: ${{ needs.setup.outputs.branch }} | SDK: ${{ needs.setup.outputs.sdk-revision }}\\\\n\");" SlimeVR-Tracker-nRF/src/console.c
+          sed -i "/printk(FW_STRING);/a printk(\"Repo: ${{ needs.setup.outputs.repo }}@${{ needs.setup.outputs.branch }} | SDK: ${{ needs.setup.outputs.sdk-revision }}\\\\n\");" SlimeVR-Tracker-nRF/src/console.c
           sudo rm -rf Releases
           mkdir -p Releases
           rm -rf "SlimeVR-Tracker-nRF/build"
