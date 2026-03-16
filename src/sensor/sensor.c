@@ -85,7 +85,6 @@ static int64_t last_temp_time = -1000;
 
 static int64_t last_suspend_attempt_time = 0;
 static int64_t last_data_time;
-static int64_t sensor_timeout_time = INT64_MAX;
 
 static float max_gyro_speed_square;
 static bool mag_use_oneshot;
