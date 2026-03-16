@@ -254,6 +254,8 @@ void sys_clear(void)
 	sys_nvs_init();
 	memset(retained, 0, sizeof(*retained));
 	nvs_clear(&fs);
+	config_settings_init();
+	retained_update();
 	nvs_init = false;
 	reset_confirm = false;
 	LOG_INF("NVS and retained reset");
