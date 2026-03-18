@@ -210,7 +210,11 @@ void connection_write_packet_0() // device info
 	data[13] = FW_VERSION_MINOR & 255; // fw_minor
 	data[14] = FW_VERSION_PATCH & 255; // fw_patch
 	data[15] = 0; // rssi (supplied by receiver)
-	k_mutex_lock(&data_buffer_mutex, K_FOREVER);
+	int ret = k_mutex_lock(&data_buffer_mutex, K_MSEC(100));
+	if (ret) {
+		LOG_ERR("Failed mutex lock");
+		return;
+	}
 	memcpy(data_buffer, data, sizeof(data));
 	last_data_time = k_uptime_get(); // TODO: use ticks
 //	esb_write(data); // TODO: schedule in thread
@@ -231,7 +235,11 @@ void connection_write_packet_1() // full precision quat and accel
 	buf[4] = TO_FIXED_7(sensor_a[0]); // range is ±256m/s² or ±26.1g
 	buf[5] = TO_FIXED_7(sensor_a[1]);
 	buf[6] = TO_FIXED_7(sensor_a[2]);
-	k_mutex_lock(&data_buffer_mutex, K_FOREVER);
+	int ret = k_mutex_lock(&data_buffer_mutex, K_MSEC(100));
+	if (ret) {
+		LOG_ERR("Failed mutex lock");
+		return;
+	}
 	memcpy(data_buffer, data, sizeof(data));
 	last_data_time = k_uptime_get(); // TODO: use ticks
 //	esb_write(data); // TODO: schedule in thread
@@ -268,7 +276,11 @@ void connection_write_packet_2() // reduced precision quat and accel with batter
 	buf[1] = TO_FIXED_7(sensor_a[1]);
 	buf[2] = TO_FIXED_7(sensor_a[2]);
 	data[15] = 0; // rssi (supplied by receiver)
-	k_mutex_lock(&data_buffer_mutex, K_FOREVER);
+	int ret = k_mutex_lock(&data_buffer_mutex, K_MSEC(100));
+	if (ret) {
+		LOG_ERR("Failed mutex lock");
+		return;
+	}
 	memcpy(data_buffer, data, sizeof(data));
 	last_data_time = k_uptime_get(); // TODO: use ticks
 //	esb_write(data); // TODO: schedule in thread
@@ -284,7 +296,11 @@ void connection_write_packet_3() // status
 	data[2] = tracker_svr_status;
 	data[3] = tracker_status;
 	data[15] = 0; // rssi (supplied by receiver)
-	k_mutex_lock(&data_buffer_mutex, K_FOREVER);
+	int ret = k_mutex_lock(&data_buffer_mutex, K_MSEC(100));
+	if (ret) {
+		LOG_ERR("Failed mutex lock");
+		return;
+	}
 	memcpy(data_buffer, data, sizeof(data));
 	last_data_time = k_uptime_get(); // TODO: use ticks
 //	esb_write(data); // TODO: schedule in thread
@@ -305,7 +321,11 @@ void connection_write_packet_4() // full precision quat and magnetometer
 	buf[4] = TO_FIXED_10(sensor_m[0]); // range is ±32G
 	buf[5] = TO_FIXED_10(sensor_m[1]);
 	buf[6] = TO_FIXED_10(sensor_m[2]);
-	k_mutex_lock(&data_buffer_mutex, K_FOREVER);
+	int ret = k_mutex_lock(&data_buffer_mutex, K_MSEC(100));
+	if (ret) {
+		LOG_ERR("Failed mutex lock");
+		return;
+	}
 	memcpy(data_buffer, data, sizeof(data));
 	last_data_time = k_uptime_get(); // TODO: use ticks
 //	esb_write(data); // TODO: schedule in thread
@@ -320,10 +340,14 @@ void connection_write_packet_5() // runtime
 	data[1] = tracker_id;
 	int64_t *buf = (int64_t *)&data[2];
 	if (sys_get_valid_battery_pptt() >= 0)
-		buf[0] = k_ticks_to_us_floor64(sys_get_battery_remaining_time_estimate());
+		*buf = k_ticks_to_us_floor64(sys_get_battery_remaining_time_estimate());
 	else
-		buf[0] = -1; // no valid reading yet, but previous estimate may still be valid
-	k_mutex_lock(&data_buffer_mutex, K_FOREVER);
+		*buf = -1; // no valid reading yet, but previous estimate may still be valid
+	int ret = k_mutex_lock(&data_buffer_mutex, K_MSEC(100));
+	if (ret) {
+		LOG_ERR("Failed mutex lock");
+		return;
+	}
 	memcpy(data_buffer, data, sizeof(data));
 	last_data_time = k_uptime_get(); // TODO: use ticks
 //	esb_write(data); // TODO: schedule in thread
@@ -339,20 +363,24 @@ void connection_write_packet_6() // reduced precision quat and accel with button
 	data[2] = tracker_button;
 	uint16_t *buf = (uint16_t *)&data[3];
 	if (shutdown)
-		buf = 1;
+		*buf = 1;
 	else
-		buf = timeout_time < 1 ? 1 : timeout_time;
+		*buf = timeout_time < 1 ? 1 : timeout_time;
 	if (k_ticks_to_ms_floor64(sys_get_battery_remaining_time_estimate()) < 60000 && timeout_time == UINT16_MAX)
 		timeout_time = UINT16_MAX - 1;
 	data[15] = 0; // rssi (supplied by receiver)
-	k_mutex_lock(&data_buffer_mutex, K_FOREVER);
-	memcpy(data_buffer, data, sizeof(data));
-	last_data_time = k_uptime_get(); // TODO: use ticks
 	if (tracker_button && k_uptime_get() > button_update_time + 1000) // attempt to send button press for 1000 ms
 	{
 		tracker_button = 0;
 		button_update_time = 0;
 	}
+	int ret = k_mutex_lock(&data_buffer_mutex, K_MSEC(100));
+	if (ret) {
+		LOG_ERR("Failed mutex lock");
+		return;
+	}
+	memcpy(data_buffer, data, sizeof(data));
+	last_data_time = k_uptime_get(); // TODO: use ticks
 //	esb_write(data); // TODO: schedule in thread
 	k_mutex_unlock(&data_buffer_mutex);
 	hid_write_packet_n(data); // TODO:
@@ -366,9 +394,9 @@ void connection_write_packet_7() // button and sleep time
 	data[2] = tracker_button;
 	uint16_t *buf = (uint16_t *)&data[3];
 	if (shutdown)
-		buf = 1;
+		*buf = 1;
 	else
-		buf = timeout_time < 1 ? 1 : timeout_time;
+		*buf = timeout_time < 1 ? 1 : timeout_time;
 	if (k_ticks_to_ms_floor64(sys_get_battery_remaining_time_estimate()) < 60000 && timeout_time == UINT16_MAX)
 		timeout_time = UINT16_MAX - 1;
 	float v[3] = {0};
@@ -378,19 +406,23 @@ void connection_write_packet_7() // button and sleep time
 	uint16_t v_buf[3] = {SATURATE_UINT10((1 << 10) * v[0]), SATURATE_UINT11((1 << 11) * v[1]), SATURATE_UINT11((1 << 11) * v[2])}; // fill 32 bits
 	uint32_t *q_buf = (uint32_t *)&data[5];
 	*q_buf = v_buf[0] | (v_buf[1] << 10) | (v_buf[2] << 21);
-	uint16_t *buf = (uint16_t *)&data[9];
+	buf = (uint16_t *)&data[9];
 	buf[0] = TO_FIXED_7(sensor_a[0]);
 	buf[1] = TO_FIXED_7(sensor_a[1]);
 	buf[2] = TO_FIXED_7(sensor_a[2]);
 	data[15] = 0; // rssi (supplied by receiver)
-	k_mutex_lock(&data_buffer_mutex, K_FOREVER);
-	memcpy(data_buffer, data, sizeof(data));
-	last_data_time = k_uptime_get(); // TODO: use ticks
 	if (tracker_button && k_uptime_get() > button_update_time + 1000) // attempt to send button press for 1000 ms
 	{
 		tracker_button = 0;
 		button_update_time = 0;
 	}
+	int ret = k_mutex_lock(&data_buffer_mutex, K_MSEC(100));
+	if (ret) {
+		LOG_ERR("Failed mutex lock");
+		return;
+	}
+	memcpy(data_buffer, data, sizeof(data));
+	last_data_time = k_uptime_get(); // TODO: use ticks
 //	esb_write(data); // TODO: schedule in thread
 	k_mutex_unlock(&data_buffer_mutex);
 	hid_write_packet_n(data); // TODO:
@@ -419,7 +451,11 @@ void connection_thread(void)
 	{
 		if (last_data_time != 0) // have valid data
 		{
-			k_mutex_lock(&data_buffer_mutex, K_FOREVER);
+			int ret = k_mutex_lock(&data_buffer_mutex, K_MSEC(100));
+			if (ret) {
+				LOG_ERR("Failed mutex lock");
+				continue;
+			}
 			last_data_time = 0;
 			memcpy(data_copy, data_buffer, sizeof(data_copy));
 			k_mutex_unlock(&data_buffer_mutex);

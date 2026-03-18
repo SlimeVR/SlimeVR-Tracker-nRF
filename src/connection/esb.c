@@ -504,7 +504,7 @@ static void esb_thread(void)
 
 	while (1)
 	{
-		if (!esb_paired && (!use_hid || (!get_status(SYS_STATUS_USB_CONNECTED) && k_uptime_get() - 750 > start_time))) // only automatically enter pairing while not potentially communicating by usb
+		if (!esb_paired && (!use_hid || paired_addr[0] || (!get_status(SYS_STATUS_USB_CONNECTED) && k_uptime_get() - 750 > start_time))) // only automatically enter pairing while not potentially communicating by usb, however allow esb if already paired
 		{
 			esb_pair();
 			esb_initialize(true);

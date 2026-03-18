@@ -86,7 +86,7 @@ int main(void)
 				k_msleep(1);
 			}
 			if (CONFIG_0_SETTINGS_READ(CONFIG_0_USER_SHUTDOWN) && k_uptime_get() - start_time < 50) // debounce // TODO: does sense pin stay configured?
-				sys_request_system_off(false);
+				sys_request_system_silent_off(false);
 			set_status(SYS_STATUS_BUTTON_PRESSED, false);
 		}
 	}
