@@ -39,7 +39,7 @@
 #if DT_NODE_HAS_STATUS(DT_NODELABEL(imu_spi), okay)
 #define SENSOR_IMU_SPI_EXISTS true
 #define SENSOR_IMU_SPI_NODE DT_NODELABEL(imu_spi)
-static struct spi_dt_spec sensor_imu_spi_dev = SPI_DT_SPEC_GET(SENSOR_IMU_SPI_NODE, SPI_OP, 0);
+static struct spi_dt_spec sensor_imu_spi_dev = SPI_DT_SPEC_GET(SENSOR_IMU_SPI_NODE, SPI_OP);
 #endif
 #if DT_NODE_HAS_STATUS(DT_NODELABEL(imu), okay)
 #define SENSOR_IMU_EXISTS true
@@ -56,7 +56,7 @@ static uint8_t sensor_imu_dev_reg = 0xFF;
 #if DT_NODE_HAS_STATUS(DT_NODELABEL(mag_spi), okay)
 #define SENSOR_MAG_SPI_EXISTS true
 #define SENSOR_MAG_SPI_NODE DT_NODELABEL(mag_spi)
-static struct spi_dt_spec sensor_mag_spi_dev = SPI_DT_SPEC_GET(SENSOR_MAG_SPI_NODE, SPI_OP, 0);
+static struct spi_dt_spec sensor_mag_spi_dev = SPI_DT_SPEC_GET(SENSOR_MAG_SPI_NODE, SPI_OP);
 #endif
 #if DT_NODE_HAS_STATUS(DT_NODELABEL(mag), okay)
 #define SENSOR_MAG_EXISTS true
@@ -85,7 +85,6 @@ static int64_t last_temp_time = -1000;
 
 static int64_t last_suspend_attempt_time = 0;
 static int64_t last_data_time;
-static int64_t sensor_timeout_time = INT64_MAX;
 
 static float max_gyro_speed_square;
 static bool mag_use_oneshot;
@@ -172,6 +171,7 @@ int sensor_get_sensor_temperature(float *ptr)
 {
 	if (sensor_imu == &sensor_imu_none || (k_uptime_get() - last_temp_time > 1000))
 	{
+		*ptr = 25.0f; // fallback
 		if (get_status(SYS_STATUS_SENSOR_ERROR))
 			return -2; // no imu!
 		else
