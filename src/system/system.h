@@ -20,6 +20,8 @@
 
 #define MAIN_SENSOR_DATA_ID 31
 
+int sys_get_die_temperature(float *ptr);
+
 void configure_sense_pins(void);
 
 uint8_t reboot_counter_read(void);

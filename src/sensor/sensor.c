@@ -171,6 +171,7 @@ int sensor_get_sensor_temperature(float *ptr)
 {
 	if (sensor_imu == &sensor_imu_none || (k_uptime_get() - last_temp_time > 1000))
 	{
+		*ptr = 25.0f; // fallback
 		if (get_status(SYS_STATUS_SENSOR_ERROR))
 			return -2; // no imu!
 		else

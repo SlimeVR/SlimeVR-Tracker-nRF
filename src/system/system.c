@@ -10,9 +10,14 @@
 #include <zephyr/drivers/flash.h>
 #include <zephyr/storage/flash_map.h>
 #include <zephyr/fs/nvs.h>
+#include <zephyr/drivers/sensor.h>
 #include <hal/nrf_gpio.h>
 
 #include "system.h"
+
+static const struct device *const temp_dev = DEVICE_DT_GET_ANY(nordic_nrf_temp);
+static struct sensor_value temp;
+static int64_t last_temp_time = -1000;
 
 static struct nvs_fs fs;
 
@@ -22,6 +27,9 @@ static struct nvs_fs fs;
 #define NVS_PARTITION_SIZE FIXED_PARTITION_SIZE(NVS_PARTITION)
 
 LOG_MODULE_REGISTER(system, LOG_LEVEL_INF);
+
+static void temp_thread(void);
+K_THREAD_DEFINE(temp_thread_id, 256, temp_thread, NULL, NULL, NULL, TEMP_THREAD_PRIORITY, 0, 0);
 
 #if DT_NODE_HAS_PROP(DT_ALIAS(sw0), gpios) // Alternate button if available to use as "reset key"
 #define BUTTON_EXISTS true
@@ -72,6 +80,15 @@ static const struct pwm_dt_spec clk_out = {0};
 #if NRF5_BOOTLOADER
 static const struct device *gpio_dev = DEVICE_DT_GET(DT_NODELABEL(gpio0));
 #endif
+
+int sys_get_die_temperature(float *ptr)
+{
+	if (k_uptime_get() - last_temp_time > 1000)
+		return -1;
+	sensor_channel_get(temp_dev, SENSOR_CHAN_DIE_TEMP, &temp);
+	*ptr = sensor_value_to_float(&temp);
+	return 0;
+}
 
 void configure_sense_pins(void)
 {
@@ -488,5 +505,17 @@ void sys_reset_mode(uint8_t mode)
 #endif
 	default:
 		break;
+	}
+}
+
+static void temp_thread(void)
+{
+	while (1)
+	{
+		if (sensor_sample_fetch(temp_dev))
+			LOG_ERR("Failed to fetch sample from nRF temperature device\n");
+		else
+			last_temp_time = k_uptime_get();
+		k_msleep(500);
 	}
 }
