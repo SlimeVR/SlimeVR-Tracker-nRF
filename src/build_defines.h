@@ -151,6 +151,8 @@ static uint8_t get_server_constant_imu_id(int id)
 		return SVR_IMU_ICM42688;
 	case IMU_ICM45686:
 		return SVR_IMU_ICM45686;
+	case IMU_ICM45688:
+		return SVR_IMU_ICM45686; // compatible with driver, but not really
 	case IMU_ISM330IS:
 		return 0;
 	case IMU_LSM6DS3:
