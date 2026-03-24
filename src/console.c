@@ -563,7 +563,7 @@ static void console_thread(void)
 #endif
 	const char command_meow[] = "meow";
 
-	// debug
+	// data
 	const char command_reset_data[] = "reset_data";
 	const char command_reset_arg_zro[] = "zro";
 	const char command_reset_arg_acc[] = "acc";
@@ -580,6 +580,9 @@ static void console_thread(void)
 	const char command_reset_config[] = "reset_config";
 	const char command_wr_arg_all[] = "all";
 	const char command_wr_arg_base64[] = "base64";
+
+	// debug
+	const char command_nvs[] = "nvs";
 
 	while (1) {
 #if USB_EXISTS
@@ -776,6 +779,10 @@ static void console_thread(void)
 				if (!parse_config_settings_reset(argv[1]))
 					printk("Reset config: %s\n", argv[1]);
 			}
+		}
+		else if (strcmp(line, command_nvs) == 0)
+		{
+			sys_nvs_stats();
 		}
 		else
 		{

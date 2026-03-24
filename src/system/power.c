@@ -527,9 +527,13 @@ static void power_thread(void)
 		bool charging = chg_read();
 		bool charged = stby_read();
 
-		float temp;
-		int chg_ret = sensor_get_sensor_temperature(&temp);
-		switch (chg_ret)
+		float die_temp;
+		float sensor_temp;
+		int sys_ret = sys_get_die_temperature(&die_temp);
+		int sensor_ret = sensor_get_sensor_temperature(&sensor_temp);
+		float min_temp = MIN(die_temp, sensor_temp);
+		float max_temp = MAX(die_temp, sensor_temp);
+		switch (sys_ret ? sensor_ret : sys_ret)
 		{
 		case -2:
 			last_valid_temp = -1;
@@ -544,16 +548,17 @@ static void power_thread(void)
 		case 0:
 			last_valid_temp = k_uptime_get();
 			// https://www.batteryuniversity.com/article/bu-410-charging-at-high-and-low-temperatures/
-			if (!chg_temp_warn && (temp < 5.f || temp > 45.f)) // this is still safe (hard limit is 0C, but that is dangerous)
+			if (!chg_temp_warn && (min_temp < 5.f || max_temp > 45.f)) // this is still safe (hard limit is 0C, but that is dangerous)
 				chg_temp_warn = true;
-			else if (chg_temp_warn && temp > 10.f && temp < 40.f) // safest range
+			else if (chg_temp_warn && min_temp > 10.f && max_temp < 40.f) // safest range
 				chg_temp_warn = false;
 		default:
 			break;
 		}
-		chg_ret = set_charger_enable(!chg_temp_warn, device_plugged);
+		int chg_ret = set_charger_enable(!chg_temp_warn, device_plugged);
 		// chg_ret = -1: outside safe temp range, but charger could not be disabled
 		// chg_ret = 0 and chg_temp_warn = true: out of temp range, charger is disabled or already has thermistor
+		LOG_DBG("Die: %.2f C, Sensor: %.2f C, sys: %d, sensor: %d, wrn: %d, plugged: %d, ret: %d", (double)die_temp, (double)sensor_temp, sys_ret, sensor_ret, chg_temp_warn, device_plugged, chg_ret);
 
 		int battery_mV;
 		int16_t battery_pptt = read_batt_mV(&battery_mV);
