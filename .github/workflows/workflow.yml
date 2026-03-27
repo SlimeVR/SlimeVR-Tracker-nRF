@@ -5,11 +5,10 @@ on:
   push:
     branches:
       - main
-  create:
   workflow_dispatch:
 
 concurrency:
-  group: ${{ github.ref }}
+  group: ${{ github.event.pull_request.head.sha || github.ref }}
   cancel-in-progress: true
 
 permissions: write-all
@@ -33,6 +32,7 @@ jobs:
         with:
           path: zephyr-workspace/SlimeNRF-CI
           submodules: recursive
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
 
       - name: 📟 Generate CI Variables
         id: generate-vars
@@ -56,10 +56,17 @@ jobs:
           SDK_REVISION=$(yq -r '.manifest.projects[] | select(.name=="sdk-nrf") | .revision' "$WEST_FILE")
           SDK_COMMIT=$(git ls-remote "$SDK_URL" "$SDK_REVISION" | awk '{print $1}')
 
-          REPO="$GITHUB_REPOSITORY"
-          REPO_URL="https://github.com/$GITHUB_REPOSITORY.git"
-          BRANCH="${GITHUB_HEAD_REF:-${GITHUB_REF#refs/heads/}}"
-          REPO_COMMIT="$GITHUB_SHA"
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            REPO="${{ github.event.pull_request.head.repo.full_name }}"
+            REPO_URL="${{ github.event.pull_request.head.repo.clone_url }}"
+            BRANCH="${{ github.event.pull_request.head.ref }}"
+            REPO_COMMIT="${{ github.event.pull_request.head.sha }}"
+          else
+            REPO="$GITHUB_REPOSITORY"
+            REPO_URL="https://github.com/$GITHUB_REPOSITORY.git"
+            BRANCH="${GITHUB_REF#refs/heads/}"
+            REPO_COMMIT="$GITHUB_SHA"
+          fi
           
           echo "sdk-hash=$SDK_COMMIT" >> "$GITHUB_OUTPUT"
           echo "sdk-revision=$SDK_REVISION" >> "$GITHUB_OUTPUT"
@@ -162,7 +169,7 @@ jobs:
           rm -rf SlimeVR-Tracker-nRF
 
           git clone --filter=blob:none --no-checkout "${{ steps.generate-vars.outputs.repo-url }}" SlimeVR-Tracker-nRF
-          git -C SlimeVR-Tracker-nRF fetch origin "${{ steps.generate-vars.outputs.branch }}"
+          git -C SlimeVR-Tracker-nRF fetch --depth=1 origin "${{ steps.generate-vars.outputs.repo-hash }}"
           git -C SlimeVR-Tracker-nRF checkout "${{ steps.generate-vars.outputs.repo-hash }}"
           git -C SlimeVR-Tracker-nRF submodule update --init --recursive --depth 1
 
@@ -199,6 +206,7 @@ jobs:
         with:
           path: zephyr-workspace/SlimeNRF-CI
           submodules: recursive
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
 
       - name: 🧰 Cache + Install Apt Dependencies
         id: restore-apt
