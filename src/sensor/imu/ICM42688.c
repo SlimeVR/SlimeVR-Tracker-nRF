@@ -283,7 +283,7 @@ int icm_update_odr(float accel_time, float gyro_time, float *accel_actual_time, 
 
 	// extra read packets by ODR time
 	if (accel_time == 0 && gyro_time != 0)
-		fifo_multiplier = fifo_multiplier_factor / gyro_time; 
+		fifo_multiplier = fifo_multiplier_factor / gyro_time;
 	else if (accel_time != 0 && gyro_time == 0)
 		fifo_multiplier = fifo_multiplier_factor / accel_time;
 	else if (gyro_time > accel_time)

@@ -72,7 +72,7 @@ void timer_init(void)
 {
 //	uint8_t tracker_id = connection_get_id(); // TODO: make sure it is ready
 //	nrfx_err_t err;
-//	nrfx_timer_config_t timer_cfg = NRFX_TIMER_DEFAULT_CONFIG(1000000);  
+//	nrfx_timer_config_t timer_cfg = NRFX_TIMER_DEFAULT_CONFIG(1000000);
 	//timer_cfg.frequency = NRF_TIMER_FREQ_1MHz;
 	//timer_cfg.mode = NRF_TIMER_MODE_TIMER;
 	//timer_cfg.bit_width = NRF_TIMER_BIT_WIDTH_16;

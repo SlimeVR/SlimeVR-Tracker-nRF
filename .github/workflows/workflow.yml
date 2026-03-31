@@ -38,7 +38,7 @@ jobs:
         id: generate-vars
         run: |
           WEST_FILE="west.yml"
-          
+
           if [ -f "$WEST_FILE" ]; then
             echo "Found west.yml in the root directory"
           elif [ -f "zephyr-workspace/$WEST_FILE" ]; then
@@ -60,7 +60,7 @@ jobs:
           REPO_URL="https://github.com/$GITHUB_REPOSITORY.git"
           BRANCH="${GITHUB_HEAD_REF:-${GITHUB_REF#refs/heads/}}"
           REPO_COMMIT="$GITHUB_SHA"
-          
+
           echo "sdk-hash=$SDK_COMMIT" >> "$GITHUB_OUTPUT"
           echo "sdk-revision=$SDK_REVISION" >> "$GITHUB_OUTPUT"
           echo "repo=$REPO" >> "$GITHUB_OUTPUT"
