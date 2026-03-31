@@ -306,6 +306,8 @@ uint16_t icm_fifo_read(uint8_t *data, uint16_t len)
 		uint8_t rawCount[2];
 		err |= ssi_burst_read(SENSOR_INTERFACE_DEV_IMU, ICM42688_FIFO_COUNTH, &rawCount[0], 2);
 		packets = (uint16_t)(rawCount[0] << 8 | rawCount[1]); // Turn the 16 bits into a unsigned 16-bit value
+		if (!packets) // nothing to do
+			break;
 		float extra_read_packets = packets * fifo_multiplier;
 		packets += extra_read_packets;
 		uint16_t count = packets * PACKET_SIZE;

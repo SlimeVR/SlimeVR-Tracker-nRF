@@ -270,6 +270,8 @@ uint16_t bmi_fifo_read(uint8_t *data, uint16_t len)
 		uint8_t rawCount[2];
 		err |= ssi_burst_read(SENSOR_INTERFACE_DEV_IMU, BMI270_FIFO_LENGTH_0, &rawCount[0], 2);
 		uint16_t count = (uint16_t)((rawCount[1] & 0x3F) << 8 | rawCount[0]); // Turn the 16 bits into a unsigned 16-bit value
+		if (!count) // nothing to do
+			break;
 		packets = count / PACKET_SIZE;
 		uint16_t limit = len / PACKET_SIZE;
 		if (packets > limit)

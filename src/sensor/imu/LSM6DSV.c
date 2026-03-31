@@ -322,6 +322,8 @@ uint16_t lsm_fifo_read(uint8_t *data, uint16_t len)
 		uint8_t rawCount[2];
 		err |= ssi_burst_read(SENSOR_INTERFACE_DEV_IMU, LSM6DSV_FIFO_STATUS1, &rawCount[0], 2);
 		count = (uint16_t)((rawCount[1] & 3) << 8 | rawCount[0]); // Turn the 16 bits into a unsigned 16-bit value. Only LSB on FIFO_STATUS2 is used, but we mask 2nd bit too // TODO: might be 3 bits not 2
+		if (!count) // nothing to do
+			break;
 		uint16_t limit = len / PACKET_SIZE;
 		if (count > limit)
 		{

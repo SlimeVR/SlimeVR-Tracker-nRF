@@ -298,6 +298,8 @@ uint16_t lsm6dsm_fifo_read(uint8_t *data, uint16_t len)
 		uint8_t rawCount[4];
 		err |= ssi_burst_read(SENSOR_INTERFACE_DEV_IMU, LSM6DSM_FIFO_STATUS1, &rawCount[0], 2);
 		count = (uint16_t)((rawCount[1] & 7) << 8 | rawCount[0]); // Turn the 16 bits into a unsigned 16-bit value
+		if (!count) // nothing to do
+			break;
 		count /= PACKET_SIZE / 2; // words to "packets" (actually PACKET_SIZE - 1)
 		uint16_t limit = len / PACKET_SIZE;
 		if (count > limit)
