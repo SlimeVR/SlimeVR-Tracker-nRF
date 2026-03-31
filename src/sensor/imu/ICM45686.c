@@ -14,6 +14,9 @@ static const float gyro_sensitivity = 2000.0f / 32768.0f; // Always 2000dps
 static const float accel_sensitivity_32 = 32.0f / ((uint32_t)2<<30); // 32G forced
 static const float gyro_sensitivity_32 = 4000.0f / ((uint32_t)2<<30); // 4000dps forced
 
+static const uint16_t times[] = {6400, 3200, 1600, 800, 400, 200, 100, 50, 25, 2, 0}; // calculated ODR from time is an integer..
+static const uint8_t odrs[] = {ACCEL_ODR_6_4kHz, ACCEL_ODR_3_2kHz, ACCEL_ODR_1_6kHz, ACCEL_ODR_800Hz, ACCEL_ODR_400Hz, ACCEL_ODR_200Hz, ACCEL_ODR_100Hz, ACCEL_ODR_50Hz, ACCEL_ODR_25Hz, ACCEL_ODR_12_5Hz};
+
 static uint8_t last_accel_odr = 0xff;
 static uint8_t last_gyro_odr = 0xff;
 static const float clock_reference = 32000;
@@ -97,76 +100,28 @@ int icm45_update_odr(float accel_time, float gyro_time, float *accel_actual_time
 	uint8_t GYRO_UI_FS_SEL = GYRO_UI_FS_SEL_2000DPS;
 	uint8_t ACCEL_MODE;
 	uint8_t GYRO_MODE;
-	uint8_t ACCEL_ODR;
-	uint8_t GYRO_ODR;
+	uint8_t ACCEL_ODR = 0;
+	uint8_t GYRO_ODR = 0;
 
 	// Calculate accel
 	if (accel_time <= 0 || accel_time == INFINITY) // off, standby interpreted as off
 	{
 		ACCEL_MODE = ACCEL_MODE_OFF;
-		ODR = 0;
+		accel_time = 0; // off
 	}
 	else
 	{
 		ACCEL_MODE = ACCEL_MODE_LN;
 		ODR = 1 / accel_time;
 		ODR /= clock_scale; // scale clock
-	}
-
-	if (ACCEL_MODE != ACCEL_MODE_LN)
-	{
-		ACCEL_ODR = 0;
-		accel_time = 0; // off
-	}
-	else if (ODR > 3200) // TODO: this is absolutely awful
-	{
-		ACCEL_ODR = ACCEL_ODR_6_4kHz;
-		accel_time = 1.0 / 6400;
-	}
-	else if (ODR > 1600)
-	{
-		ACCEL_ODR = ACCEL_ODR_3_2kHz;
-		accel_time = 1.0 / 3200;
-	}
-	else if (ODR > 800)
-	{
-		ACCEL_ODR = ACCEL_ODR_1_6kHz;
-		accel_time = 1.0 / 1600;
-	}
-	else if (ODR > 400)
-	{
-		ACCEL_ODR = ACCEL_ODR_800Hz;
-		accel_time = 1.0 / 800;
-	}
-	else if (ODR > 200)
-	{
-		ACCEL_ODR = ACCEL_ODR_400Hz;
-		accel_time = 1.0 / 400;
-	}
-	else if (ODR > 100)
-	{
-		ACCEL_ODR = ACCEL_ODR_200Hz;
-		accel_time = 1.0 / 200;
-	}
-	else if (ODR > 50)
-	{
-		ACCEL_ODR = ACCEL_ODR_100Hz;
-		accel_time = 1.0 / 100;
-	}
-	else if (ODR > 25)
-	{
-		ACCEL_ODR = ACCEL_ODR_50Hz;
-		accel_time = 1.0 / 50;
-	}
-	else if (ODR > 12.5)
-	{
-		ACCEL_ODR = ACCEL_ODR_25Hz;
-		accel_time = 1.0 / 25;
-	}
-	else
-	{
-		ACCEL_ODR = ACCEL_ODR_12_5Hz;
-		accel_time = 1.0 / 12.5;
+		for (int i = 1; i < ARRAY_SIZE(times); i++)
+		{
+			if (ODR <= (i > 9 ? times[i] / 25.0 : times[i]))
+				continue;
+			ACCEL_ODR = odrs[i - 1];
+			accel_time = i > 10 ? times[i - 1] / 25.0 : 1.0 / times[i - 1];
+			break;
+		}
 	}
 	accel_time /= clock_scale; // scale clock
 
@@ -174,74 +129,26 @@ int icm45_update_odr(float accel_time, float gyro_time, float *accel_actual_time
 	if (gyro_time <= 0) // off
 	{
 		GYRO_MODE = GYRO_MODE_OFF;
-		ODR = 0;
+		gyro_time = 0; // off
 	}
 	else if (gyro_time == INFINITY) // standby
 	{
 		GYRO_MODE = GYRO_MODE_STANDBY;
-		ODR = 0;
+		gyro_time = 0; // off
 	}
 	else
 	{
 		GYRO_MODE = GYRO_MODE_LN;
 		ODR = 1 / gyro_time;
 		ODR /= clock_scale; // scale clock
-	}
-
-	if (GYRO_MODE != GYRO_MODE_LN)
-	{
-		GYRO_ODR = 0;
-		gyro_time = 0; // off
-	}
-	else if (ODR > 3200) // TODO: this is absolutely awful
-	{
-		GYRO_ODR = GYRO_ODR_6_4kHz;
-		gyro_time = 1.0 / 6400;
-	}
-	else if (ODR > 1600)
-	{
-		GYRO_ODR = GYRO_ODR_3_2kHz;
-		gyro_time = 1.0 / 3200;
-	}
-	else if (ODR > 800)
-	{
-		GYRO_ODR = GYRO_ODR_1_6kHz;
-		gyro_time = 1.0 / 1600;
-	}
-	else if (ODR > 400)
-	{
-		GYRO_ODR = GYRO_ODR_800Hz;
-		gyro_time = 1.0 / 800;
-	}
-	else if (ODR > 200)
-	{
-		GYRO_ODR = GYRO_ODR_400Hz;
-		gyro_time = 1.0 / 400;
-	}
-	else if (ODR > 100)
-	{
-		GYRO_ODR = GYRO_ODR_200Hz;
-		gyro_time = 1.0 / 200;
-	}
-	else if (ODR > 50)
-	{
-		GYRO_ODR = GYRO_ODR_100Hz;
-		gyro_time = 1.0 / 100;
-	}
-	else if (ODR > 25)
-	{
-		GYRO_ODR = GYRO_ODR_50Hz;
-		gyro_time = 1.0 / 50;
-	}
-	else if (ODR > 12.5)
-	{
-		GYRO_ODR = GYRO_ODR_25Hz;
-		gyro_time = 1.0 / 25;
-	}
-	else
-	{
-		GYRO_ODR = GYRO_ODR_12_5Hz;
-		gyro_time = 1.0 / 12.5;
+		for (int i = 1; i < ARRAY_SIZE(times); i++)
+		{
+			if (ODR <= (i > 9 ? times[i] / 25.0 : times[i]))
+				continue;
+			GYRO_ODR = odrs[i - 1];
+			gyro_time = i > 10 ? times[i - 1] / 25.0 : 1.0 / times[i - 1];
+			break;
+		}
 	}
 	gyro_time /= clock_scale; // scale clock
 

@@ -15,6 +15,11 @@ static float gyro_sensitivity = 2000.0f / 32768.0f; // default 2000dps
 static uint8_t accel_fs = RANGE_16G;
 static uint8_t gyro_fs = RANGE_2000;
 
+static const uint16_t accel_times[] = {1600, 800, 400, 200, 100, 50, 25, 2, 4, 8, 16, 32, 0}; // calculated ODR from accel_time is an integer..
+static const uint8_t accel_odrs[] = {ODR_1k6, ODR_800, ODR_400, ODR_200, ODR_100, ODR_50, ODR_25, ODR_12p5, ODR_6p25, ODR_3p1, ODR_1p5, ODR_0p78};
+static const uint16_t gyro_times[] = {3200, 1600, 800, 400, 200, 100, 50, 25, 0};
+static const uint8_t gyro_odrs[] = {ODR_3k2, ODR_1k6, ODR_800, ODR_400, ODR_200, ODR_100, ODR_50, ODR_25};
+
 static uint8_t last_accel_odr = 0xff;
 static uint8_t last_gyro_odr = 0xff;
 static float factor_zx;
@@ -110,131 +115,43 @@ void bmi_update_fs(float accel_range, float gyro_range, float *accel_actual_rang
 int bmi_update_odr(float accel_time, float gyro_time, float *accel_actual_time, float *gyro_actual_time)
 {
 	int ODR;
-	uint8_t acc_odr;
-	uint8_t gyr_odr;
+	uint8_t acc_odr = 0;
+	uint8_t gyr_odr = 0;
 
 	// Calculate accel
 	if (accel_time <= 0 || accel_time == INFINITY) // off, standby interpreted as off
-		ODR = 0;
-	else
-		ODR = 1 / accel_time;
-
-	if (ODR == 0)
 	{
-		acc_odr = 0; // off
 		accel_time = 0; // off
 	}
-	else if (ODR > 800) // TODO: this is absolutely awful
-	{
-		acc_odr = ODR_1k6;
-		accel_time = 1.0 / 1600;
-	}
-	else if (ODR > 400)
-	{
-		acc_odr = ODR_800;
-		accel_time = 1.0 / 800;
-	}
-	else if (ODR > 200)
-	{
-		acc_odr = ODR_400;
-		accel_time = 1.0 / 400;
-	}
-	else if (ODR > 100)
-	{
-		acc_odr = ODR_200;
-		accel_time = 1.0 / 200;
-	}
-	else if (ODR > 50)
-	{
-		acc_odr = ODR_100;
-		accel_time = 1.0 / 100;
-	}
-	else if (ODR > 25)
-	{
-		acc_odr = ODR_50;
-		accel_time = 1.0 / 50;
-	}
-	else if (ODR > 12.5)
-	{
-		acc_odr = ODR_25;
-		accel_time = 1.0 / 25;
-	}
-	else if (ODR > 6.25)
-	{
-		acc_odr = ODR_12p5;
-		accel_time = 2.0 / 25;
-	}
-	else if (ODR > 3.125)
-	{
-		acc_odr = ODR_6p25;
-		accel_time = 4.0 / 25;
-	}
-	else if (ODR > 1.5625)
-	{
-		acc_odr = ODR_3p1;
-		accel_time = 8.0 / 25;
-	}
-	else if (ODR > 0.78125)
-	{
-		acc_odr = ODR_1p5;
-		accel_time = 16.0 / 25;
-	}
 	else
 	{
-		acc_odr = ODR_0p78;
-		accel_time = 32.0 / 25;
+		ODR = 1 / accel_time;
+		for (int i = 1; i < ARRAY_SIZE(accel_times); i++)
+		{
+			if (ODR <= (i > 6 ? accel_times[i] / 25.0 : accel_times[i]))
+				continue;
+			acc_odr = accel_odrs[i - 1];
+			accel_time = i > 7 ? accel_times[i - 1] / 25.0 : 1.0 / accel_times[i - 1];
+			break;
+		}
 	}
 
 	// Calculate gyro
 	if (gyro_time <= 0 || gyro_time == INFINITY) // off, standby interpreted as off
-		ODR = 0;
-	else
-		ODR = 1 / gyro_time;
-
-	if (ODR == 0)
 	{
-		gyr_odr = 0; // off
 		gyro_time = 0; // off
 	}
-	else if (ODR > 1600) // TODO: this is absolutely awful
-	{
-		gyr_odr = ODR_3k2;
-		gyro_time = 1.0 / 3200;
-	}
-	else if (ODR > 800)
-	{
-		gyr_odr = ODR_1k6;
-		gyro_time = 1.0 / 1600;
-	}
-	else if (ODR > 400)
-	{
-		gyr_odr = ODR_800;
-		gyro_time = 1.0 / 800;
-	}
-	else if (ODR > 200)
-	{
-		gyr_odr = ODR_400;
-		gyro_time = 1.0 / 400;
-	}
-	else if (ODR > 100)
-	{
-		gyr_odr = ODR_200;
-		gyro_time = 1.0 / 200;
-	}
-	else if (ODR > 50)
-	{
-		gyr_odr = ODR_100;
-		gyro_time = 1.0 / 100;
-	}
-	else if (ODR > 25)
-	{
-		gyr_odr = ODR_50;
-		gyro_time = 1.0 / 50;
-	}
 	else
 	{
-		gyr_odr = ODR_25;
-		gyro_time = 1.0 / 25;
+		ODR = 1 / gyro_time;
+		for (int i = 1; i < ARRAY_SIZE(gyro_times); i++)
+		{
+			if (ODR <= gyro_times[i])
+				continue;
+			gyr_odr = gyro_odrs[i - 1];
+			gyro_time = 1.0 / gyro_times[i - 1];
+			break;
+		}
 	}
 
 	if (last_accel_odr == acc_odr && last_gyro_odr == gyr_odr) // if both were already configured
