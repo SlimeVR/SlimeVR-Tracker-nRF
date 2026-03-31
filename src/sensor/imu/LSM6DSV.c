@@ -343,23 +343,23 @@ uint16_t lsm_fifo_read(uint8_t *data, uint16_t len)
 int lsm_fifo_process(uint16_t index, uint8_t *data, float a[3], float g[3])
 {
 	index *= PACKET_SIZE;
-	if ((data[index] >> 3) == 0x02) // Accelerometer NC (Accelerometer uncompressed data)
+	switch (data[index] >> 3)
 	{
+	case 0x02: // Accelerometer NC (Accelerometer uncompressed data)
 		for (int i = 0; i < 3; i++) // x, y, z
 		{
 			a[i] = (int16_t)((((uint16_t)data[index + 2 + (i * 2)]) << 8) | data[index + 1 + (i * 2)]);
 			a[i] *= accel_sensitivity;
 		}
 		return 0;
-	}
-	if ((data[index] >> 3) == 0x01) // Gyroscope NC (Gyroscope uncompressed data)
-	{
+	case 0x01: // Gyroscope NC (Gyroscope uncompressed data)
 		for (int i = 0; i < 3; i++) // x, y, z
 		{
 			g[i] = (int16_t)((((uint16_t)data[index + 2 + (i * 2)]) << 8) | data[index + 1 + (i * 2)]);
 			g[i] *= gyro_sensitivity;
 		}
 		return 0;
+	default:
 	}
 	// TODO: need to skip invalid data
 	return 1;
