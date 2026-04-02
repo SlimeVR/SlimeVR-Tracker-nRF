@@ -178,16 +178,28 @@ void connection_set_shutdown(void)
 	shutdown = true;
 }
 
+//|type    |priority|precise |interval|description
+//|       0|       4|        |     100|device info ("info")
+//|       1|       3|*       |       -|full precision quat and accel
+//|       2|       1|        |     100|reduced precision quat and accel with battery, temp, and rssi ("info")
+//|       3|       6|        |    1000|status ("status")
+//|       4|       0|*       |     200|full precision quat and magnetometer
+//|       5|       7|        |    1000|runtime ("status2")
+//|       6|       5|        |     100|reduced precision quat and accel with button and sleep time ("info2")
+//|       7|       2|        |     100|button and sleep time ("info2")
+
+// precise: priority override; interval: target interval in milliseconds
+
 //|b0      |b1      |b2      |b3      |b4      |b5      |b6      |b7      |b8      |b9      |b10     |b11     |b12     |b13     |b14     |b15     |
 //|type    |id      |packet data                                                                                                                  |
-//|0       |id      |batt    |batt_v  |temp    |brd_id  |mcu_id  |resv    |imu_id  |mag_id  |fw_date          |major   |minor   |patch   |rssi    |
-//|1       |id      |q0               |q1               |q2               |q3               |a0               |a1               |a2               |
-//|2       |id      |batt    |batt_v  |temp    |q_buf                              |a0               |a1               |a2               |rssi    |
-//|3	   |id      |svr_stat|status  |resv                                                                                              |rssi    |
-//|4       |id      |q0               |q1               |q2               |q3               |m0               |m1               |m2               |
-//|5	   |id      |runtime                                                                |resv                                        |rssi    |
-//|6       |id      |button  |sleeptime        |                                                                                         |rssi    |
-//|7       |id      |button  |sleeptime        |q_buf                              |a0               |a1               |a2               |rssi    |
+//|       0|id      |batt    |batt_v  |temp    |brd_id  |mcu_id  |resv----|imu_id  |mag_id  |fw_date          |major   |minor   |patch   |rssi    |
+//|       1|id      |q0               |q1               |q2               |q3               |a0               |a1               |a2               |
+//|       2|id      |batt    |batt_v  |temp    |q_buf                              |a0               |a1               |a2               |rssi    |
+//|       3|id      |svr_stat|status  |resv----------------------------------------------------------------------------------------------|rssi    |
+//|       4|id      |q0               |q1               |q2               |q3               |m0               |m1               |m2               |
+//|       5|id      |runtime                                                                |resv----------------------------------------|rssi    |
+//|       6|id      |button  |sleeptime        |resv-------------------------------------------------------------------------------------|rssi    |
+//|       7|id      |button  |sleeptime        |q_buf                              |a0               |a1               |a2               |rssi    |
 
 // runtime is in microseconds (overkill), sleeptime is in milliseconds (overkill but less)
 
