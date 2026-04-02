@@ -66,6 +66,15 @@ K_THREAD_DEFINE(esb_thread_id, 512, esb_thread, NULL, NULL, NULL, ESB_THREAD_PRI
 
 uint64_t pairing_packets = 0;
 
+//|type    |description
+//|TX  CRC8|pairing
+//|RX  CRC8|pairing
+
+//|b0      |b1      |b2      |b3      |b4      |b5      |b6      |b7      |b8      |b9      |b10     |b11     |b12     |b13     |b14     |b15     |
+//|type    |id      |packet data                                                                                                                  |
+//|TX  CRC8|ack     |device_addr                                          |
+//|RX  CRC8|ack     |recv_addr                                            |
+
 void event_handler(struct esb_evt const *event)
 {
 	switch (event->evt_id)
