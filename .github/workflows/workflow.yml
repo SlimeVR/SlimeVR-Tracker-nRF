@@ -114,19 +114,35 @@ jobs:
             zephyr-workspace/tools
           key: west-workspace-${{ steps.generate-vars.outputs.sdk-hash }}
 
-      - name: 📦 Cache Python venv
-        id: cache-venv
+      - name: 📦 Cache PIP Requirements
+        id: cache-pip
         uses: actions/cache@v5
+        with:
+          path: ~/.venv
+          key: venv-pip-${{ env.ZEPHYR_SDK_VERSION }}
+
+      - name: 📦 Restore Python venv
+        if: steps.cache-pip.outputs.cache-hit != 'true'
+        id: restore-venv
+        uses: actions/cache/restore@v5
         with:
           path: ~/.venv
           key: venv-${{ env.ZEPHYR_SDK_VERSION }}
 
       - name: 🐍 Setup Python venv + West
         id: setup-venv
-        if: steps.cache-venv.outputs.cache-hit != 'true'
+        if: ${{ steps.cache-pip.outputs.cache-hit != 'true' && steps.restore-venv.outputs.cache-hit != 'true' }}
         run: |
           python3 -m venv ~/.venv
           ~/.venv/bin/pip install west ninja
+
+      - name: 📦 Cache Python venv
+        if: steps.restore-venv.outputs.cache-hit != 'true'
+        id: cache-venv
+        uses: actions/cache/save@v5
+        with:
+          path: ~/.venv
+          key: venv-${{ env.ZEPHYR_SDK_VERSION }}
 
       - name: ♻️ Initialize Zephyr Workspace
         id: init-west
@@ -139,13 +155,6 @@ jobs:
           fi
           west update --narrow -o=--depth=1
           west zephyr-export
-
-      - name: 📦 Cache PIP Requirements
-        id: cache-pip
-        uses: actions/cache@v5
-        with:
-          path: ~/.venv
-          key: venv-pip-${{ env.ZEPHYR_SDK_VERSION }}-${{ hashFiles('zephyr-workspace/zephyr/scripts/requirements.txt') }}
 
       - name: 🐍 Install Zephyr Python Requirements
         id: install-pip
@@ -246,15 +255,12 @@ jobs:
           key: west-workspace-${{ needs.setup.outputs.sdk-hash }}
           fail-on-cache-miss: true
 
-      - name: 📦 Restore Python venv
-        id: restore-venv
+      - name: 📦 Restore PIP Requirements
+        id: restore-pip
         uses: actions/cache/restore@v5
         with:
           path: ~/.venv
-          key: venv-pip-${{ env.ZEPHYR_SDK_VERSION }}-${{ hashFiles('zephyr-workspace/zephyr/scripts/requirements.txt') }}
-          restore-keys: |
-            venv-pip-
-            venv-
+          key: venv-pip-${{ env.ZEPHYR_SDK_VERSION }}
           fail-on-cache-miss: true
 
       - name: ♻️ Register Zephyr Workspace
