@@ -322,7 +322,7 @@ int esb_initialize(bool tx)
 		esb_set_base_address_0(base_addr_0);
 		esb_set_base_address_1(base_addr_1);
 		esb_set_prefixes(addr_prefix, ARRAY_SIZE(addr_prefix));
-		esb_set_rf_channel(ESB_CHANNEL);
+		esb_set_rf_channel(CONFIG_2_SETTINGS_READ(CONFIG_2_ESB_CHANNEL));
 	}
 	else
 	{
