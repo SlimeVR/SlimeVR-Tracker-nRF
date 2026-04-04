@@ -291,6 +291,13 @@ config RADIO_TX_POWER
         Radio output power level.
         A lower value may reduce power consumption.
 
+config ESB_CHANNEL
+    int "Initial ESB channel"
+    range 0 100
+    default 50
+    help
+        ESB channel frequency used on initialization.
+
 config CONNECTION_OVER_HID
     bool "Use HID for data output"
     help
