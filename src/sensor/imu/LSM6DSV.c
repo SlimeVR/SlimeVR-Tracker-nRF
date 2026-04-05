@@ -12,8 +12,16 @@
 float accel_sensitivity = 16.0f / 32768.0f; // Default 16G (FS = ±16 g: 0.488 mg/LSB)
 float gyro_sensitivity = 0.070f; // Default 2000dps (FS = ±2000 dps: 70 mdps/LSB)
 
+static const uint16_t accel_ranges[] = {16, 8, 4, 2, 0};
+static const uint8_t accel_fss[] = {FS_XL_16G, FS_XL_8G, FS_XL_4G, FS_XL_2G};
+static const uint16_t gyro_ranges[] = {4000, 2000, 1000, 500, 250, 125, 0};
+static const uint8_t gyro_fss[] = {FS_G_4000DPS, FS_G_2000DPS, FS_G_1000DPS, FS_G_500DPS, FS_G_250DPS, FS_G_125DPS};
+
 static uint8_t accel_fs = FS_XL_16G;
 static uint8_t gyro_fs = FS_G_2000DPS;
+
+static const uint16_t intervals[] = {1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 4096, 0};
+static const uint8_t odrs[] = {ODR_7_68kHz, ODR_3_84kHz, ODR_1_92kHz, ODR_960Hz, ODR_480Hz, ODR_240Hz, ODR_120Hz, ODR_60Hz, ODR_30Hz, ODR_15Hz, ODR_7_5Hz, ODR_1_875Hz};
 
 // TODO: shared with LSM
 uint8_t last_accel_mode = 0xff;
@@ -57,56 +65,28 @@ void lsm_shutdown(void)
 
 void lsm_update_fs(float accel_range, float gyro_range, float *accel_actual_range, float *gyro_actual_range)
 {
-	if (accel_range > 8)
+	if (accel_range < 0)
+		accel_range = 0;
+
+	if (gyro_range < 0)
+		gyro_range = 0;
+
+	for (int i = 1; i < ARRAY_SIZE(accel_ranges); i++)
 	{
-		accel_fs = FS_XL_16G;
-		accel_range = 16;
-	}
-	else if (accel_range > 4)
-	{
-		accel_fs = FS_XL_8G;
-		accel_range = 8;
-	}
-	else if (accel_range > 2)
-	{
-		accel_fs = FS_XL_4G;
-		accel_range = 4;
-	}
-	else
-	{
-		accel_fs = FS_XL_2G;
-		accel_range = 2;
+		if (accel_range <= accel_ranges[i])
+			continue;
+		accel_fs = accel_fss[i - 1];
+		accel_range = accel_ranges[i - 1];
+		break;
 	}
 
-	if (gyro_range > 2000)
+	for (int i = 1; i < ARRAY_SIZE(gyro_ranges); i++)
 	{
-		gyro_fs = FS_G_4000DPS;
-		gyro_range = 4000;
-	}
-	else if (gyro_range > 1000)
-	{
-		gyro_fs = FS_G_2000DPS;
-		gyro_range = 2000;
-	}
-	else if (gyro_range > 500)
-	{
-		gyro_fs = FS_G_1000DPS;
-		gyro_range = 1000;
-	}
-	else if (gyro_range > 250)
-	{
-		gyro_fs = FS_G_500DPS;
-		gyro_range = 500;
-	}
-	else if (gyro_range > 125)
-	{
-		gyro_fs = FS_G_250DPS;
-		gyro_range = 250;
-	}
-	else
-	{
-		gyro_fs = FS_G_125DPS;
-		gyro_range = 125;
+		if (gyro_range <= gyro_ranges[i])
+			continue;
+		gyro_fs = gyro_fss[i - 1];
+		gyro_range = gyro_ranges[i - 1];
+		break;
 	}
 
 	accel_sensitivity = accel_range / 32768.0f;
@@ -118,89 +98,31 @@ void lsm_update_fs(float accel_range, float gyro_range, float *accel_actual_rang
 
 int lsm_update_odr(float accel_time, float gyro_time, float *accel_actual_time, float *gyro_actual_time)
 {
-	int ODR;
+	int interval;
 	uint8_t OP_MODE_XL;
 	uint8_t OP_MODE_G;
-	uint8_t ODR_XL;
-	uint8_t ODR_G;
+	uint8_t ODR_XL = 0;
+	uint8_t ODR_G = 0;
 
 	// Calculate accel
 	if (accel_time <= 0 || accel_time == INFINITY) // off, standby interpreted as off
 	{
 		OP_MODE_XL = OP_MODE_XL_HP;
 		ODR_XL = ODR_OFF;
-		ODR = 0;
+		accel_time = 0; // off
 	}
 	else
 	{
 		OP_MODE_XL = OP_MODE_XL_HP;
-		ODR = 1 / accel_time;
-		ODR /= freq_scale; // scale by internal freq adjustment
-	}
-
-	if (ODR == 0)
-	{
-		accel_time = 0; // off
-	}
-	else if (ODR > 3840) // TODO: this is absolutely awful
-	{
-		ODR_XL = ODR_7_68kHz;
-		accel_time = 1.0 / 7680;
-	}
-	else if (ODR > 1920)
-	{
-		ODR_XL = ODR_3_84kHz;
-		accel_time = 1.0 / 3840;
-	}
-	else if (ODR > 960)
-	{
-		ODR_XL = ODR_1_92kHz;
-		accel_time = 1.0 / 1920;
-	}
-	else if (ODR > 480)
-	{
-		ODR_XL = ODR_960Hz;
-		accel_time = 1.0 / 960;
-	}
-	else if (ODR > 240)
-	{
-		ODR_XL = ODR_480Hz;
-		accel_time = 1.0 / 480;
-	}
-	else if (ODR > 120)
-	{
-		ODR_XL = ODR_240Hz;
-		accel_time = 1.0 / 240;
-	}
-	else if (ODR > 60)
-	{
-		ODR_XL = ODR_120Hz;
-		accel_time = 1.0 / 120;
-	}
-	else if (ODR > 30)
-	{
-		ODR_XL = ODR_60Hz;
-		accel_time = 1.0 / 60;
-	}
-	else if (ODR > 15)
-	{
-		ODR_XL = ODR_30Hz;
-		accel_time = 1.0 / 30;
-	}
-	else if (ODR > 7.5)
-	{
-		ODR_XL = ODR_15Hz;
-		accel_time = 1.0 / 15;
-	}
-	else if (ODR > 1.875)
-	{
-		ODR_XL = ODR_7_5Hz;
-		accel_time = 1.0 / 7.5;
-	}
-	else
-	{
-		ODR_XL = ODR_1_875Hz;
-		accel_time = 1.0 / 1.875;
+		interval = accel_time * freq_scale * 7680; // scale by internal freq adjustment
+		for (int i = 1; i < ARRAY_SIZE(intervals); i++)
+		{
+			if (intervals[i] && interval >= intervals[i])
+				continue;
+			ODR_XL = odrs[i - 1];
+			accel_time = intervals[i - 1] / 7680.0f;
+			break;
+		}
 	}
 	accel_time /= freq_scale; // scale by internal freq adjustment
 
@@ -209,85 +131,26 @@ int lsm_update_odr(float accel_time, float gyro_time, float *accel_actual_time, 
 	{
 		OP_MODE_G = OP_MODE_G_HP;
 		ODR_G = ODR_OFF;
-		ODR = 0;
+		gyro_time = 0; // off
 	}
 	else if (gyro_time == INFINITY) // sleep
 	{
 		OP_MODE_G = OP_MODE_G_SLEEP;
 		ODR_G = last_gyro_odr; // using last ODR
-		ODR = 0;
+		gyro_time = 0; // off
 	}
 	else
 	{
 		OP_MODE_G = OP_MODE_G_HP;
-		ODR_G = 0; // the compiler complains unless I do this
-		ODR = 1 / gyro_time;
-		ODR /= freq_scale; // scale by internal freq adjustment
-	}
-
-	if (ODR == 0)
-	{
-		gyro_time = 0; // off
-	}
-	else if (ODR > 3840) // TODO: this is absolutely awful
-	{
-		ODR_G = ODR_7_68kHz;
-		gyro_time = 1.0 / 7680;
-	}
-	else if (ODR > 1920)
-	{
-		ODR_G = ODR_3_84kHz;
-		gyro_time = 1.0 / 3840;
-	}
-	else if (ODR > 960)
-	{
-		ODR_G = ODR_1_92kHz;
-		gyro_time = 1.0 / 1920;
-	}
-	else if (ODR > 480)
-	{
-		ODR_G = ODR_960Hz;
-		gyro_time = 1.0 / 960;
-	}
-	else if (ODR > 240)
-	{
-		ODR_G = ODR_480Hz;
-		gyro_time = 1.0 / 480;
-	}
-	else if (ODR > 120)
-	{
-		ODR_G = ODR_240Hz;
-		gyro_time = 1.0 / 240;
-	}
-	else if (ODR > 60)
-	{
-		ODR_G = ODR_120Hz;
-		gyro_time = 1.0 / 120;
-	}
-	else if (ODR > 30)
-	{
-		ODR_G = ODR_60Hz;
-		gyro_time = 1.0 / 60;
-	}
-	else if (ODR > 15)
-	{
-		ODR_G = ODR_30Hz;
-		gyro_time = 1.0 / 30;
-	}
-	else if (ODR > 7.5)
-	{
-		ODR_G = ODR_15Hz;
-		gyro_time = 1.0 / 15;
-	}
-	else if (ODR > 1.875)
-	{
-		ODR_G = ODR_7_5Hz;
-		gyro_time = 1.0 / 7.5;
-	}
-	else
-	{
-		ODR_G = ODR_1_875Hz;
-		gyro_time = 1.0 / 1.875;
+		interval = gyro_time * freq_scale * 7680; // scale by internal freq adjustment
+		for (int i = 1; i < ARRAY_SIZE(intervals); i++)
+		{
+			if (intervals[i] && interval >= intervals[i])
+				continue;
+			ODR_G = odrs[i - 1];
+			gyro_time = intervals[i - 1] / 7680.0f;
+			break;
+		}
 	}
 	gyro_time /= freq_scale; // scale by internal freq adjustment
 
@@ -322,6 +185,8 @@ uint16_t lsm_fifo_read(uint8_t *data, uint16_t len)
 		uint8_t rawCount[2];
 		err |= ssi_burst_read(SENSOR_INTERFACE_DEV_IMU, LSM6DSV_FIFO_STATUS1, &rawCount[0], 2);
 		count = (uint16_t)((rawCount[1] & 3) << 8 | rawCount[0]); // Turn the 16 bits into a unsigned 16-bit value. Only LSB on FIFO_STATUS2 is used, but we mask 2nd bit too // TODO: might be 3 bits not 2
+		if (!count) // nothing to do
+			break;
 		uint16_t limit = len / PACKET_SIZE;
 		if (count > limit)
 		{
@@ -341,23 +206,23 @@ uint16_t lsm_fifo_read(uint8_t *data, uint16_t len)
 int lsm_fifo_process(uint16_t index, uint8_t *data, float a[3], float g[3])
 {
 	index *= PACKET_SIZE;
-	if ((data[index] >> 3) == 0x02) // Accelerometer NC (Accelerometer uncompressed data)
+	switch (data[index] >> 3)
 	{
+	case 0x02: // Accelerometer NC (Accelerometer uncompressed data)
 		for (int i = 0; i < 3; i++) // x, y, z
 		{
 			a[i] = (int16_t)((((uint16_t)data[index + 2 + (i * 2)]) << 8) | data[index + 1 + (i * 2)]);
 			a[i] *= accel_sensitivity;
 		}
 		return 0;
-	}
-	if ((data[index] >> 3) == 0x01) // Gyroscope NC (Gyroscope uncompressed data)
-	{
+	case 0x01: // Gyroscope NC (Gyroscope uncompressed data)
 		for (int i = 0; i < 3; i++) // x, y, z
 		{
 			g[i] = (int16_t)((((uint16_t)data[index + 2 + (i * 2)]) << 8) | data[index + 1 + (i * 2)]);
 			g[i] *= gyro_sensitivity;
 		}
 		return 0;
+	default:
 	}
 	// TODO: need to skip invalid data
 	return 1;

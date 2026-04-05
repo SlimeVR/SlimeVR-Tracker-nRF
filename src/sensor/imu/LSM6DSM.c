@@ -9,8 +9,17 @@
 
 #define PACKET_SIZE 7 // first byte is pattern, only 6 actual sample bytes
 
+static const uint16_t accel_ranges[] = {16, 8, 4, 2, 0};
+static const uint8_t accel_fss[] = {DSM_FS_XL_16G, DSM_FS_XL_8G, DSM_FS_XL_4G, DSM_FS_XL_2G};
+static const uint16_t gyro_ranges[] = {2000, 1000, 500, 250, 0};
+static const uint8_t gyro_fss[] = {DSM_FS_G_2000DPS, DSM_FS_G_1000DPS, DSM_FS_G_500DPS, DSM_FS_G_250DPS};
+
 static uint8_t accel_fs = DSM_FS_XL_16G;
 static uint8_t gyro_fs = DSM_FS_G_2000DPS;
+
+static const uint16_t intervals[] = {3, 6, 12, 24, 48, 96, 192, 384, 768, 1536, 0};
+static const uint8_t odrs[] = {DSM_ODR_6_66kHz, DSM_ODR_3_33kHz, DSM_ODR_1_66kHz, DSM_ODR_833Hz, DSM_ODR_416Hz, DSM_ODR_208Hz, DSM_ODR_104Hz, DSM_ODR_52Hz, DSM_ODR_26Hz, DSM_ODR_12_5Hz};
+// last ODR is 12.5Hz, but we check 13Hz -> 1536 / 20000
 
 static uint8_t fifo_pattern_length;
 static bool fifo_pattern_gyro_dominant; // if more samples are gyro than accel in a pattern
@@ -34,46 +43,28 @@ int lsm6dsm_init(float clock_rate, float accel_time, float gyro_time, float *acc
 
 void lsm6dsm_update_fs(float accel_range, float gyro_range, float *accel_actual_range, float *gyro_actual_range)
 {
-	if (accel_range > 8)
+	if (accel_range < 0)
+		accel_range = 0;
+
+	if (gyro_range < 0)
+		gyro_range = 0;
+
+	for (int i = 1; i < ARRAY_SIZE(accel_ranges); i++)
 	{
-		accel_fs = DSM_FS_XL_16G;
-		accel_range = 16;
-	}
-	else if (accel_range > 4)
-	{
-		accel_fs = DSM_FS_XL_8G;
-		accel_range = 8;
-	}
-	else if (accel_range > 2)
-	{
-		accel_fs = DSM_FS_XL_4G;
-		accel_range = 4;
-	}
-	else
-	{
-		accel_fs = DSM_FS_XL_2G;
-		accel_range = 2;
+		if (accel_range <= accel_ranges[i])
+			continue;
+		accel_fs = accel_fss[i - 1];
+		accel_range = accel_ranges[i - 1];
+		break;
 	}
 
-	if (gyro_range > 1000)
+	for (int i = 1; i < ARRAY_SIZE(gyro_ranges); i++)
 	{
-		gyro_fs = DSM_FS_G_2000DPS;
-		gyro_range = 2000;
-	}
-	else if (gyro_range > 500)
-	{
-		gyro_fs = DSM_FS_G_1000DPS;
-		gyro_range = 1000;
-	}
-	else if (gyro_range > 250)
-	{
-		gyro_fs = DSM_FS_G_500DPS;
-		gyro_range = 500;
-	}
-	else
-	{
-		gyro_fs = DSM_FS_G_250DPS;
-		gyro_range = 250;
+		if (gyro_range <= gyro_ranges[i])
+			continue;
+		gyro_fs = gyro_fss[i - 1];
+		gyro_range = gyro_ranges[i - 1];
+		break;
 	}
 
 	accel_sensitivity = accel_range / 32768.0f;
@@ -85,11 +76,11 @@ void lsm6dsm_update_fs(float accel_range, float gyro_range, float *accel_actual_
 
 int lsm6dsm_update_odr(float accel_time, float gyro_time, float *accel_actual_time, float *gyro_actual_time)
 {
-	int ODR;
+	int interval;
 	uint8_t OP_MODE_XL;
 	uint8_t OP_MODE_G;
-	uint8_t ODR_XL;
-	uint8_t ODR_G;
+	uint8_t ODR_XL = 0;
+	uint8_t ODR_G = 0;
 	uint8_t GYRO_SLEEP = DSM_OP_MODE_G_AWAKE;
 
 	// Calculate accel
@@ -98,69 +89,21 @@ int lsm6dsm_update_odr(float accel_time, float gyro_time, float *accel_actual_ti
 		// set High perf mode and off odr on XL
 		OP_MODE_XL = DSM_OP_MODE_XL_HP;
 		ODR_XL = DSM_ODR_OFF;
-		ODR = 0;
+		accel_time = 0; // off
 	}
 	else
 	{
 		// set High perf mode and select odr on XL
 		OP_MODE_XL = DSM_OP_MODE_XL_HP;
-		ODR = 1 / accel_time;
-	}
-
-	if (ODR == 0)
-	{
-		accel_time = 0; // off
-		ODR_XL = DSM_ODR_OFF;
-	}
-	else if (accel_time < 0.3f / 1000) // in this case it seems better to compare accel_time
-	{
-		ODR_XL = DSM_ODR_6_66kHz; // TODO: this is absolutely awful
-		accel_time = 0.15 / 1000;
-	}
-	else if (accel_time < 0.6f / 1000)
-	{
-		ODR_XL = DSM_ODR_3_33kHz;
-		accel_time = 0.3 / 1000;
-	}
-	else if (accel_time < 1.2f / 1000)
-	{
-		ODR_XL = DSM_ODR_1_66kHz;
-		accel_time = 0.6 / 1000;
-	}
-	else if (accel_time < 2.4f / 1000)
-	{
-		ODR_XL = DSM_ODR_833Hz;
-		accel_time = 1.2 / 1000;
-	}
-	else if (accel_time < 4.8f / 1000)
-	{
-		ODR_XL = DSM_ODR_416Hz;
-		accel_time = 2.4 / 1000;
-	}
-	else if (accel_time < 9.6f / 1000)
-	{
-		ODR_XL = DSM_ODR_208Hz;
-		accel_time = 4.8 / 1000;
-	}
-	else if (accel_time < 19.2f / 1000)
-	{
-		ODR_XL = DSM_ODR_104Hz;
-		accel_time = 9.6 / 1000;
-	}
-	else if (accel_time < 38.4f / 1000)
-	{
-		ODR_XL = DSM_ODR_52Hz;
-		accel_time = 19.2 / 1000;
-	}
-	else if (ODR > 12.5)
-	{
-		ODR_XL = DSM_ODR_26Hz;
-		accel_time = 38.4 / 1000;
-	}
-	else
-	{
-		ODR_XL = DSM_ODR_12_5Hz;
-		accel_time = 1.0 / 12.5; // 13Hz -> 76.8 / 1000
+		interval = accel_time * 20000;
+		for (int i = 1; i < ARRAY_SIZE(intervals); i++)
+		{
+			if (intervals[i] && interval >= intervals[i])
+				continue;
+			ODR_XL = odrs[i - 1];
+			accel_time = intervals[i - 1] / 20000.0f;
+			break;
+		}
 	}
 
 	// Calculate gyro
@@ -168,76 +111,27 @@ int lsm6dsm_update_odr(float accel_time, float gyro_time, float *accel_actual_ti
 	{
 		OP_MODE_G = DSM_OP_MODE_G_HP;
 		ODR_G = DSM_ODR_OFF;
-		ODR = 0;
+		gyro_time = 0; // off
 	}
 	else if (gyro_time == INFINITY) // sleep
 	{
 		OP_MODE_G = DSM_OP_MODE_G_NP;
 		GYRO_SLEEP = DSM_OP_MODE_G_SLEEP;
 		ODR_G = last_gyro_odr; // using last ODR
-		ODR = 0;
+		gyro_time = 0; // off
 	}
 	else
 	{
 		OP_MODE_G = DSM_OP_MODE_G_HP;
-		ODR_G = 0; // the compiler complains unless I do this
-		ODR = 1 / gyro_time;
-	}
-
-	if (ODR == 0)
-	{
-		gyro_time = 0; // off
-		ODR_G = DSM_ODR_OFF;
-	}
-	else if (gyro_time < 0.3f / 1000) // in this case it seems better to compare gyro_time
-	{
-		ODR_G = DSM_ODR_6_66kHz; // TODO: this is absolutely awful
-		gyro_time = 1.0 / 6660;
-	}
-	else if (gyro_time < 0.6f / 1000)
-	{
-		ODR_G = DSM_ODR_3_33kHz;
-		gyro_time = 0.3 / 1000;
-	}
-	else if (gyro_time < 1.2f / 1000)
-	{
-		ODR_G = DSM_ODR_1_66kHz;
-		gyro_time = 0.6 / 1000;
-	}
-	else if (gyro_time < 2.4f / 1000)
-	{
-		ODR_G = DSM_ODR_833Hz;
-		gyro_time = 1.2 / 1000;
-	}
-	else if (gyro_time < 4.8f / 1000)
-	{
-		ODR_G = DSM_ODR_416Hz;
-		gyro_time = 2.4 / 1000;
-	}
-	else if (gyro_time < 9.6f / 1000)
-	{
-		ODR_G = DSM_ODR_208Hz;
-		gyro_time = 4.8 / 1000;
-	}
-	else if (gyro_time < 19.2f / 1000)
-	{
-		ODR_G = DSM_ODR_104Hz;
-		gyro_time = 9.6 / 1000;
-	}
-	else if (gyro_time < 38.4f / 1000)
-	{
-		ODR_G = DSM_ODR_52Hz;
-		gyro_time = 19.2 / 1000;
-	}
-	else if (ODR > 12.5)
-	{
-		ODR_G = DSM_ODR_26Hz;
-		gyro_time = 38.4 / 1000;
-	}
-	else
-	{
-		ODR_G = DSM_ODR_12_5Hz;
-		gyro_time = 1.0 / 12.5; // 13Hz -> 76.8 / 1000
+		interval = gyro_time * 20000;
+		for (int i = 1; i < ARRAY_SIZE(intervals); i++)
+		{
+			if (intervals[i] && interval >= intervals[i])
+				continue;
+			ODR_G = odrs[i - 1];
+			gyro_time = intervals[i - 1] / 20000.0f;
+			break;
+		}
 	}
 
 	if (last_accel_mode == OP_MODE_XL && last_gyro_mode == OP_MODE_G && last_accel_odr == ODR_XL && last_gyro_odr == ODR_G) // if both were already configured
@@ -298,6 +192,8 @@ uint16_t lsm6dsm_fifo_read(uint8_t *data, uint16_t len)
 		uint8_t rawCount[4];
 		err |= ssi_burst_read(SENSOR_INTERFACE_DEV_IMU, LSM6DSM_FIFO_STATUS1, &rawCount[0], 2);
 		count = (uint16_t)((rawCount[1] & 7) << 8 | rawCount[0]); // Turn the 16 bits into a unsigned 16-bit value
+		if (!count) // nothing to do
+			break;
 		count /= PACKET_SIZE / 2; // words to "packets" (actually PACKET_SIZE - 1)
 		uint16_t limit = len / PACKET_SIZE;
 		if (count > limit)

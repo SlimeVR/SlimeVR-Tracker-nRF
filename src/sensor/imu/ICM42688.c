@@ -24,6 +24,9 @@ static const float gyro_sensitivity = 2000.0f / 32768.0f; // Always 2000dps
 static const float accel_sensitivity_32 = 16.0f / ((uint32_t)2<<30); // 16G forced
 static const float gyro_sensitivity_32 = 2000.0f / ((uint32_t)2<<30); // 2000dps forced
 
+static const uint16_t intervals[] = {1, 2, 4, 8, 16, 32, 64, 160, 320, 640, 1280, 2560, 0};
+static const uint8_t odrs[] = {AODR_32kHz, AODR_16kHz, AODR_8kHz, AODR_4kHz, AODR_2kHz, AODR_1kHz, AODR_500Hz, AODR_200Hz, AODR_100Hz, AODR_50Hz, AODR_25Hz, AODR_12_5Hz}; // same binary
+
 static uint8_t last_accel_odr = 0xff;
 static uint8_t last_gyro_odr = 0xff;
 static const float clock_reference = 32000;
@@ -87,91 +90,32 @@ void icm_update_fs(float accel_range, float gyro_range, float *accel_actual_rang
 
 int icm_update_odr(float accel_time, float gyro_time, float *accel_actual_time, float *gyro_actual_time)
 {
-	int ODR;
+	int interval;
 	uint8_t Ascale = AFS_16G; // set highest
 	uint8_t Gscale = GFS_2000DPS; // set highest
 	uint8_t aMode;
 	uint8_t gMode;
-	uint8_t AODR;
-	uint8_t GODR;
+	uint8_t AODR = 0;
+	uint8_t GODR = 0;
 
 	// Calculate accel
 	if (accel_time <= 0 || accel_time == INFINITY) // off, standby interpreted as off
 	{
 		aMode = aMode_OFF;
-		ODR = 0;
+		accel_time = 0;
 	}
 	else
 	{
 		aMode = aMode_LN;
-		ODR = 1 / accel_time;
-		ODR /= clock_scale; // scale clock
-	}
-
-	if (aMode != aMode_LN)
-	{
-		AODR = 0;
-		accel_time = 0; // off
-	}
-	else if (ODR > 16000) // TODO: this is absolutely awful
-	{
-		AODR = AODR_32kHz;
-		accel_time = 1.0 / 32000;
-	}
-	else if (ODR > 8000)
-	{
-		AODR = AODR_16kHz;
-		accel_time = 1.0 / 16000;
-	}
-	else if (ODR > 4000)
-	{
-		AODR = AODR_8kHz;
-		accel_time = 1.0 / 8000;
-	}
-	else if (ODR > 2000)
-	{
-		AODR = AODR_4kHz;
-		accel_time = 1.0 / 4000;
-	}
-	else if (ODR > 1000)
-	{
-		AODR = AODR_2kHz;
-		accel_time = 1.0 / 2000;
-	}
-	else if (ODR > 500)
-	{
-		AODR = AODR_1kHz;
-		accel_time = 1.0 / 1000;
-	}
-	else if (ODR > 200)
-	{
-		AODR = AODR_500Hz;
-		accel_time = 1.0 / 500;
-	}
-	else if (ODR > 100)
-	{
-		AODR = AODR_200Hz;
-		accel_time = 1.0 / 200;
-	}
-	else if (ODR > 50)
-	{
-		AODR = AODR_100Hz;
-		accel_time = 1.0 / 100;
-	}
-	else if (ODR > 25)
-	{
-		AODR = AODR_50Hz;
-		accel_time = 1.0 / 50;
-	}
-	else if (ODR > 12)
-	{
-		AODR = AODR_25Hz;
-		accel_time = 1.0 / 25;
-	}
-	else
-	{
-		AODR = AODR_12_5Hz;
-		accel_time = 1.0 / 12.5;
+		interval = accel_time * clock_scale * 32000; // scale clock
+		for (int i = 1; i < ARRAY_SIZE(intervals); i++)
+		{
+			if (intervals[i] && interval >= intervals[i])
+				continue;
+			AODR = odrs[i - 1];
+			accel_time = intervals[i - 1] / 32000.0f;
+			break;
+		}
 	}
 	accel_time /= clock_scale; // scale clock
 
@@ -179,84 +123,25 @@ int icm_update_odr(float accel_time, float gyro_time, float *accel_actual_time, 
 	if (gyro_time <= 0) // off
 	{
 		gMode = gMode_OFF;
-		ODR = 0;
+		gyro_time = 0;
 	}
 	else if (gyro_time == INFINITY) // standby
 	{
 		gMode = gMode_SBY;
-		ODR = 0;
+		gyro_time = 0;
 	}
 	else
 	{
 		gMode = gMode_LN;
-		ODR = 1 / gyro_time;
-		ODR /= clock_scale; // scale clock
-	}
-
-	if (gMode != gMode_LN)
-	{
-		GODR = 0;
-		gyro_time = 0; // off
-	}
-	else if (ODR > 16000) // TODO: this is absolutely awful
-	{
-		GODR = GODR_32kHz;
-		gyro_time = 1.0 / 32000;
-	}
-	else if (ODR > 8000)
-	{
-		GODR = GODR_16kHz;
-		gyro_time = 1.0 / 16000;
-	}
-	else if (ODR > 4000)
-	{
-		GODR = GODR_8kHz;
-		gyro_time = 1.0 / 8000;
-	}
-	else if (ODR > 2000)
-	{
-		GODR = GODR_4kHz;
-		gyro_time = 1.0 / 4000;
-	}
-	else if (ODR > 1000)
-	{
-		GODR = GODR_2kHz;
-		gyro_time = 1.0 / 2000;
-	}
-	else if (ODR > 500)
-	{
-		GODR = GODR_1kHz;
-		gyro_time = 1.0 / 1000;
-	}
-	else if (ODR > 200)
-	{
-		GODR = GODR_500Hz;
-		gyro_time = 1.0 / 500;
-	}
-	else if (ODR > 100)
-	{
-		GODR = GODR_200Hz;
-		gyro_time = 1.0 / 200;
-	}
-	else if (ODR > 50)
-	{
-		GODR = GODR_100Hz;
-		gyro_time = 1.0 / 100;
-	}
-	else if (ODR > 25)
-	{
-		GODR = GODR_50Hz;
-		gyro_time = 1.0 / 50;
-	}
-	else if (ODR > 12)
-	{
-		GODR = GODR_25Hz;
-		gyro_time = 1.0 / 25;
-	}
-	else
-	{
-		GODR = GODR_12_5Hz;
-		gyro_time = 1.0 / 12.5;
+		interval = gyro_time * clock_scale * 32000; // scale clock
+		for (int i = 1; i < ARRAY_SIZE(intervals); i++)
+		{
+			if (intervals[i] && interval >= intervals[i])
+				continue;
+			GODR = odrs[i - 1];
+			accel_time = intervals[i - 1] / 32000.0f;
+			break;
+		}
 	}
 	gyro_time /= clock_scale; // scale clock
 
@@ -283,7 +168,7 @@ int icm_update_odr(float accel_time, float gyro_time, float *accel_actual_time, 
 
 	// extra read packets by ODR time
 	if (accel_time == 0 && gyro_time != 0)
-		fifo_multiplier = fifo_multiplier_factor / gyro_time; 
+		fifo_multiplier = fifo_multiplier_factor / gyro_time;
 	else if (accel_time != 0 && gyro_time == 0)
 		fifo_multiplier = fifo_multiplier_factor / accel_time;
 	else if (gyro_time > accel_time)
@@ -306,6 +191,8 @@ uint16_t icm_fifo_read(uint8_t *data, uint16_t len)
 		uint8_t rawCount[2];
 		err |= ssi_burst_read(SENSOR_INTERFACE_DEV_IMU, ICM42688_FIFO_COUNTH, &rawCount[0], 2);
 		packets = (uint16_t)(rawCount[0] << 8 | rawCount[1]); // Turn the 16 bits into a unsigned 16-bit value
+		if (!packets) // nothing to do
+			break;
 		float extra_read_packets = packets * fifo_multiplier;
 		packets += extra_read_packets;
 		uint16_t count = packets * PACKET_SIZE;

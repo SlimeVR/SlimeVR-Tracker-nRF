@@ -12,8 +12,18 @@
 static float accel_sensitivity = 16.0f / 32768.0f; // default 16g
 static float gyro_sensitivity = 2000.0f / 32768.0f; // default 2000dps
 
+static const uint16_t accel_ranges[] = {16, 8, 4, 2, 0};
+static const uint8_t accel_fss[] = {RANGE_16G, RANGE_8G, RANGE_4G, RANGE_2G};
+static const uint16_t gyro_ranges[] = {2000, 1000, 500, 250, 125, 0};
+static const uint8_t gyro_fss[] = {RANGE_2000, RANGE_1000, RANGE_500, RANGE_250, RANGE_125};
+
 static uint8_t accel_fs = RANGE_16G;
 static uint8_t gyro_fs = RANGE_2000;
+
+static const uint16_t accel_intervals[] = {1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 0};
+static const uint8_t accel_odrs[] = {ODR_1k6, ODR_800, ODR_400, ODR_200, ODR_100, ODR_50, ODR_25, ODR_12p5, ODR_6p25, ODR_3p1, ODR_1p5, ODR_0p78};
+static const uint16_t gyro_intervals[] = {1, 2, 4, 8, 16, 32, 64, 128, 0};
+static const uint8_t gyro_odrs[] = {ODR_3k2, ODR_1k6, ODR_800, ODR_400, ODR_200, ODR_100, ODR_50, ODR_25};
 
 static uint8_t last_accel_odr = 0xff;
 static uint8_t last_gyro_odr = 0xff;
@@ -58,46 +68,28 @@ void bmi_shutdown(void) // this does not reset the device, to avoid clearing the
 
 void bmi_update_fs(float accel_range, float gyro_range, float *accel_actual_range, float *gyro_actual_range)
 {
-	if (accel_range > 8)
+	if (accel_range < 0)
+		accel_range = 0;
+
+	if (gyro_range < 0)
+		gyro_range = 0;
+
+	for (int i = 1; i < ARRAY_SIZE(accel_ranges); i++)
 	{
-		accel_fs = RANGE_16G;
-		accel_range = 16;
-	}
-	else if (accel_range > 4)
-	{
-		accel_fs = RANGE_8G;
-		accel_range = 8;
-	}
-	else if (accel_range > 2)
-	{
-		accel_fs = RANGE_4G;
-		accel_range = 4;
-	}
-	else
-	{
-		accel_fs = RANGE_2G;
-		accel_range = 2;
+		if (accel_range <= accel_ranges[i])
+			continue;
+		accel_fs = accel_fss[i - 1];
+		accel_range = accel_ranges[i - 1];
+		break;
 	}
 
-	if (gyro_range > 1000)
+	for (int i = 1; i < ARRAY_SIZE(gyro_ranges); i++)
 	{
-		gyro_fs = RANGE_2000;
-		gyro_range = 2000;
-	}
-	else if (gyro_range > 500)
-	{
-		gyro_fs = RANGE_1000;
-		gyro_range = 1000;
-	}
-	else if (gyro_range > 250)
-	{
-		gyro_fs = RANGE_500;
-		gyro_range = 500;
-	}
-	else
-	{
-		gyro_fs = RANGE_250;
-		gyro_range = 250;
+		if (gyro_range <= gyro_ranges[i])
+			continue;
+		gyro_fs = gyro_fss[i - 1];
+		gyro_range = gyro_ranges[i - 1];
+		break;
 	}
 
 	accel_sensitivity = accel_range / 32768.0f;
@@ -109,132 +101,44 @@ void bmi_update_fs(float accel_range, float gyro_range, float *accel_actual_rang
 
 int bmi_update_odr(float accel_time, float gyro_time, float *accel_actual_time, float *gyro_actual_time)
 {
-	int ODR;
-	uint8_t acc_odr;
-	uint8_t gyr_odr;
+	int interval;
+	uint8_t acc_odr = 0;
+	uint8_t gyr_odr = 0;
 
 	// Calculate accel
 	if (accel_time <= 0 || accel_time == INFINITY) // off, standby interpreted as off
-		ODR = 0;
-	else
-		ODR = 1 / accel_time;
-
-	if (ODR == 0)
 	{
-		acc_odr = 0; // off
 		accel_time = 0; // off
 	}
-	else if (ODR > 800) // TODO: this is absolutely awful
-	{
-		acc_odr = ODR_1k6;
-		accel_time = 1.0 / 1600;
-	}
-	else if (ODR > 400)
-	{
-		acc_odr = ODR_800;
-		accel_time = 1.0 / 800;
-	}
-	else if (ODR > 200)
-	{
-		acc_odr = ODR_400;
-		accel_time = 1.0 / 400;
-	}
-	else if (ODR > 100)
-	{
-		acc_odr = ODR_200;
-		accel_time = 1.0 / 200;
-	}
-	else if (ODR > 50)
-	{
-		acc_odr = ODR_100;
-		accel_time = 1.0 / 100;
-	}
-	else if (ODR > 25)
-	{
-		acc_odr = ODR_50;
-		accel_time = 1.0 / 50;
-	}
-	else if (ODR > 12.5)
-	{
-		acc_odr = ODR_25;
-		accel_time = 1.0 / 25;
-	}
-	else if (ODR > 6.25)
-	{
-		acc_odr = ODR_12p5;
-		accel_time = 2.0 / 25;
-	}
-	else if (ODR > 3.125)
-	{
-		acc_odr = ODR_6p25;
-		accel_time = 4.0 / 25;
-	}
-	else if (ODR > 1.5625)
-	{
-		acc_odr = ODR_3p1;
-		accel_time = 8.0 / 25;
-	}
-	else if (ODR > 0.78125)
-	{
-		acc_odr = ODR_1p5;
-		accel_time = 16.0 / 25;
-	}
 	else
 	{
-		acc_odr = ODR_0p78;
-		accel_time = 32.0 / 25;
+		interval = accel_time * 1600;
+		for (int i = 1; i < ARRAY_SIZE(accel_intervals); i++)
+		{
+			if (accel_intervals[i] && interval >= accel_intervals[i])
+				continue;
+			acc_odr = accel_odrs[i - 1];
+			accel_time = accel_intervals[i - 1] / 1600.0f;
+			break;
+		}
 	}
 
 	// Calculate gyro
 	if (gyro_time <= 0 || gyro_time == INFINITY) // off, standby interpreted as off
-		ODR = 0;
-	else
-		ODR = 1 / gyro_time;
-
-	if (ODR == 0)
 	{
-		gyr_odr = 0; // off
 		gyro_time = 0; // off
 	}
-	else if (ODR > 1600) // TODO: this is absolutely awful
-	{
-		gyr_odr = ODR_3k2;
-		gyro_time = 1.0 / 3200;
-	}
-	else if (ODR > 800)
-	{
-		gyr_odr = ODR_1k6;
-		gyro_time = 1.0 / 1600;
-	}
-	else if (ODR > 400)
-	{
-		gyr_odr = ODR_800;
-		gyro_time = 1.0 / 800;
-	}
-	else if (ODR > 200)
-	{
-		gyr_odr = ODR_400;
-		gyro_time = 1.0 / 400;
-	}
-	else if (ODR > 100)
-	{
-		gyr_odr = ODR_200;
-		gyro_time = 1.0 / 200;
-	}
-	else if (ODR > 50)
-	{
-		gyr_odr = ODR_100;
-		gyro_time = 1.0 / 100;
-	}
-	else if (ODR > 25)
-	{
-		gyr_odr = ODR_50;
-		gyro_time = 1.0 / 50;
-	}
 	else
 	{
-		gyr_odr = ODR_25;
-		gyro_time = 1.0 / 25;
+		interval = gyro_time * 3200;
+		for (int i = 1; i < ARRAY_SIZE(gyro_intervals); i++)
+		{
+			if (gyro_intervals[i] && interval >= gyro_intervals[i])
+				continue;
+			gyr_odr = gyro_odrs[i - 1];
+			gyro_time = gyro_intervals[i - 1] / 3200.0f;
+			break;
+		}
 	}
 
 	if (last_accel_odr == acc_odr && last_gyro_odr == gyr_odr) // if both were already configured
@@ -270,6 +174,8 @@ uint16_t bmi_fifo_read(uint8_t *data, uint16_t len)
 		uint8_t rawCount[2];
 		err |= ssi_burst_read(SENSOR_INTERFACE_DEV_IMU, BMI270_FIFO_LENGTH_0, &rawCount[0], 2);
 		uint16_t count = (uint16_t)((rawCount[1] & 0x3F) << 8 | rawCount[0]); // Turn the 16 bits into a unsigned 16-bit value
+		if (!count) // nothing to do
+			break;
 		packets = count / PACKET_SIZE;
 		uint16_t limit = len / PACKET_SIZE;
 		if (packets > limit)
