@@ -14,7 +14,7 @@ static const float gyro_sensitivity = 2000.0f / 32768.0f; // Always 2000dps
 static const float accel_sensitivity_32 = 32.0f / ((uint32_t)2<<30); // 32G forced
 static const float gyro_sensitivity_32 = 4000.0f / ((uint32_t)2<<30); // 4000dps forced
 
-static const uint16_t times[] = {6400, 3200, 1600, 800, 400, 200, 100, 50, 25, 2, 0}; // calculated ODR from time is an integer..
+static const uint16_t intervals[] = {1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 0};
 static const uint8_t odrs[] = {ACCEL_ODR_6_4kHz, ACCEL_ODR_3_2kHz, ACCEL_ODR_1_6kHz, ACCEL_ODR_800Hz, ACCEL_ODR_400Hz, ACCEL_ODR_200Hz, ACCEL_ODR_100Hz, ACCEL_ODR_50Hz, ACCEL_ODR_25Hz, ACCEL_ODR_12_5Hz};
 
 static uint8_t last_accel_odr = 0xff;
@@ -95,7 +95,7 @@ void icm45_update_fs(float accel_range, float gyro_range, float *accel_actual_ra
 
 int icm45_update_odr(float accel_time, float gyro_time, float *accel_actual_time, float *gyro_actual_time)
 {
-	int ODR;
+	int interval;
 	uint8_t ACCEL_UI_FS_SEL = ACCEL_UI_FS_SEL_16G;
 	uint8_t GYRO_UI_FS_SEL = GYRO_UI_FS_SEL_2000DPS;
 	uint8_t ACCEL_MODE;
@@ -112,14 +112,13 @@ int icm45_update_odr(float accel_time, float gyro_time, float *accel_actual_time
 	else
 	{
 		ACCEL_MODE = ACCEL_MODE_LN;
-		ODR = 1 / accel_time;
-		ODR /= clock_scale; // scale clock
-		for (int i = 1; i < ARRAY_SIZE(times); i++)
+		interval = accel_time * clock_scale * 6400; // scale clock
+		for (int i = 1; i < ARRAY_SIZE(intervals); i++)
 		{
-			if (ODR <= (i > 9 ? times[i] / 25.0 : times[i]))
+			if (intervals[i] && interval >= intervals[i])
 				continue;
 			ACCEL_ODR = odrs[i - 1];
-			accel_time = i > 10 ? times[i - 1] / 25.0 : 1.0 / times[i - 1];
+			accel_time = intervals[i - 1] / 6400.0f;
 			break;
 		}
 	}
@@ -139,14 +138,13 @@ int icm45_update_odr(float accel_time, float gyro_time, float *accel_actual_time
 	else
 	{
 		GYRO_MODE = GYRO_MODE_LN;
-		ODR = 1 / gyro_time;
-		ODR /= clock_scale; // scale clock
-		for (int i = 1; i < ARRAY_SIZE(times); i++)
+		interval = gyro_time * clock_scale * 6400; // scale clock
+		for (int i = 1; i < ARRAY_SIZE(intervals); i++)
 		{
-			if (ODR <= (i > 9 ? times[i] / 25.0 : times[i]))
+			if (intervals[i] && interval >= intervals[i])
 				continue;
 			GYRO_ODR = odrs[i - 1];
-			gyro_time = i > 10 ? times[i - 1] / 25.0 : 1.0 / times[i - 1];
+			gyro_time = intervals[i - 1] / 6400.0f;
 			break;
 		}
 	}

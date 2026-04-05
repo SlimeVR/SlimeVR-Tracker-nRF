@@ -24,7 +24,7 @@ static const float gyro_sensitivity = 2000.0f / 32768.0f; // Always 2000dps
 static const float accel_sensitivity_32 = 16.0f / ((uint32_t)2<<30); // 16G forced
 static const float gyro_sensitivity_32 = 2000.0f / ((uint32_t)2<<30); // 2000dps forced
 
-static const uint16_t times[] = {32000, 16000, 8000, 4000, 2000, 1000, 500, 200, 100, 50, 25, 2, 0}; // calculated ODR from time is an integer..
+static const uint16_t intervals[] = {1, 2, 4, 8, 16, 32, 64, 160, 320, 640, 1280, 2560, 0};
 static const uint8_t odrs[] = {AODR_32kHz, AODR_16kHz, AODR_8kHz, AODR_4kHz, AODR_2kHz, AODR_1kHz, AODR_500Hz, AODR_200Hz, AODR_100Hz, AODR_50Hz, AODR_25Hz, AODR_12_5Hz}; // same binary
 
 static uint8_t last_accel_odr = 0xff;
@@ -90,7 +90,7 @@ void icm_update_fs(float accel_range, float gyro_range, float *accel_actual_rang
 
 int icm_update_odr(float accel_time, float gyro_time, float *accel_actual_time, float *gyro_actual_time)
 {
-	int ODR;
+	int interval;
 	uint8_t Ascale = AFS_16G; // set highest
 	uint8_t Gscale = GFS_2000DPS; // set highest
 	uint8_t aMode;
@@ -107,14 +107,13 @@ int icm_update_odr(float accel_time, float gyro_time, float *accel_actual_time, 
 	else
 	{
 		aMode = aMode_LN;
-		ODR = 1 / accel_time;
-		ODR /= clock_scale; // scale clock
-		for (int i = 1; i < ARRAY_SIZE(times); i++)
+		interval = accel_time * clock_scale * 32000; // scale clock
+		for (int i = 1; i < ARRAY_SIZE(intervals); i++)
 		{
-			if (ODR <= (i > 11 ? times[i] / 25.0 : times[i]))
+			if (intervals[i] && interval >= intervals[i])
 				continue;
 			AODR = odrs[i - 1];
-			accel_time = i > 12 ? times[i - 1] / 25.0 : 1.0 / times[i - 1];
+			accel_time = intervals[i - 1] / 32000.0f;
 			break;
 		}
 	}
@@ -134,14 +133,13 @@ int icm_update_odr(float accel_time, float gyro_time, float *accel_actual_time, 
 	else
 	{
 		gMode = gMode_LN;
-		ODR = 1 / gyro_time;
-		ODR /= clock_scale; // scale clock
-		for (int i = 1; i < ARRAY_SIZE(times); i++)
+		interval = gyro_time * clock_scale * 32000; // scale clock
+		for (int i = 1; i < ARRAY_SIZE(intervals); i++)
 		{
-			if (ODR <= (i > 11 ? times[i] / 25.0 : times[i]))
+			if (intervals[i] && interval >= intervals[i])
 				continue;
 			GODR = odrs[i - 1];
-			gyro_time = i > 12 ? times[i - 1] / 25.0 : 1.0 / times[i - 1];
+			accel_time = intervals[i - 1] / 32000.0f;
 			break;
 		}
 	}

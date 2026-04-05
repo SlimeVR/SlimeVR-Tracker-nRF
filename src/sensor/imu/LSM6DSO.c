@@ -9,8 +9,17 @@
 
 #define PACKET_SIZE 7
 
+static const uint16_t accel_ranges[] = {16, 8, 4, 2, 0};
+static const uint8_t accel_fss[] = {DSO_FS_XL_16G, DSO_FS_XL_8G, DSO_FS_XL_4G, DSO_FS_XL_2G};
+static const uint16_t gyro_ranges[] = {2000, 1000, 500, 250, 0};
+static const uint8_t gyro_fss[] = {DSO_FS_G_2000DPS, DSO_FS_G_1000DPS, DSO_FS_G_500DPS, DSO_FS_G_250DPS};
+
 static uint8_t accel_fs = DSO_FS_XL_16G;
 static uint8_t gyro_fs = DSO_FS_G_2000DPS;
+
+static const uint16_t intervals[] = {3, 6, 12, 24, 48, 96, 192, 384, 768, 1536, 0};
+static const uint8_t odrs[] = {DSO_ODR_6_66kHz, DSO_ODR_3_33kHz, DSO_ODR_1_66kHz, DSO_ODR_833Hz, DSO_ODR_416Hz, DSO_ODR_208Hz, DSO_ODR_104Hz, DSO_ODR_52Hz, DSO_ODR_26Hz, DSO_ODR_12_5Hz};
+// last ODR is 12.5Hz, but we check 13Hz -> 1536 / 20000
 
 static float freq_scale = 1; // ODR is scaled by INTERNAL_FREQ_FINE
 
@@ -37,46 +46,28 @@ int lsm6dso_init(float clock_rate, float accel_time, float gyro_time, float *acc
 
 void lsm6dso_update_fs(float accel_range, float gyro_range, float *accel_actual_range, float *gyro_actual_range)
 {
-	if (accel_range > 8)
+	if (accel_range < 0)
+		accel_range = 0;
+
+	if (gyro_range < 0)
+		gyro_range = 0;
+
+	for (int i = 1; i < ARRAY_SIZE(accel_ranges); i++)
 	{
-		accel_fs = DSO_FS_XL_16G;
-		accel_range = 16;
-	}
-	else if (accel_range > 4)
-	{
-		accel_fs = DSO_FS_XL_8G;
-		accel_range = 8;
-	}
-	else if (accel_range > 2)
-	{
-		accel_fs = DSO_FS_XL_4G;
-		accel_range = 4;
-	}
-	else
-	{
-		accel_fs = DSO_FS_XL_2G;
-		accel_range = 2;
+		if (accel_range <= accel_ranges[i])
+			continue;
+		accel_fs = accel_fss[i - 1];
+		accel_range = accel_ranges[i - 1];
+		break;
 	}
 
-	if (gyro_range > 1000)
+	for (int i = 1; i < ARRAY_SIZE(gyro_ranges); i++)
 	{
-		gyro_fs = DSO_FS_G_2000DPS;
-		gyro_range = 2000;
-	}
-	else if (gyro_range > 500)
-	{
-		gyro_fs = DSO_FS_G_1000DPS;
-		gyro_range = 1000;
-	}
-	else if (gyro_range > 250)
-	{
-		gyro_fs = DSO_FS_G_500DPS;
-		gyro_range = 500;
-	}
-	else
-	{
-		gyro_fs = DSO_FS_G_250DPS;
-		gyro_range = 250;
+		if (gyro_range <= gyro_ranges[i])
+			continue;
+		gyro_fs = gyro_fss[i - 1];
+		gyro_range = gyro_ranges[i - 1];
+		break;
 	}
 
 	accel_sensitivity = accel_range / 32768.0f;
@@ -88,11 +79,11 @@ void lsm6dso_update_fs(float accel_range, float gyro_range, float *accel_actual_
 
 int lsm6dso_update_odr(float accel_time, float gyro_time, float *accel_actual_time, float *gyro_actual_time)
 {
-	int ODR;
+	int interval;
 	uint8_t OP_MODE_XL;
 	uint8_t OP_MODE_G;
-	uint8_t ODR_XL;
-	uint8_t ODR_G;
+	uint8_t ODR_XL = 0;
+	uint8_t ODR_G = 0;
 	uint8_t GYRO_SLEEP = DSO_OP_MODE_G_AWAKE;
 
 	// Calculate accel
@@ -101,70 +92,21 @@ int lsm6dso_update_odr(float accel_time, float gyro_time, float *accel_actual_ti
 		// set High perf mode and off odr on XL
 		OP_MODE_XL = DSO_OP_MODE_XL_HP;
 		ODR_XL = DSO_ODR_OFF;
-		ODR = 0;
+		accel_time = 0; // off
 	}
 	else
 	{
 		// set High perf mode and select odr on XL
 		OP_MODE_XL = DSO_OP_MODE_XL_HP;
-		ODR = 1 / accel_time;
-		ODR /= freq_scale; // scale by internal freq adjustment
-	}
-
-	if (ODR == 0)
-	{
-		accel_time = 0; // off
-		ODR_XL = DSO_ODR_OFF;
-	}
-	else if (accel_time < 0.3f / 1000) // in this case it seems better to compare accel_time
-	{
-		ODR_XL = DSO_ODR_6_66kHz; // TODO: this is absolutely awful
-		accel_time = 0.15 / 1000;
-	}
-	else if (accel_time < 0.6f / 1000)
-	{
-		ODR_XL = DSO_ODR_3_33kHz;
-		accel_time = 0.3 / 1000;
-	}
-	else if (accel_time < 1.2f / 1000)
-	{
-		ODR_XL = DSO_ODR_1_66kHz;
-		accel_time = 0.6 / 1000;
-	}
-	else if (accel_time < 2.4f / 1000)
-	{
-		ODR_XL = DSO_ODR_833Hz;
-		accel_time = 1.2 / 1000;
-	}
-	else if (accel_time < 4.8f / 1000)
-	{
-		ODR_XL = DSO_ODR_416Hz;
-		accel_time = 2.4 / 1000;
-	}
-	else if (accel_time < 9.6f / 1000)
-	{
-		ODR_XL = DSO_ODR_208Hz;
-		accel_time = 4.8 / 1000;
-	}
-	else if (accel_time < 19.2f / 1000)
-	{
-		ODR_XL = DSO_ODR_104Hz;
-		accel_time = 9.6 / 1000;
-	}
-	else if (accel_time < 38.4f / 1000)
-	{
-		ODR_XL = DSO_ODR_52Hz;
-		accel_time = 19.2 / 1000;
-	}
-	else if (ODR > 12.5)
-	{
-		ODR_XL = DSO_ODR_26Hz;
-		accel_time = 38.4 / 1000;
-	}
-	else
-	{
-		ODR_XL = DSO_ODR_12_5Hz;
-		accel_time = 1.0 / 12.5; // 13Hz -> 76.8 / 1000
+		interval = accel_time * freq_scale * 20000; // scale by internal freq adjustment
+		for (int i = 1; i < ARRAY_SIZE(intervals); i++)
+		{
+			if (intervals[i] && interval >= intervals[i])
+				continue;
+			ODR_XL = odrs[i - 1];
+			accel_time = intervals[i - 1] / 20000.0f;
+			break;
+		}
 	}
 	accel_time /= freq_scale; // scale by internal freq adjustment
 
@@ -173,77 +115,27 @@ int lsm6dso_update_odr(float accel_time, float gyro_time, float *accel_actual_ti
 	{
 		OP_MODE_G = DSO_OP_MODE_G_HP;
 		ODR_G = DSO_ODR_OFF;
-		ODR = 0;
+		gyro_time = 0; // off
 	}
 	else if (gyro_time == INFINITY) // sleep
 	{
 		OP_MODE_G = DSO_OP_MODE_G_NP;
 		GYRO_SLEEP = DSO_OP_MODE_G_SLEEP;
 		ODR_G = last_gyro_odr; // using last ODR
-		ODR = 0;
+		gyro_time = 0; // off
 	}
 	else
 	{
 		OP_MODE_G = DSO_OP_MODE_G_HP;
-		ODR_G = 0; // the compiler complains unless I do this
-		ODR = 1 / gyro_time;
-		ODR /= freq_scale; // scale by internal freq adjustment
-	}
-
-	if (ODR == 0)
-	{
-		gyro_time = 0; // off
-		ODR_G = DSO_ODR_OFF;
-	}
-	else if (gyro_time < 0.3f / 1000) // in this case it seems better to compare gyro_time
-	{
-		ODR_G = DSO_ODR_6_66kHz; // TODO: this is absolutely awful
-		gyro_time = 1.0 / 6660;
-	}
-	else if (gyro_time < 0.6f / 1000)
-	{
-		ODR_G = DSO_ODR_3_33kHz;
-		gyro_time = 0.3 / 1000;
-	}
-	else if (gyro_time < 1.2f / 1000)
-	{
-		ODR_G = DSO_ODR_1_66kHz;
-		gyro_time = 0.6 / 1000;
-	}
-	else if (gyro_time < 2.4f / 1000)
-	{
-		ODR_G = DSO_ODR_833Hz;
-		gyro_time = 1.2 / 1000;
-	}
-	else if (gyro_time < 4.8f / 1000)
-	{
-		ODR_G = DSO_ODR_416Hz;
-		gyro_time = 2.4 / 1000;
-	}
-	else if (gyro_time < 9.6f / 1000)
-	{
-		ODR_G = DSO_ODR_208Hz;
-		gyro_time = 4.8 / 1000;
-	}
-	else if (gyro_time < 19.2f / 1000)
-	{
-		ODR_G = DSO_ODR_104Hz;
-		gyro_time = 9.6 / 1000;
-	}
-	else if (gyro_time < 38.4f / 1000)
-	{
-		ODR_G = DSO_ODR_52Hz;
-		gyro_time = 19.2 / 1000;
-	}
-	else if (ODR > 12.5)
-	{
-		ODR_G = DSO_ODR_26Hz;
-		gyro_time = 38.4 / 1000;
-	}
-	else
-	{
-		ODR_G = DSO_ODR_12_5Hz;
-		gyro_time = 1.0 / 12.5; // 13Hz -> 76.8 / 1000
+		interval = gyro_time * freq_scale * 20000; // scale by internal freq adjustment
+		for (int i = 1; i < ARRAY_SIZE(intervals); i++)
+		{
+			if (intervals[i] && interval >= intervals[i])
+				continue;
+			ODR_G = odrs[i - 1];
+			gyro_time = intervals[i - 1] / 20000.0f;
+			break;
+		}
 	}
 	gyro_time /= freq_scale; // scale by internal freq adjustment
 
