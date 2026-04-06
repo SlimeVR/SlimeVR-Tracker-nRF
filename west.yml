@@ -6,5 +6,5 @@ manifest:
     - name: sdk-nrf
       path: nrf
       url: https://github.com/SlimeVR/sdk-nrf.git
-      revision: slime-esb
+      revision: v3.2-slimevr
       import: true
