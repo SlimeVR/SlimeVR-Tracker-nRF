@@ -1,0 +1,10 @@
+bootloader:
+  address: 0x0
+  end_address: 0x1000
+  region: flash_primary
+  size: 0x1000
+uf2_bootloader:
+  address: 0xf4000
+  end_address: 0x100000
+  region: flash_primary
+  size: 0xc000

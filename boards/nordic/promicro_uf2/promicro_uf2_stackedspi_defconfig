@@ -1,0 +1,15 @@
+# Copyright (c) 2024 Nordic Semiconductor ASA
+# SPDX-License-Identifier: Apache-2.0
+
+CONFIG_ARM_MPU=y
+CONFIG_HW_STACK_PROTECTION=y
+
+CONFIG_USB_DEVICE_STACK=y
+CONFIG_USB_DEVICE_MANUFACTURER="SlimeVR"
+CONFIG_USB_DEVICE_PRODUCT="SlimeNRF Tracker ProMicro"
+
+CONFIG_BATTERY_USE_REG_LDO_MAPPING=y
+
+#generate for adafruit uf2 bootloader flashing
+CONFIG_BUILD_OUTPUT_UF2=y
+CONFIG_FLASH_LOAD_OFFSET=0x1000
