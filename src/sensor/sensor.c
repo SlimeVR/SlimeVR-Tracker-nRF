@@ -1070,7 +1070,7 @@ void sensor_loop(void)
 			last_status_time = k_uptime_get();
 			if (max_loop_time > 0)
 			{
-				LOG_WRN("Last update steps took up to %lld ms", time_delta);
+				LOG_WRN("Last update steps took up to %lld ms", max_loop_time);
 				max_loop_time = 0;
 			}
 #if DEBUG
