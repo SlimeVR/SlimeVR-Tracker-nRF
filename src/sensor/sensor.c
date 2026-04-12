@@ -947,9 +947,8 @@ void sensor_loop(void)
 				total_processed_packets += processed_packets;
 #endif
 
-			if (mag_available && mag_enabled && !memcmp(raw_m, last_m, sizeof(last_m))) // check data has changed from last acquisition
+			if (mag_available && mag_enabled && memcmp(raw_m, last_m, sizeof(last_m))) // check data has changed from last acquisition
 			{
-				LOG_INF("new sample at %lld", k_uptime_get());
 				bool mag_calibrated = true;
 				memcpy(last_m, raw_m, sizeof(last_m)); // copy raw magnetometer data
 				sensor_calibration_process_mag(raw_m);
@@ -1080,9 +1079,9 @@ void sensor_loop(void)
 				main_wfi = false;
 			}
 		}
-		else // if signal was sent during processing, loop immediately to catch up
+		else // if signal was sent during processing, loop immediately to catch up (I2C could cause this to happen constantly)
 		{
-			LOG_INF("FIFO THS/WM/WTM triggered during loop");
+			LOG_DBG("FIFO THS/WM/WTM triggered during loop");
 			k_yield();
 			main_wfi = false;
 		}
