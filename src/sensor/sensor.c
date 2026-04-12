@@ -79,16 +79,13 @@ static float last_q[4] = {1.0f, 0.0f, 0.0f, 0.0f}; // vector to hold quaternion
 static float q3[4] = {SENSOR_QUATERNION_CORRECTION}; // correction quaternion
 
 static float last_lin_a[3] = {0}; // vector to hold last linear accelerometer
+static float last_m[3] = {0};
 
 static float temp; // sensor temperature
 static int64_t last_temp_time = -1000;
 
 static int64_t last_suspend_attempt_time = 0;
 static int64_t last_data_time;
-
-static float max_gyro_speed_square;
-static bool mag_use_oneshot;
-static bool mag_skip_oneshot;
 
 static float accel_actual_time;
 static float gyro_actual_time;
@@ -680,9 +677,9 @@ int sensor_init(void)
 	mag_enabled = CONFIG_1_SETTINGS_READ(CONFIG_1_SENSOR_USE_MAG);
 
 	// setup sensor, set ODR
-	float accel_initial_time = 1.0 / CONFIG_2_SETTINGS_READ(CONFIG_2_SENSOR_ACCEL_ODR); // configure with ~1000Hz ODR
-	float gyro_initial_time = 1.0 / CONFIG_2_SETTINGS_READ(CONFIG_2_SENSOR_GYRO_ODR); // configure with ~1000Hz ODR
-	float mag_initial_time = sensor_update_time_ms / 1000.0; // configure with ~200Hz ODR
+	float accel_initial_time = 1.0 / CONFIG_2_SETTINGS_READ(CONFIG_2_SENSOR_ACCEL_ODR);
+	float gyro_initial_time = 1.0 / CONFIG_2_SETTINGS_READ(CONFIG_2_SENSOR_GYRO_ODR);
+	float mag_initial_time = 0.1; // configure with 10Hz ODR
 	err = sensor_imu->init(clock_actual_rate, accel_initial_time, gyro_initial_time, &accel_actual_time, &gyro_actual_time);
 	sensor_actual_time = MIN(accel_actual_time, gyro_actual_time);
 #if SENSOR_IMU_SPI_EXISTS
@@ -697,7 +694,7 @@ int sensor_init(void)
 	{
 		// TODO: need to flag passthrough enabled
 //			sensor_imu->ext_passthrough(true); // reenable passthrough
-		err = sensor_mag->init(mag_initial_time, &mag_actual_time); // configure with ~200Hz ODR
+		err = sensor_mag->init(mag_initial_time, &mag_actual_time);
 #if SENSOR_MAG_SPI_EXISTS
 		LOG_INF("Requested SPI frequency: %.2fMHz", (double)sensor_mag_spi_dev.config.frequency / 1000000.0);
 #endif
@@ -724,7 +721,7 @@ int sensor_init(void)
 	}
 	else
 	{
-		sensor_fusion->init(gyro_actual_time, accel_actual_time, mag_initial_time); // TODO: using initial time since mag are not polled at the actual rate
+		sensor_fusion->init(gyro_actual_time, accel_actual_time, mag_actual_time);
 	}
 
 	sensor_calibration_update_sensor_ids(sensor_imu_id);
@@ -815,11 +812,6 @@ void sensor_loop(void)
 			// Fusing data will take between 100us (~7 samples, low noise) - 500us (~33 samples, low power) for xiofusion
 			// TODO: on any errors set main_ok false and skip (make functions return nonzero)
 
-			// At high speed, use oneshot mode to have synced magnetometer data
-			// Call before FIFO and get the data after
-			if (mag_available && mag_enabled && mag_use_oneshot)
-				sensor_mag->mag_oneshot();
-
 			// Read IMU temperature
 			err = sensor_imu->temp_read(&temp); // TODO: use as calibration data
 			if (!err)
@@ -885,7 +877,6 @@ void sensor_loop(void)
 			int g_count = 0;
 			float a_sum[3] = {0};
 			int a_count = 0;
-			max_gyro_speed_square = 0;
 			int processed_packets = 0;
 			for (uint16_t i = 0; i < packets; i++)
 			{
@@ -919,11 +910,6 @@ void sensor_loop(void)
 						sensor_fusion->get_gyro_bias(g_off);
 						for (int i = 0; i < 3; i++)
 							g_off[i] = g[i] - g_off[i];
-
-						// Get the highest gyro speed
-						float gyro_speed_square = g_off[0] * g_off[0] + g_off[1] * g_off[1] + g_off[2] * g_off[2];
-						if (gyro_speed_square > max_gyro_speed_square)
-							max_gyro_speed_square = gyro_speed_square;
 					}
 				}
 
@@ -961,16 +947,16 @@ void sensor_loop(void)
 				total_processed_packets += processed_packets;
 #endif
 
-			if (mag_available && mag_enabled)
+			if (mag_available && mag_enabled && !memcmp(raw_m, last_m, sizeof(last_m))) // check data has changed from last acquisition
 			{
+				LOG_INF("new sample at %lld", k_uptime_get());
 				bool mag_calibrated = true;
-				float uncalibrated_m[3] = {0};
-				memcpy(uncalibrated_m, raw_m, sizeof(uncalibrated_m)); // copy raw magnetometer data
+				memcpy(last_m, raw_m, sizeof(last_m)); // copy raw magnetometer data
 				sensor_calibration_process_mag(raw_m);
 				float zero_m[3] = {0};
 				if (v_epsilon(raw_m, zero_m, 1e-6)) // if the magnetometer is not calibrated, skip and send raw data
 				{
-					memcpy(raw_m, uncalibrated_m, sizeof(uncalibrated_m));
+					memcpy(raw_m, last_m, sizeof(last_m));
 					mag_calibrated = false;
 				}
 				float mx = raw_m[0];
@@ -980,7 +966,7 @@ void sensor_loop(void)
 
 				// Process fusion
 				if (mag_calibrated)
-					sensor_fusion->update_mag(m, sensor_update_time_ms / 1000.0); // TODO: use actual time?
+					sensor_fusion->update_mag(m, mag_actual_time);
 
 				v_rotate(m, q3, m); // magnetic field in local device frame, no other transformation will be done
 				connection_update_sensor_mag(m);
@@ -1034,43 +1020,6 @@ void sensor_loop(void)
 				a_to_lin_a(q, a, lin_a);
 
 			sensor_update_sensor_state();
-
-			// Update magnetometer mode
-			if (mag_available && mag_enabled)
-			{
-				// TODO: magnetometer might be better to limit to a lower (fixed) rate
-				float gyro_speed = sqrtf(max_gyro_speed_square);
-				float mag_target_time = 1.0f / (4 * gyro_speed); // target mag ODR for ~0.25 deg error
-				if (mag_target_time < 0.005f && mag_skip_oneshot) // only use continuous modes if oneshot is not available
-					mag_target_time = 0.005;
-				if (mag_target_time > 0.1f) // limit to 0.1 (minimum 10Hz)
-					mag_target_time = 0.1;
-				sys_interface_resume();
-				if (mag_target_time < 0.005f) // cap at 0.005 (200Hz), above this the sensor will use oneshot mode instead
-				{
-					int err = sensor_mag->update_odr(INFINITY, &mag_actual_time);
-					if (mag_actual_time == INFINITY)
-					{
-						if (!err)
-							LOG_DBG("Switching magnetometer to oneshot");
-						mag_use_oneshot = true;
-					}
-					else // magnetometer did not have a oneshot mode, try 200Hz
-					{
-						if (!err)
-							mag_skip_oneshot = true;
-						mag_target_time = 0.005;
-					}
-				}
-				if (mag_target_time >= 0.005f || mag_actual_time != INFINITY) // under 200Hz or magnetometer did not have a oneshot mode
-				{
-					int err = sensor_mag->update_odr(mag_target_time, &mag_actual_time);
-					if (!err)
-						LOG_DBG("Switching magnetometer ODR to %.2fHz", 1.0 / (double)mag_actual_time);
-					mag_use_oneshot = false;
-				}
-				sys_interface_suspend();
-			}
 
 			// Update orientation
 			bool send_quat_data = !q_epsilon(q, last_q, 0.001);
