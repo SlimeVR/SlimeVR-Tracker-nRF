@@ -79,7 +79,10 @@ static float last_q[4] = {1.0f, 0.0f, 0.0f, 0.0f}; // vector to hold quaternion
 static float q3[4] = {SENSOR_QUATERNION_CORRECTION}; // correction quaternion
 
 static float last_lin_a[3] = {0}; // vector to hold last linear accelerometer
+
 static float last_m[3] = {0};
+static int64_t last_mag_time = -1000;
+static int64_t mag_interval = 0;
 
 static float temp; // sensor temperature
 static int64_t last_temp_time = -1000;
@@ -695,6 +698,7 @@ int sensor_init(void)
 		// TODO: need to flag passthrough enabled
 //			sensor_imu->ext_passthrough(true); // reenable passthrough
 		err = sensor_mag->init(mag_initial_time, &mag_actual_time);
+		mag_interval = mag_actual_time * 0.9f * 1000; // start attemping magnetometer reads before expected new sample
 #if SENSOR_MAG_SPI_EXISTS
 		LOG_INF("Requested SPI frequency: %.2fMHz", (double)sensor_mag_spi_dev.config.frequency / 1000000.0);
 #endif
@@ -775,6 +779,7 @@ static uint64_t total_read_packets = 0;
 static uint64_t total_processed_packets = 0;
 static uint64_t total_gyro_samples = 0;
 static uint64_t total_accel_samples = 0;
+static uint64_t total_mag_samples = 0;
 static uint64_t total_loop_time = 0;
 static uint64_t total_loop_iterations = 0;
 #endif
@@ -845,8 +850,12 @@ void sensor_loop(void)
 
 			// Read magnetometer
 			float raw_m[3];
-			if (mag_available && mag_enabled)
+			bool mag_read = false;
+			if (mag_available && mag_enabled && (k_uptime_get() - last_mag_time > mag_interval)) // some magnetometer do not have int pin // TODO: implement for magnetometer that does, or read status byte
+			{
+				mag_read = true;
 				sensor_mag->mag_read(raw_m); // reading mag last, and it will be processed last
+			}
 
 			int16_t last_sensor_fifo_threshold = sensor_fifo_threshold;
 
@@ -947,8 +956,12 @@ void sensor_loop(void)
 				total_processed_packets += processed_packets;
 #endif
 
-			if (mag_available && mag_enabled && memcmp(raw_m, last_m, sizeof(last_m))) // check data has changed from last acquisition
+			if (mag_available && mag_enabled && mag_read && memcmp(raw_m, last_m, sizeof(last_m))) // check data has changed from last acquisition
 			{
+#if DEBUG
+				total_mag_samples++;
+#endif
+				last_mag_time = k_uptime_get();
 				bool mag_calibrated = true;
 				memcpy(last_m, raw_m, sizeof(last_m)); // copy raw magnetometer data
 				sensor_calibration_process_mag(raw_m);
@@ -1061,9 +1074,9 @@ void sensor_loop(void)
 				max_loop_time = 0;
 			}
 #if DEBUG
-			LOG_DBG("loop iterations: %llu, packets read: %llu, processed: %llu, gyro samples: %llu, accel samples: %llu, total acquisition time: %lld us, total loop time: %lld us", total_loop_iterations, total_read_packets, total_processed_packets, total_gyro_samples, total_accel_samples, k_ticks_to_us_near64(total_acquisition_time), k_ticks_to_us_near64(total_loop_time));
+			LOG_DBG("loop iterations: %llu, packets read: %llu, processed: %llu, gyro samples: %llu, accel samples: %llu, mag samples: %llu, total acquisition time: %lld us, total loop time: %lld us", total_loop_iterations, total_read_packets, total_processed_packets, total_gyro_samples, total_accel_samples, total_mag_samples, k_ticks_to_us_near64(total_acquisition_time), k_ticks_to_us_near64(total_loop_time));
 			LOG_DBG("sensor loop rate: %.2fHz, processing time: %.2f/%.2f us -> %.2f%%", (double)total_loop_iterations / (double)k_ticks_to_us_near64(total_acquisition_time) * 1000000.0, (double)k_ticks_to_us_near64(total_loop_time) / (double)total_loop_iterations, (double)k_ticks_to_us_near64(total_acquisition_time) / (double)total_loop_iterations, (double)total_loop_time / (double)total_acquisition_time * 100.0);
-			LOG_DBG("reported gyro rate: %.2fHz, actual: %.2fHz, reported accel rate: %.2fHz, actual: %.2fHz", 1.0 / (double)gyro_actual_time, (double)total_gyro_samples / (double)k_ticks_to_us_near64(total_acquisition_time) * 1000000.0, 1.0 / (double)accel_actual_time, (double)total_accel_samples / (double)k_ticks_to_us_near64(total_acquisition_time) * 1000000.0);
+			LOG_DBG("reported gyro rate: %.2fHz, actual: %.2fHz, reported accel rate: %.2fHz, actual: %.2fHz, reported mag rate: %.2fHz, actual: %.2fHz", 1.0 / (double)gyro_actual_time, (double)total_gyro_samples / (double)k_ticks_to_us_near64(total_acquisition_time) * 1000000.0, 1.0 / (double)accel_actual_time, (double)total_accel_samples / (double)k_ticks_to_us_near64(total_acquisition_time) * 1000000.0, 1.0 / (double)mag_actual_time, (double)total_mag_samples / (double)k_ticks_to_us_near64(total_acquisition_time) * 1000000.0);
 #endif
 		}
 
