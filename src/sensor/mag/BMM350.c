@@ -59,18 +59,16 @@ LOG_MODULE_REGISTER(BMM350, LOG_LEVEL_DBG);
 
 int bmm3_init(float time, float *actual_time)
 {
-	int err = ssi_reg_write_byte(SENSOR_INTERFACE_DEV_MAG, BMM350_OTP_CMD_REG, 0x80); // PWR_OFF_OTP
-	if (err)
-		LOG_ERR("Communication error");
 	last_odr = 0xff; // reset last odr
-	err |= bmm3_update_odr(time, actual_time);
+	int err = bmm3_update_odr(time, actual_time);
 	return (err < 0 ? err : 0);
 }
 
 void bmm3_shutdown(void)
 {
 	last_odr = 0xff; // reset last odr
-	int err = ssi_reg_write_byte(SENSOR_INTERFACE_DEV_MAG, BMM350_CMD, 0xB6);
+	int err = ssi_reg_write_byte(SENSOR_INTERFACE_DEV_MAG, BMM350_OTP_CMD_REG, 0x80); // PWR_OFF_OTP
+	err |= ssi_reg_write_byte(SENSOR_INTERFACE_DEV_MAG, BMM350_PMU_CMD, PMU_CMD_SUS); // enter suspend (amogus,)
 	if (err)
 		LOG_ERR("Communication error");
 }
@@ -188,20 +186,20 @@ void bmm3_mag_read(float m[3])
 	uint8_t status;
 	while ((status & 0x01) == 0x01) // wait for forced mode to complete
 		err |= ssi_reg_read_byte(SENSOR_INTERFACE_DEV_MAG, BMM350_PMU_CMD_STATUS_0, &status);
-	uint8_t rawData[9];
-	err |= ssi_burst_read(SENSOR_INTERFACE_DEV_MAG, BMM350_MAG_X_XLSB, &rawData[0], 9);
+	uint8_t rawData[11];
+	err |= ssi_burst_read(SENSOR_INTERFACE_DEV_MAG, BMM350_MAG_X_XLSB, &rawData[0], 11); // two dummy bytes on read
 	if (err)
 		LOG_ERR("Communication error");
-	bmm3_mag_process(rawData, m);
+	bmm3_mag_process(rawData + 2, m);
 }
 
 float bmm3_temp_read(float bias[3])
 {
-	uint8_t rawTemp[3];
-	int err = ssi_burst_read(SENSOR_INTERFACE_DEV_MAG, BMM350_TEMP_XLSB, &rawTemp[0], 3);
+	uint8_t rawTemp[5];
+	int err = ssi_burst_read(SENSOR_INTERFACE_DEV_MAG, BMM350_TEMP_XLSB, &rawTemp[0], 5); // two dummy bytes on read
 	if (err)
 		LOG_ERR("Communication error");
-	float temp = (int32_t)((((int32_t)rawTemp[2]) << 24) | (((int32_t)rawTemp[1]) << 16) | (((int32_t)rawTemp[0]) << 8)) / 256;
+	float temp = (int32_t)((((int32_t)rawTemp[4]) << 24) | (((int32_t)rawTemp[3]) << 16) | (((int32_t)rawTemp[2]) << 8)) / 256;
 	temp *= sensitivity_temp;
 	// taken from boschsensortec BMM350_SensorAPI, why is this needed?
 	if (temp > 0)
