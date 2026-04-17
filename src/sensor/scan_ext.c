@@ -65,6 +65,7 @@ int sensor_scan_ext(const sensor_ext_ssi_t *ext_ssi, uint16_t *ext_dev_addr, uin
 				uint8_t reg = dev_reg[reg_index + k];
 				if (*ext_dev_reg == 0xFF || *ext_dev_reg == reg)
 				{
+					int err;
 					uint8_t id;
 					LOG_DBG("Scanning register: 0x%02X", reg);
 					if (reg == 0x40 && addr >= 0x10 && addr <= 0x13) // edge case for BMM150
@@ -75,7 +76,16 @@ int sensor_scan_ext(const sensor_ext_ssi_t *ext_ssi, uint16_t *ext_dev_addr, uin
 						LOG_DBG("Power up BMM150");
 						k_msleep(2); // BMM150 start-up
 					}
-					int err = ext_ssi->ext_write_read(addr, &reg, 1, &id, 1);
+					if (reg == 0x00 && addr >= 0x14 && addr <= 0x17) // edge case for BMM350
+					{
+						uint8_t buf[3];
+						err = ext_ssi->ext_write_read(addr, &reg, 1, buf, 3); // BMM350 has two dummy bytes on read
+						id = buf[2];
+					}
+					else
+					{
+						err = ext_ssi->ext_write_read(addr, &reg, 1, &id, 1);
+					}
 					LOG_DBG("Read value: 0x%02X", id);
 					if (err)
 						break;
