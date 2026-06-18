@@ -67,16 +67,16 @@ static int64_t oneshot_trigger_time = 0;
 
 LOG_MODULE_REGISTER(QMC6309, LOG_LEVEL_INF);
 
-int qmc_init(float time, float *actual_time)
+int qmc6309_init(float time, float *actual_time)
 {
 	last_state = 0xff; // init state
 	lastOvfl = false;
 	oneshot_trigger_time = 0;
-	int err = qmc_update_odr(time, actual_time);
+	int err = qmc6309_update_odr(time, actual_time);
 	return (err < 0 ? err : 0);
 }
 
-void qmc_shutdown(void)
+void qmc6309_shutdown(void)
 {
 	int err = ssi_reg_write_byte(SENSOR_INTERFACE_DEV_MAG, QMC6309_CTRL_REG_2, SOFT_RESET_MASK);
 	err |= ssi_reg_write_byte(SENSOR_INTERFACE_DEV_MAG, QMC6309_CTRL_REG_2, SOFT_RESET_CLEAR);
@@ -84,7 +84,7 @@ void qmc_shutdown(void)
 		LOG_ERR("Communication error");
 }
 
-int qmc_update_odr(float time, float *actual_time)
+int qmc6309_update_odr(float time, float *actual_time)
 {
 	int ODR;
 	uint8_t MODR;
@@ -148,7 +148,7 @@ int qmc_update_odr(float time, float *actual_time)
 	return err;
 }
 
-void qmc_mag_oneshot(void)
+void qmc6309_mag_oneshot(void)
 {
 	int err = ssi_reg_write_byte(SENSOR_INTERFACE_DEV_MAG, QMC6309_CTRL_REG_1, LPF_MASK(LPF_2) | OSR_MASK(OSR_8) | MD_SINGLE);
 	oneshot_trigger_time = k_uptime_get();
@@ -156,7 +156,7 @@ void qmc_mag_oneshot(void)
 		LOG_ERR("Communication error");
 }
 
-void qmc_mag_read(float m[3])
+void qmc6309_mag_read(float m[3])
 {
 	int err = 0;
 	uint8_t status = 0; // Always check DRDY
@@ -188,10 +188,10 @@ void qmc_mag_read(float m[3])
 	err |= ssi_burst_read(SENSOR_INTERFACE_DEV_MAG, QMC6309_OUTX_L_REG, rawData, 6);
 	if (err)
 		LOG_ERR("Communication error");
-	qmc_mag_process(rawData, m);
+	qmc6309_mag_process(rawData, m);
 }
 
-void qmc_mag_process(uint8_t *raw_m, float m[3])
+void qmc6309_mag_process(uint8_t *raw_m, float m[3])
 {
 	for (int i = 0; i < 3; i++) // x, y, z
 	{
@@ -201,15 +201,15 @@ void qmc_mag_process(uint8_t *raw_m, float m[3])
 }
 
 const sensor_mag_t sensor_mag_qmc6309 = {
-	*qmc_init,
-	*qmc_shutdown,
+	*qmc6309_init,
+	*qmc6309_shutdown,
 
-	*qmc_update_odr,
+	*qmc6309_update_odr,
 
-	*qmc_mag_oneshot,
-	*qmc_mag_read,
+	*qmc6309_mag_oneshot,
+	*qmc6309_mag_read,
 	*mag_none_temp_read,
 
-	*qmc_mag_process,
+	*qmc6309_mag_process,
 	6, 6
 };
