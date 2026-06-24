@@ -84,7 +84,10 @@ static const struct device *gpio_dev = DEVICE_DT_GET(DT_NODELABEL(gpio0));
 int sys_get_die_temperature(float *ptr)
 {
 	if (k_uptime_get() - last_temp_time > 1000)
+	{
+		*ptr = 25.0f; // fallback
 		return -1;
+	}
 	sensor_channel_get(temp_dev, SENSOR_CHAN_DIE_TEMP, &temp);
 	*ptr = sensor_value_to_float(&temp);
 	return 0;
