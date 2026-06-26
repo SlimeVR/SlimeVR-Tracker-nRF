@@ -512,7 +512,7 @@ void connection_thread(void)
 			connection_clocks_request_stop();
 		}
 		sleep = true;
-		k_msleep(MIN(MIN(MIN(last_info_time + 100, last_info2_time + 100), last_status_time + 1000), last_status2_time + 1000) - k_uptime_get()); // will be woken up if sending immediately
+		k_msleep(MAX(1, MIN(MIN(MIN(last_info_time + 100, last_info2_time + 100), last_status_time + 1000), last_status2_time + 1000) - k_uptime_get())); // will be woken up if sending immediately
 		sleep = false;
 	}
 }
