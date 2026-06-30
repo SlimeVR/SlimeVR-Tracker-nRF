@@ -38,6 +38,7 @@ int icm45_init(float clock_rate, float accel_time, float gyro_time, float *accel
 	else
 		fifo_multiplier_factor = FIFO_MULT; // I2C mode
 	int err = 0;
+
 	if (clock_rate > 0)
 	{
 		clock_scale = clock_rate / clock_reference;
@@ -50,18 +51,19 @@ int icm45_init(float clock_rate, float accel_time, float gyro_time, float *accel
 	ireg_buf[1] = ICM45686_IPREG_BAR_REG_58;
 	ireg_buf[2] = 0xD9 & ~0x48; // disable internal pull resistors for AP pins (pin 13, 12)
 	err |= ssi_burst_write(SENSOR_INTERFACE_DEV_IMU, ICM45686_IREG_ADDR_15_8, ireg_buf, 3); // write buffer
+	k_usleep(4); // Wait 4uS after writing IREG, as per datasheet
 	ireg_buf[1] = ICM45686_IPREG_BAR_REG_59;
 	ireg_buf[2] = 0xB6 & ~0x92; // disable internal pull resistors for AP pins (pin 7, 1, 14)
 	err |= ssi_burst_write(SENSOR_INTERFACE_DEV_IMU, ICM45686_IREG_ADDR_15_8, ireg_buf, 3); // write buffer
+	k_usleep(4); // Wait 4uS after writing IREG, as per datasheet
 	ireg_buf[0] = ICM45686_IPREG_TOP1; // address is a word, icm is big endian
 	ireg_buf[1] = ICM45686_SREG_CTRL;
 	ireg_buf[2] = 0x02; // set big endian
 	err |= ssi_burst_write(SENSOR_INTERFACE_DEV_IMU, ICM45686_IREG_ADDR_15_8, ireg_buf, 3); // write buffer
+	k_usleep(4); // Wait 4uS after writing IREG, as per datasheet
 	last_accel_odr = 0xff; // reset last odr
 	last_gyro_odr = 0xff; // reset last odr
 	err |= icm45_update_odr(accel_time, gyro_time, accel_actual_time, gyro_actual_time);
-//	k_msleep(50); // 10ms Accel, 30ms Gyro startup
-	k_msleep(1); // fuck i dont wanna wait that long
 	err |= ssi_reg_write_byte(SENSOR_INTERFACE_DEV_IMU, ICM45686_FIFO_CONFIG0, 0x80 | 0b000111); // set FIFO stop-on-full mode, set FIFO depth to 2K bytes (see AN-000364)
 	err |= ssi_reg_write_byte(SENSOR_INTERFACE_DEV_IMU, ICM45686_FIFO_CONFIG3, 0x0F); // begin FIFO stream, hires, a+g
 	if (err)
@@ -73,9 +75,7 @@ void icm45_shutdown(void)
 {
 	last_accel_odr = 0xff; // reset last odr
 	last_gyro_odr = 0xff; // reset last odr
-	int err = ssi_reg_write_byte(SENSOR_INTERFACE_DEV_IMU, ICM45686_REG_MISC2, 0x02); // Don't need to wait for ICM to finish reset
-//	k_msleep(1);
-	// TODO: not working
+	int err = ssi_reg_write_byte(SENSOR_INTERFACE_DEV_IMU, ICM45686_REG_MISC2, 0x02);
 //	uint8_t ireg_buf[3];
 //	ireg_buf[1] = ICM45686_IPREG_BAR_REG_60;
 //	ireg_buf[2] = 0x6D & ~0x05; // set internal pull down resistors for AP pins (pin 10, 7)
@@ -83,6 +83,21 @@ void icm45_shutdown(void)
 //	ireg_buf[1] = ICM45686_IPREG_BAR_REG_61;
 //	ireg_buf[2] = 0xBB & ~0x10; // set internal pull down resistors for AP pins (pin 11)
 //	err |= ssi_burst_write(SENSOR_INTERFACE_DEV_IMU, ICM45686_IREG_ADDR_15_8, ireg_buf, 3); // write buffer
+	// Wait to finish reset
+	uint8_t rst_state;
+	while(true) {
+		err |= ssi_reg_read_byte(SENSOR_INTERFACE_DEV_IMU, ICM45686_INT1_STATUS0, &rst_state);
+		if (err) {
+			LOG_ERR("Communication error when reading reset state");
+			break;
+		}
+		if((rst_state & 0x80) != 0x80) {
+			k_usleep(10);
+			LOG_DBG("IMU reset is pending (0x%02x), waiting...", rst_state);
+		} else {
+			break;
+		}
+	}
 	if (err)
 		LOG_ERR("Communication error");
 }
