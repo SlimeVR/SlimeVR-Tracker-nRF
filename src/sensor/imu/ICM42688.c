@@ -77,9 +77,11 @@ void icm_shutdown(void)
 {
 	last_accel_odr = 0xff; // reset last odr
 	last_gyro_odr = 0xff; // reset last odr
-	int err = ssi_reg_write_byte(SENSOR_INTERFACE_DEV_IMU, ICM42688_DEVICE_CONFIG, 0x01); // Don't need to wait for ICM to finish reset
+	int err = ssi_reg_write_byte(SENSOR_INTERFACE_DEV_IMU, ICM42688_DEVICE_CONFIG, 0x01);
 	if (err)
 		LOG_ERR("Communication error");
+	// TODO : Correctly wait for the reset to finish
+	k_msleep(1);
 }
 
 void icm_update_fs(float accel_range, float gyro_range, float *accel_actual_range, float *gyro_actual_range)

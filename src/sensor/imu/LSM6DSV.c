@@ -61,6 +61,8 @@ void lsm_shutdown(void)
 	int err = ssi_reg_write_byte(SENSOR_INTERFACE_DEV_IMU, LSM6DSV_CTRL3, 0x01); // SW_RESET
 	if (err)
 		LOG_ERR("Communication error");
+	// TODO : Correctly wait for the reset to finish
+	k_msleep(1);
 }
 
 void lsm_update_fs(float accel_range, float gyro_range, float *accel_actual_range, float *gyro_actual_range)

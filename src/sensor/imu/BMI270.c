@@ -64,6 +64,8 @@ void bmi_shutdown(void) // this does not reset the device, to avoid clearing the
 	err |= ssi_reg_write_byte(SENSOR_INTERFACE_DEV_IMU, BMI270_PWR_CONF, 0x01); // enable adv_power_save (suspend)
 	if (err)
 		LOG_ERR("Communication error");
+	// TODO : Correctly wait for the reset to finish
+	k_msleep(1);
 }
 
 void bmi_update_fs(float accel_range, float gyro_range, float *accel_actual_range, float *gyro_actual_range)
