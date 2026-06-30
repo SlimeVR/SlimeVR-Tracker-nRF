@@ -168,6 +168,14 @@ void event_handler(struct esb_evt const *event)
 					LOG_INF("Control packet %d received", rx_payload.data[1]);
 				}
 			}
+			if (rx_payload.data[0] == ESB_COMMAND_PREAMBLE) {
+				switch (rx_payload.data[1]) {
+					case ESB_PACKET_COMMAND_SHUTDOWN:
+						LOG_INF("Shutdown command received");
+						sys_request_system_off(false);
+						break;
+				}
+			}
 		}
 		break;
 	}
@@ -503,6 +511,10 @@ void esb_write(uint8_t *data, uint8_t packet_sequnce)
 {
 	if (!esb_initialized || !esb_paired)
 		return;
+
+	esb_deinitialize();
+    esb_initialize(true);
+
 	if (!clock_status)
 		clocks_start();
 	last_packet_sequence = packet_sequnce;
@@ -520,9 +532,16 @@ void esb_write(uint8_t *data, uint8_t packet_sequnce)
 	while(!tdma_is_our_window())
 		k_sleep(Z_TIMEOUT_TICKS(1)); // Spin wait?
 	tdma_tx_started();
-	esb_start_tx();
+	//esb_start_tx();
 	packets_sent++;
 	send_data = true;
+
+	while(!esb_is_idle()) {
+        k_usleep(10);
+    }
+
+	//esb_deinitialize();
+    //esb_initialize(false);
 }
 
 bool esb_ready(void)
@@ -550,7 +569,8 @@ static void esb_thread(void)
 				LOG_WRN("Pairing timeout");
 				sys_request_system_off(false);
 			} else {
-				esb_initialize(true);
+				esb_initialize(false);
+				esb_start_rx();
 			}
 		}
 		if (tx_errors >= TX_ERROR_THRESHOLD)
