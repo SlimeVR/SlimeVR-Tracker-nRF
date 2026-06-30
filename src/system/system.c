@@ -81,6 +81,10 @@ static const struct pwm_dt_spec clk_out = {0};
 static const struct device *gpio_dev = DEVICE_DT_GET(DT_NODELABEL(gpio0));
 #endif
 
+/**
+ * @param ptr current chip die temperature
+ * @return int - 0 if success, -1 if the temperature is not available yet
+ */
 int sys_get_die_temperature(float *ptr)
 {
 	if (k_uptime_get() - last_temp_time > 1000)

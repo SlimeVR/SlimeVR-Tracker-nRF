@@ -167,6 +167,11 @@ const char *sensor_get_sensor_fusion_name(void)
 	return fusion_names[fusion_id];
 }
 
+/**
+ * @param ptr last read sensor temperature
+ * @return int - 0 if success, -1 if there is IMU errors fetching the temperature or it's too early,
+ * -2 if there is no IMU connected
+ */
 int sensor_get_sensor_temperature(float *ptr)
 {
 	if (sensor_imu == &sensor_imu_none || (k_uptime_get() - last_temp_time > 1000))
@@ -654,19 +659,18 @@ static void sensor_update_sensor_state(void)
 int sensor_init(void)
 {
 	int err;
+	LOG_INF("Sensor init, shutdown first");
+	// TODO : Do not reset sensor if we just WOM'ed
 	// TODO: on any errors set main_ok false and skip (make functions return nonzero)
 	if (mag_available) // shutdown magnetometer first (in case of passthrough)
-		sensor_mag->shutdown(); // TODO: is this needed?
-	sensor_imu->shutdown(); // TODO: is this needed?
+		sensor_mag->shutdown();
+	sensor_imu->shutdown();
 
 	float clock_actual_rate = 0;
 	if (CONFIG_1_SETTINGS_READ(CONFIG_1_USE_SENSOR_CLOCK))
 		set_sensor_clock(true, 32768, &clock_actual_rate); // enable the clock source for IMU if present
 	if (clock_actual_rate != 0)
 		LOG_INF("Sensor clock rate: %.2fHz", (double)clock_actual_rate);
-
-	// wait for sensor register reset // TODO: is this needed?
-	k_usleep(250);
 
 	// set FS/range
 	float accel_range = CONFIG_2_SETTINGS_READ(CONFIG_2_SENSOR_ACCEL_FS);
