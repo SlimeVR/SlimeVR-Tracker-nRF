@@ -168,9 +168,10 @@ void event_handler(struct esb_evt const *event)
 						// 	LOG_WRN("Our: %d, packet: %d, dongle's: %d, diff: %d, roundtrip: %d (was slot %d), clock 0x%08x", time, packet_time, received_time, diff, roundtrip_time, tdma_get_slot(packet_time), nrf_clock_lf_src_get(NRF_CLOCK));
 						break;
 				default:
-					LOG_INF("Control packet %d received", rx_payload.data[2]);
+					LOG_INF("Control packet %d received", rx_payload.data[1]);
 				}
 			}
+			/*
 			if (rx_payload.data[0] == ESB_COMMAND_PREAMBLE) {
 				switch (rx_payload.data[1]) {
 					case ESB_PACKET_COMMAND_SHUTDOWN:
@@ -179,6 +180,7 @@ void event_handler(struct esb_evt const *event)
 						break;
 				}
 			}
+				*/
 		}
 		break;
 	}
@@ -534,8 +536,7 @@ void esb_write(uint8_t *data, uint8_t packet_sequnce)
 	while(!tdma_is_our_window())
 		k_sleep(Z_TIMEOUT_TICKS(1)); // Spin wait?
 	tdma_tx_started();
-	esb_start_tx();
-	last_packet_sequence = packet_sequnce;
+	//esb_start_tx();
 	packets_sent++;
 	send_data = true;
 

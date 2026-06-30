@@ -59,9 +59,10 @@ extern uint32_t led_clock_offset;
 		.data = { 0 }                     \
 	}
 
+/*
 #define ESB_PACKET_COMMAND_SHUTDOWN 1
 #define ESB_PACKET_COMMAND_UNPAIR 2
-
+*/
 void event_handler(struct esb_evt const *event);
 int clocks_start(void);
 void clocks_stop(void);
