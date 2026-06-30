@@ -147,7 +147,7 @@ void event_handler(struct esb_evt const *event)
 					case ESB_PACKET_CONTROL_WINDOW_INFO: // Window Info (5)
 						uint8_t packet_number = rx_payload.data[7];
 						if(packet_number != last_packet_sequence) {
-							LOG_ERR("Window Info (5) packet number missmatch %d != %d", packet_number, last_packet_sequence);
+							LOG_WRN("Window Info (5) packet number missmatch %d != %d", packet_number, last_packet_sequence);
 							break;
 						}
 						int32_t time = tdma_get_time();
