@@ -30,7 +30,7 @@
 #define LAST_RESET_LIMIT 10
 extern uint8_t last_reset;
 // TODO: move to esb/timer
-//extern const nrfx_timer_t m_timer;
+// extern const nrfx_timer_t m_timer;
 extern bool esb_state;
 extern bool timer_state;
 extern bool send_data;
@@ -38,15 +38,26 @@ extern bool send_data;
 extern uint16_t led_clock;
 extern uint32_t led_clock_offset;
 
-#define ESB_CONTROL_PREAMBLE 0xCD
-#define ESB_TEST_PREAMBLE 0xCF
+#define ESB_PACKET_MAX_SIZE 17
+#define ESB_PACKET_DATA_LEGACY_SIZE 16
+
+#define ESB_PACKET_BROADCAST 255
+#define ESB_PACKET_DONGLE_PACKETS 200
+#define ESB_PACKET_CONTROL_PACKETS 230
 #define ESB_COMMAND_PREAMBLE 0xCE
 
-#define ESB_PACKET_CONTROL_PAIR_REQEST 1
-#define ESB_PACKET_CONTROL_PAIR_ACCEPT 2
-#define ESB_PACKET_CONTROL_DONGLE_STATUS 3
-#define ESB_PACKET_CONTROL_NO_WINDOWS 4
-#define ESB_PACKET_CONTROL_WINDOW_INFO 5
+#define ESB_PACKET_CONTROL_PAIR_REQEST 231
+#define ESB_PACKET_CONTROL_PAIR_ACCEPT 232
+#define ESB_PACKET_CONTROL_DONGLE_STATUS 233
+#define ESB_PACKET_CONTROL_NO_WINDOWS 234
+#define ESB_PACKET_CONTROL_WINDOW_INFO 235
+
+#define ESB_EMPTY_PAYLOAD(_pipe, _length) \
+	{                                     \
+		.pipe = _pipe,                    \
+		.length = _length,                \
+		.data = { 0 }                     \
+	}
 
 #define ESB_PACKET_COMMAND_SHUTDOWN 1
 #define ESB_PACKET_COMMAND_UNPAIR 2
@@ -84,9 +95,9 @@ bool esb_ready(void);
  * 72, 73, 74, 75, 76, 77, 78: 2472MHz to 2478Mhz - BT channels 33, 34, 35, 36 outside WiFi channels
  * 82, 83: 2482Mhz to 2483Mhz - outside of used WiFi and BT spectrums
  * Higher channels can be restricted by country.
- * 
+ *
  * TODO : Make a list of allowed channels by country
- * 
+ *
  * WARNING: Using nearby channels can lead to overlap, i.e. packets sent to Channel 20
  * can be received by a device tuned to Channel 21, so it's recommended to
  * ONLY USE EVEN CHANNELS
