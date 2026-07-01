@@ -517,7 +517,6 @@ void esb_write(uint8_t *data, uint8_t packet_sequnce)
 
 	if (!clock_status)
 		clocks_start();
-	last_packet_sequence = packet_sequnce;
 	tx_payload.pipe = 1; // using base address 1
 #if defined(NRF54L15_XXAA) // TODO: esb halts with ack and tx fail
 	tx_payload.noack = true;
@@ -532,7 +531,8 @@ void esb_write(uint8_t *data, uint8_t packet_sequnce)
 	while(!tdma_is_our_window())
 		k_sleep(Z_TIMEOUT_TICKS(1)); // Spin wait?
 	tdma_tx_started();
-	//esb_start_tx();
+	esb_start_tx();
+	last_packet_sequence = packet_sequnce;
 	packets_sent++;
 	send_data = true;
 
