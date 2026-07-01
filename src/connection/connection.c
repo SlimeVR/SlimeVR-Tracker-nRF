@@ -36,9 +36,11 @@ static uint8_t tracker_id, batt, batt_v, sensor_temp, imu_id, mag_id, tracker_st
 static uint8_t tracker_svr_status = SVR_STATUS_OK;
 static float sensor_q[4], sensor_a[3], sensor_m[3];
 
-static uint8_t data_buffer[21] = {0};
+static uint8_t data_buffer[ESB_PACKET_MAX_SIZE - 1] = {0};
+static uint8_t data_buffer_position = 0;
 static int64_t last_data_time = 0;
 static uint8_t packet_sequence = 0;
+static bool allow_packet_bundling = false; // Can only be used with new server
 
 LOG_MODULE_REGISTER(connection, LOG_LEVEL_INF);
 
@@ -182,6 +184,33 @@ void connection_set_shutdown(void)
 	shutdown = true;
 }
 
+void data_buffer_write(uint8_t* data, size_t size) {
+	if(data_buffer_position + size > sizeof(data_buffer)) {
+		LOG_ERR("ESB data buffer overflow. Writing %d, have space for %d", size, sizeof(data_buffer) - data_buffer_position);
+		return;
+	}
+	memcpy(data_buffer + data_buffer_position, data, size);
+	data_buffer_position += size;
+	last_data_time = k_uptime_get(); // TODO: use ticks
+	if (sleep)
+		k_wakeup(connection_thread_id);
+	hid_write_packet_n(data); // TODO:
+}
+
+void data_buffer_reset() {
+	data_buffer_position = 0;
+}
+
+bool can_send_packet(size_t size) {
+	if(data_buffer_position + size > sizeof(data_buffer)) {
+		return false;
+	}
+	if(data_buffer_position != 0 && !allow_packet_bundling) {
+		return false;
+	}
+	return true;
+}
+
 //|type    |priority|motion  |precise |interval|description
 //|TX     0|       4|        |        |     100|device info ("info")
 //|TX     1|       3|*       |*       |       -|full precision quat and accel
@@ -226,11 +255,7 @@ void connection_write_packet_0() // device info
 	data[13] = FW_VERSION_MINOR & 255; // fw_minor
 	data[14] = FW_VERSION_PATCH & 255; // fw_patch
 	data[15] = 0; // rssi (supplied by receiver)
-	memcpy(data_buffer, data, sizeof(data));
-	last_data_time = k_uptime_get(); // TODO: use ticks
-	if (sleep)
-		k_wakeup(connection_thread_id);
-	hid_write_packet_n(data); // TODO:
+	data_buffer_write(data, sizeof(data));
 }
 
 void connection_write_packet_1() // full precision quat and accel
@@ -246,11 +271,7 @@ void connection_write_packet_1() // full precision quat and accel
 	buf[4] = TO_FIXED_7(sensor_a[0]); // range is ±256m/s² or ±26.1g
 	buf[5] = TO_FIXED_7(sensor_a[1]);
 	buf[6] = TO_FIXED_7(sensor_a[2]);
-	memcpy(data_buffer, data, sizeof(data));
-	last_data_time = k_uptime_get(); // TODO: use ticks
-	if (sleep)
-		k_wakeup(connection_thread_id);
-	hid_write_packet_n(data); // TODO:
+	data_buffer_write(data, sizeof(data));
 }
 
 void connection_write_packet_2() // reduced precision quat and accel with battery, temp, and rssi
@@ -282,11 +303,7 @@ void connection_write_packet_2() // reduced precision quat and accel with batter
 	buf[1] = TO_FIXED_7(sensor_a[1]);
 	buf[2] = TO_FIXED_7(sensor_a[2]);
 	data[15] = 0; // rssi (supplied by receiver)
-	memcpy(data_buffer, data, sizeof(data));
-	last_data_time = k_uptime_get(); // TODO: use ticks
-	if (sleep)
-		k_wakeup(connection_thread_id);
-	hid_write_packet_n(data); // TODO:
+	data_buffer_write(data, sizeof(data));
 }
 
 void connection_write_packet_3() // status
@@ -307,11 +324,7 @@ void connection_write_packet_3() // status
 	// data[11] - average rssi (received by the tracker)
 	// data[11] - repeat packets (filled by dongle)
 	data[15] = 0; // rssi (supplied by receiver)
-	memcpy(data_buffer, data, sizeof(data));
-	last_data_time = k_uptime_get(); // TODO: use ticks
-	if (sleep)
-		k_wakeup(connection_thread_id);
-	hid_write_packet_n(data); // TODO:
+	data_buffer_write(data, sizeof(data));
 }
 
 void connection_write_packet_4() // full precision quat and magnetometer
@@ -327,11 +340,7 @@ void connection_write_packet_4() // full precision quat and magnetometer
 	buf[4] = TO_FIXED_10(sensor_m[0]); // range is ±32G
 	buf[5] = TO_FIXED_10(sensor_m[1]);
 	buf[6] = TO_FIXED_10(sensor_m[2]);
-	memcpy(data_buffer, data, sizeof(data));
-	last_data_time = k_uptime_get(); // TODO: use ticks
-	if (sleep)
-		k_wakeup(connection_thread_id);
-	hid_write_packet_n(data); // TODO:
+	data_buffer_write(data, sizeof(data));
 }
 
 void connection_write_packet_5() // runtime
@@ -344,11 +353,7 @@ void connection_write_packet_5() // runtime
 		*buf = k_ticks_to_us_floor64(sys_get_battery_remaining_time_estimate());
 	else
 		*buf = -1; // no valid reading yet, but previous estimate may still be valid
-	memcpy(data_buffer, data, sizeof(data));
-	last_data_time = k_uptime_get(); // TODO: use ticks
-	if (sleep)
-		k_wakeup(connection_thread_id);
-	hid_write_packet_n(data); // TODO:
+	data_buffer_write(data, sizeof(data));
 }
 
 void connection_write_packet_6() // reduced precision quat and accel with button and sleep time
@@ -370,11 +375,7 @@ void connection_write_packet_6() // reduced precision quat and accel with button
 		tracker_button = 0;
 		button_update_time = 0;
 	}
-	memcpy(data_buffer, data, sizeof(data));
-	last_data_time = k_uptime_get(); // TODO: use ticks
-	if (sleep)
-		k_wakeup(connection_thread_id);
-	hid_write_packet_n(data); // TODO:
+	data_buffer_write(data, sizeof(data));
 }
 
 void connection_write_packet_7() // button and sleep time
@@ -407,11 +408,7 @@ void connection_write_packet_7() // button and sleep time
 		tracker_button = 0;
 		button_update_time = 0;
 	}
-	memcpy(data_buffer, data, sizeof(data));
-	last_data_time = k_uptime_get(); // TODO: use ticks
-	if (sleep)
-		k_wakeup(connection_thread_id);
-	hid_write_packet_n(data); // TODO:
+	data_buffer_write(data, sizeof(data));
 }
 
 // TODO: get radio channel from receiver
@@ -431,15 +428,16 @@ static int64_t last_status2_time = 0;
 
 void connection_thread(void)
 {
-	uint8_t data_copy[17];
+	uint8_t data_copy[ESB_PACKET_MAX_SIZE];
 	// TODO: checking for connection_update events from sensor_loop, here we will time and send them out
 	while (1)
 	{
 		if (last_data_time != 0) // have valid data
 		{
 			last_data_time = 0;
-			memcpy(data_copy, data_buffer, sizeof(data_copy));
-			data_copy[16] = packet_sequence++;
+			data_copy[0] = packet_sequence++;
+			memcpy(data_copy + 1, data_buffer, sizeof(data_buffer));
+			data_buffer_reset();
 			esb_write(data_copy, packet_sequence - 1);
 		}
 		// Didn't send status in 2 seconds, prioritize it

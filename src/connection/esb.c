@@ -50,10 +50,8 @@ int64_t last_tx_fail = 0;
 uint8_t last_packet_sequence = 0;
 
 static struct esb_payload rx_payload;
-static struct esb_payload tx_payload = ESB_CREATE_PAYLOAD(0,
-														  0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
-static struct esb_payload tx_payload_pair = ESB_CREATE_PAYLOAD(0,
-														  0, 0, 0, 0, 0, 0, 0, 0);
+static struct esb_payload tx_payload = ESB_EMPTY_PAYLOAD(0, ESB_PACKET_MAX_SIZE);
+static struct esb_payload tx_payload_pair = ESB_EMPTY_PAYLOAD(0, 8);
 
 /*
 base_addr_p0: Base address for pipe 0, in big endian.
@@ -62,7 +60,7 @@ pipe_prefixes: Address prefix for pipe 0 to 7.
 This was randomly generated
 */
 static const uint8_t discovery_base_addr_0[4] = {0x62, 0x39, 0x8A, 0xF2};
-static const uint8_t discovery_base_addr_1[4] = {0x28, 0xFF, 0x50, 0xB8}; // Not used
+static const uint8_t discovery_base_addr_1[4] = {0x00, 0x00, 0x00, 0x00}; // Not used
 static const uint8_t discovery_addr_prefix[8] = {0xFE, 0xFF, 0x29, 0x27, 0x09, 0x02, 0xB2, 0xD6};
 
 static uint8_t base_addr_0[4], base_addr_1[4], addr_prefix[8] = {0};
@@ -138,14 +136,19 @@ void event_handler(struct esb_evt const *event)
 				return;
 			}
 
-			if(rx_payload.data[0] == ESB_CONTROL_PREAMBLE) {
+			if(rx_payload.length < 2) {
+				LOG_ERR("Too short packet received");
+				return;
+			}
+			
+			uint8_t packet_number = rx_payload.data[0];
+			if(rx_payload.data[1] > ESB_PACKET_CONTROL_PACKETS) {
 				// Control packet received
 				switch(rx_payload.data[1]) {
 					case ESB_PACKET_CONTROL_NO_WINDOWS: // No Windows (4)
 						// TODO Enter error state and show LED to the user
 						break;
 					case ESB_PACKET_CONTROL_WINDOW_INFO: // Window Info (5)
-						uint8_t packet_number = rx_payload.data[7];
 						if(packet_number != last_packet_sequence) {
 							LOG_WRN("Window Info (5) packet number missmatch %d != %d", packet_number, last_packet_sequence);
 							break;
@@ -165,7 +168,7 @@ void event_handler(struct esb_evt const *event)
 						// 	LOG_WRN("Our: %d, packet: %d, dongle's: %d, diff: %d, roundtrip: %d (was slot %d), clock 0x%08x", time, packet_time, received_time, diff, roundtrip_time, tdma_get_slot(packet_time), nrf_clock_lf_src_get(NRF_CLOCK));
 						break;
 				default:
-					LOG_INF("Control packet %d received", rx_payload.data[1]);
+					LOG_INF("Control packet %d received", rx_payload.data[2]);
 				}
 			}
 		}
@@ -295,7 +298,7 @@ int esb_initialize(bool tx)
 		config.retransmit_delay = 435;
 		config.retransmit_count = 1;
 		config.tx_mode = ESB_TXMODE_MANUAL;
-		config.payload_length = 32;
+		config.payload_length = CONFIG_ESB_MAX_PAYLOAD_LENGTH;
 		config.selective_auto_ack = true;
 		// config.use_fast_ramp_up = false;
 	}
@@ -310,7 +313,7 @@ int esb_initialize(bool tx)
 		config.retransmit_delay = 435;
 		config.retransmit_count = 0;
 		// config.tx_mode = ESB_TXMODE_AUTO;
-		config.payload_length = 32;
+		config.payload_length = CONFIG_ESB_MAX_PAYLOAD_LENGTH;
 		config.selective_auto_ack = true;
 		// config.use_fast_ramp_up = false;
 	}
