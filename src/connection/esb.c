@@ -29,6 +29,8 @@
 #include <hal/nrf_clock.h>
 #endif /* defined(NRF54L15_XXAA) */
 #include <zephyr/sys/crc.h>
+#include <zephyr/sys/poweroff.h>
+#include <zephyr/logging/log_ctrl.h>
 
 #include "esb.h"
 #include "tdma.h"
@@ -118,6 +120,7 @@ void event_handler(struct esb_evt const *event)
 		LOG_DBG("RX");
 		int err = 0;
 		while (!err) // zero, rx success
+
 		{
 			err = esb_read_rx_payload(&rx_payload);
 			if (err == -ENODATA) {
@@ -136,7 +139,7 @@ void event_handler(struct esb_evt const *event)
 				return;
 			}
 
-			if(rx_payload.length < 2) {
+			if(rx_payload.length < 1) {
 				LOG_ERR("Too short packet received");
 				return;
 			}
@@ -169,21 +172,34 @@ void event_handler(struct esb_evt const *event)
 						break;
 				default:
 					LOG_INF("Control packet %d received", rx_payload.data[1]);
+					break;
 				}
 			}
-			/*
-			if (rx_payload.data[0] == ESB_COMMAND_PREAMBLE) {
-				switch (rx_payload.data[1]) {
+			// Command packets have id 150-199
+			if ((rx_payload.data[1] > ESB_PACKET_COMMAND_PACKETS) && (rx_payload.data[1] < ESB_PACKET_CONTROL_PACKETS)) {
+				LOG_INF("Command packet received");
+				switch(rx_payload.data[1]) {
 					case ESB_PACKET_COMMAND_SHUTDOWN:
 						LOG_INF("Shutdown command received");
-						sys_request_system_off(false);
+						log_flush();
+						sys_poweroff();
+						break;
+
+					case ESB_PACKET_COMMAND_UNPAIR:
+						LOG_INF("Unpair command received");
+						break;
+					default:
+						LOG_INF("Command packet %d received", rx_payload.data[1]);
 						break;
 				}
 			}
-				*/
+		}
+		if (err) {
+			LOG_INF("Error occured in event");
 		}
 		break;
 	}
+
 }
 
 void fill_packets_stat(uint8_t *data) {
@@ -516,10 +532,6 @@ void esb_write(uint8_t *data, uint8_t packet_sequnce)
 {
 	if (!esb_initialized || !esb_paired)
 		return;
-
-	esb_deinitialize();
-    esb_initialize(true);
-
 	if (!clock_status)
 		clocks_start();
 	tx_payload.pipe = 1; // using base address 1
@@ -536,16 +548,10 @@ void esb_write(uint8_t *data, uint8_t packet_sequnce)
 	while(!tdma_is_our_window())
 		k_sleep(Z_TIMEOUT_TICKS(1)); // Spin wait?
 	tdma_tx_started();
-	//esb_start_tx();
+	esb_start_tx();
+	last_packet_sequence = packet_sequnce;
 	packets_sent++;
 	send_data = true;
-
-	while(!esb_is_idle()) {
-        k_usleep(10);
-    }
-
-	//esb_deinitialize();
-    //esb_initialize(false);
 }
 
 bool esb_ready(void)
@@ -565,7 +571,7 @@ static void esb_thread(void)
 	clocks_start();
 	clock_init_external();
 
-	while (1)
+while (1)
 	{
 		if (!esb_paired && (!use_hid || paired_addr[0] || (!get_status(SYS_STATUS_USB_CONNECTED) && k_uptime_get() - 750 > start_time))) // only automatically enter pairing while not potentially communicating by usb, however allow esb if already paired
 		{
@@ -573,8 +579,7 @@ static void esb_thread(void)
 				LOG_WRN("Pairing timeout");
 				sys_request_system_off(false);
 			} else {
-				esb_initialize(false);
-				esb_start_rx();
+				esb_initialize(true);
 			}
 		}
 		if (tx_errors >= TX_ERROR_THRESHOLD)
