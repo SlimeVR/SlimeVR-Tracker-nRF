@@ -123,14 +123,17 @@ void event_handler(struct esb_evt const *event)
 
 		{
 			err = esb_read_rx_payload(&rx_payload);
-			if (err == -ENODATA) {
+			if (err == -ENODATA)
+			{
 				return;
-			} else if (err) {
+			}
+			else if (err)
+			{
 				LOG_ERR("Error while reading rx packet: %d", err);
 				return;
 			}
 			packets_received++;
-			packets_rssi += (uint8_t) rx_payload.rssi;
+			packets_rssi += (uint8_t)rx_payload.rssi;
 			if (!paired_addr[0] && rx_payload.length == 8 && rx_payload.pipe == 0) // not paired
 			{
 				LOG_INF("tx: %16llX rx: %16llX", *(uint64_t *)tx_payload_pair.data, *(uint64_t *)rx_payload.data);
@@ -139,70 +142,81 @@ void event_handler(struct esb_evt const *event)
 				return;
 			}
 
-			if(rx_payload.length < 1) {
+			if (rx_payload.length < 1)
+			{
 				LOG_ERR("Too short packet received");
 				return;
 			}
-			
-			uint8_t packet_number = rx_payload.data[0];
-			if(rx_payload.data[1] > ESB_PACKET_CONTROL_PACKETS) {
-				// Control packet received
-				switch(rx_payload.data[1]) {
-					case ESB_PACKET_CONTROL_NO_WINDOWS: // No Windows (4)
-						// TODO Enter error state and show LED to the user
-						break;
-					case ESB_PACKET_CONTROL_WINDOW_INFO: // Window Info (5)
-						if(packet_number != last_packet_sequence) {
-							LOG_WRN("Window Info (5) packet number missmatch %d != %d", packet_number, last_packet_sequence);
-							break;
-						}
-						int32_t time = tdma_get_time();
-						int32_t packet_time = tdma_get_packet_time();
-						uint8_t window = rx_payload.data[2];
-						tdma_set_our_window(window);
-						int32_t received_time = *((uint32_t *) &rx_payload.data[3]);
-						
-						// See NTP algorithm
-						int32_t diff = ((received_time - packet_time) + (received_time - time)) / 2;
-						// int32_t roundtrip_time = time - packet_time;
 
-						tdma_update_timer_offset(diff);
-						// if(ABS(diff) != 0) 
-						// 	LOG_WRN("Our: %d, packet: %d, dongle's: %d, diff: %d, roundtrip: %d (was slot %d), clock 0x%08x", time, packet_time, received_time, diff, roundtrip_time, tdma_get_slot(packet_time), nrf_clock_lf_src_get(NRF_CLOCK));
+			uint8_t packet_number = rx_payload.data[0];
+			if (rx_payload.data[1] > ESB_PACKET_CONTROL_PACKETS)
+			{
+				// Control packet received
+				switch (rx_payload.data[1])
+				{
+				case ESB_PACKET_CONTROL_NO_WINDOWS: // No Windows (4)
+					// TODO Enter error state and show LED to the user
+					break;
+				case ESB_PACKET_CONTROL_WINDOW_INFO: // Window Info (5)
+					if (packet_number != last_packet_sequence)
+					{
+						LOG_WRN("Window Info (5) packet number missmatch %d != %d", packet_number, last_packet_sequence);
 						break;
+					}
+					int32_t time = tdma_get_time();
+					int32_t packet_time = tdma_get_packet_time();
+					uint8_t window = rx_payload.data[2];
+					tdma_set_our_window(window);
+					int32_t received_time = *((uint32_t *)&rx_payload.data[3]);
+
+					// See NTP algorithm
+					int32_t diff = ((received_time - packet_time) + (received_time - time)) / 2;
+					// int32_t roundtrip_time = time - packet_time;
+
+					tdma_update_timer_offset(diff);
+					// if(ABS(diff) != 0)
+					// 	LOG_WRN("Our: %d, packet: %d, dongle's: %d, diff: %d, roundtrip: %d (was slot %d), clock 0x%08x", time, packet_time, received_time, diff, roundtrip_time, tdma_get_slot(packet_time), nrf_clock_lf_src_get(NRF_CLOCK));
+					break;
 				default:
 					LOG_INF("Control packet %d received", rx_payload.data[1]);
 					break;
 				}
 			}
 			// Command packets have id 150-199
-			if ((rx_payload.data[1] > ESB_PACKET_COMMAND_PACKETS) && (rx_payload.data[1] < ESB_PACKET_CONTROL_PACKETS)) {
+			if ((rx_payload.data[1] > ESB_PACKET_COMMAND_PACKETS) && (rx_payload.data[1] < ESB_PACKET_CONTROL_PACKETS))
+			{
 				LOG_INF("Command packet received");
-				switch(rx_payload.data[1]) {
-					case ESB_PACKET_COMMAND_SHUTDOWN:
-						LOG_INF("Shutdown command received");
-						log_flush();
-						sys_poweroff();
-						break;
+				switch (rx_payload.data[1])
+				{
+				case ESB_PACKET_COMMAND_SHUTDOWN:
+					LOG_INF("Shutdown command received");
+					connection_set_shutdown();
+					set_led(SYS_LED_PATTERN_ONESHOT_POWEROFF, SYS_LED_PRIORITY_USER);
+					reboot_counter_write(0);
+					set_led(SYS_LED_PATTERN_OFF_FORCE, SYS_LED_PRIORITY_USER); // pattern not done, force off
+					sys_request_system_reboot(false);
+					return 0;
+					break;
 
-					case ESB_PACKET_COMMAND_UNPAIR:
-						LOG_INF("Unpair command received");
-						break;
-					default:
-						LOG_INF("Command packet %d received", rx_payload.data[1]);
-						break;
+				case ESB_PACKET_COMMAND_UNPAIR:
+					LOG_INF("Unpair command received");
+					break;
+				default:
+					LOG_INF("Command packet %d received", rx_payload.data[1]);
+					break;
 				}
 			}
 		}
-		if (err) {
+		if (err)
+		{
 			LOG_INF("Error occured in event");
 		}
 		break;
 	}
-
 }
 
-void fill_packets_stat(uint8_t *data) {
+void fill_packets_stat(uint8_t *data)
+{
 	data[8] = packets_sent;
 	data[9] = packets_received;
 	data[10] = packets_failed;
@@ -260,7 +274,8 @@ int clocks_start(void)
 			LOG_ERR("Clock could not be started: %d", res);
 			return res;
 		}
-		if (err && ++fetch_attempts > 10) {
+		if (err && ++fetch_attempts > 10)
+		{
 			LOG_WRN_ONCE("Unable to fetch Clock request result: %d", err);
 			return err;
 		}
@@ -452,7 +467,7 @@ bool esb_pair(void)
 		while (paired_addr[0] != checksum && ((*(uint64_t *)&paired_addr[0] >> 16) & 0xFFFFFFFFFFFF) != *addr)
 		{
 			int64_t time_begin = k_uptime_get();
-			if(time_pairing_start + CONFIG_3_SETTINGS_READ(CONFIG_3_CONNECTION_TIMEOUT_DELAY) < time_begin)
+			if (time_pairing_start + CONFIG_3_SETTINGS_READ(CONFIG_3_CONNECTION_TIMEOUT_DELAY) < time_begin)
 				return false; // Pairing timeout
 
 			if (!esb_initialized)
@@ -522,7 +537,8 @@ void esb_clear_pair(void)
 	LOG_INF("Pairing data reset");
 }
 
-int esb_get_frequency(void) {
+int esb_get_frequency(void)
+{
 	uint32_t channel;
 	esb_get_rf_channel(&channel);
 	return 2400UL + channel; // MHz
@@ -534,18 +550,18 @@ void esb_write(uint8_t *data, uint8_t packet_sequnce)
 		return;
 	if (!clock_status)
 		clocks_start();
-	tx_payload.pipe = 1; // using base address 1
+	tx_payload.pipe = 1;   // using base address 1
 #if defined(NRF54L15_XXAA) // TODO: esb halts with ack and tx fail
 	tx_payload.noack = true;
 #else
 	tx_payload.noack = false;
 #endif
 	memcpy(tx_payload.data, data, tx_payload.length);
-	esb_flush_tx(); // this will clear all transmissions even if they did not complete
+	esb_flush_tx();					// this will clear all transmissions even if they did not complete
 	esb_write_payload(&tx_payload); // Add transmission to queue
-	//k_usleep(1);
-	// Wait for our window to broadcast
-	while(!tdma_is_our_window())
+	// k_usleep(1);
+	//  Wait for our window to broadcast
+	while (!tdma_is_our_window())
 		k_sleep(Z_TIMEOUT_TICKS(1)); // Spin wait?
 	tdma_tx_started();
 	esb_start_tx();
@@ -571,14 +587,17 @@ static void esb_thread(void)
 	clocks_start();
 	clock_init_external();
 
-while (1)
+	while (1)
 	{
 		if (!esb_paired && (!use_hid || paired_addr[0] || (!get_status(SYS_STATUS_USB_CONNECTED) && k_uptime_get() - 750 > start_time))) // only automatically enter pairing while not potentially communicating by usb, however allow esb if already paired
 		{
-			if(!esb_pair()) {
+			if (!esb_pair())
+			{
 				LOG_WRN("Pairing timeout");
 				sys_request_system_off(false);
-			} else {
+			}
+			else
+			{
 				esb_initialize(true);
 			}
 		}
