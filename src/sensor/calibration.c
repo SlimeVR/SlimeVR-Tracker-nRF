@@ -484,7 +484,13 @@ static int sensor_calibrate_mag(void)
 	printk("norm_sum: %.2f, sample_count: %.0f\n", norm_sum, sample_count);
 #endif
 	wait_for_threads();
-	magneto_current_calibration(m_inv, ata, norm_sum, sample_count); // 25ms
+	if (magneto_current_calibration(m_inv, ata, norm_sum, sample_count)) // 25ms
+	{
+		magneto_reset();
+		set_led(SYS_LED_PATTERN_OFF, SYS_LED_PRIORITY_SENSOR);
+		LOG_ERR("Magnetometer calibration solver ran out of memory");
+		return -1;
+	}
 	magneto_reset();
 
 	LOG_INF("Magnetometer matrix:");
@@ -737,7 +743,11 @@ int sensor_6_sideBias(float a_inv[][3])
 	printk("norm_sum: %.2f, sample_count: %.0f\n", norm_sum, sample_count);
 #endif
 	wait_for_threads(); // TODO: let the data cook or something idk why this has to be here to work
-	magneto_current_calibration(a_inv, ata, norm_sum, sample_count);
+	if (magneto_current_calibration(a_inv, ata, norm_sum, sample_count))
+	{
+		printk("Calibration solver ran out of memory.\n");
+		return -2; // caller restores the previous calibration
+	}
 	magneto_reset();
 
 	printk("Calibration is complete.\n");
