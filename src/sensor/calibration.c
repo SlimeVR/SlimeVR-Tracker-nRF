@@ -459,7 +459,7 @@ static int sensor_calibrate_mag(void)
 {
 	float zero[3] = {0};
 	if (v_diff_mag(magBAinv[0], zero) != 0)
-		return -1; // magnetometer calibration already exists
+		return 0; // magnetometer calibration already exists
 
 	float m[3];
 	if (sensor_wait_mag(m, K_MSEC(1000)))
