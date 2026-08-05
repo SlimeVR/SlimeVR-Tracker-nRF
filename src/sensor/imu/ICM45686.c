@@ -25,6 +25,9 @@ static float clock_scale = 1; // ODR is scaled by clock_rate/clock_reference
 #define FIFO_MULT 0.00075f // assuming i2c fast mode
 #define FIFO_MULT_SPI 0.0001f // ~24MHz
 
+// minimum time between consecutive IREG accesses (protocol note in ICM45686.h)
+#define IREG_ACCESS_GAP_US 10
+
 static float fifo_multiplier_factor = FIFO_MULT;
 static float fifo_multiplier = 0;
 
@@ -50,13 +53,16 @@ int icm45_init(float clock_rate, float accel_time, float gyro_time, float *accel
 	ireg_buf[1] = ICM45686_IPREG_BAR_REG_58;
 	ireg_buf[2] = 0xD9 & ~0x48; // disable internal pull resistors for AP pins (pin 13, 12)
 	err |= ssi_burst_write(SENSOR_INTERFACE_DEV_IMU, ICM45686_IREG_ADDR_15_8, ireg_buf, 3); // write buffer
+	k_busy_wait(IREG_ACCESS_GAP_US);
 	ireg_buf[1] = ICM45686_IPREG_BAR_REG_59;
 	ireg_buf[2] = 0xB6 & ~0x92; // disable internal pull resistors for AP pins (pin 7, 1, 14)
 	err |= ssi_burst_write(SENSOR_INTERFACE_DEV_IMU, ICM45686_IREG_ADDR_15_8, ireg_buf, 3); // write buffer
+	k_busy_wait(IREG_ACCESS_GAP_US);
 	ireg_buf[0] = ICM45686_IPREG_TOP1; // address is a word, icm is big endian
 	ireg_buf[1] = ICM45686_SREG_CTRL;
 	ireg_buf[2] = 0x02; // set big endian
 	err |= ssi_burst_write(SENSOR_INTERFACE_DEV_IMU, ICM45686_IREG_ADDR_15_8, ireg_buf, 3); // write buffer
+	k_busy_wait(IREG_ACCESS_GAP_US);
 	last_accel_odr = 0xff; // reset last odr
 	last_gyro_odr = 0xff; // reset last odr
 	err |= icm45_update_odr(accel_time, gyro_time, accel_actual_time, gyro_actual_time);
@@ -193,8 +199,15 @@ uint16_t icm45_fifo_read(uint8_t *data, uint16_t len) // TODO: check if working
 	uint16_t packets = UINT16_MAX;
 	while (packets > 0 && len >= PACKET_SIZE)
 	{
-		uint8_t rawCount[2];
+		uint8_t rawCount[2] = {0};
+		// errata AN-000364 (2.2): read FIFO_COUNT twice, use the second value
+		err = ssi_burst_read(SENSOR_INTERFACE_DEV_IMU, ICM45686_FIFO_COUNT_0, &rawCount[0], 2);
 		err |= ssi_burst_read(SENSOR_INTERFACE_DEV_IMU, ICM45686_FIFO_COUNT_0, &rawCount[0], 2);
+		if (err)
+		{
+			LOG_ERR("Communication error");
+			return 0;
+		}
 		packets = (uint16_t)(rawCount[0] << 8 | rawCount[1]); // Turn the 16 bits into a unsigned 16-bit value
 		if (!packets) // nothing to do
 			break;
@@ -208,9 +221,12 @@ uint16_t icm45_fifo_read(uint8_t *data, uint16_t len) // TODO: check if working
 			packets = limit;
 			count = packets * PACKET_SIZE;
 		}
-		err |= ssi_burst_read_interval(SENSOR_INTERFACE_DEV_IMU, ICM45686_FIFO_DATA, data, count, PACKET_SIZE);
+		err = ssi_burst_read_interval(SENSOR_INTERFACE_DEV_IMU, ICM45686_FIFO_DATA, data, count, PACKET_SIZE);
 		if (err)
+		{
 			LOG_ERR("Communication error");
+			return 0;
+		}
 		data += packets * PACKET_SIZE;
 		len -= packets * PACKET_SIZE;
 		total += packets;
@@ -307,7 +323,7 @@ uint8_t icm45_setup_DRDY(uint16_t threshold)
 	return NRF_GPIO_PIN_PULLUP << 4 | NRF_GPIO_PIN_SENSE_LOW; // active low
 }
 
-uint8_t icm45_setup_WOM(void) // TODO: check if working
+uint8_t icm45_setup_WOM(void)
 {
 	uint8_t interrupts;
 	uint8_t ireg_buf[5];
@@ -319,6 +335,7 @@ uint8_t icm45_setup_WOM(void) // TODO: check if working
 	ireg_buf[1] = ICM45686_IPREG_SYS2_REG_129;
 	ireg_buf[2] = 0x00; // set ACCEL_LP_AVG_SEL to 1x
 	err |= ssi_burst_write(SENSOR_INTERFACE_DEV_IMU, ICM45686_IREG_ADDR_15_8, ireg_buf, 3); // write buffer
+	k_busy_wait(IREG_ACCESS_GAP_US);
 	// should already be defaulted to AULP
 //	ireg_buf[0] = ICM45686_IPREG_TOP1;
 //	ireg_buf[1] = ICM45686_SMC_CONTROL_0;
@@ -327,9 +344,13 @@ uint8_t icm45_setup_WOM(void) // TODO: check if working
 	ireg_buf[0] = ICM45686_IPREG_TOP1;
 	ireg_buf[1] = ICM45686_ACCEL_WOM_X_THR;
 	ireg_buf[2] = 0x08; // set wake thresholds // 8 x 3.9 mg is ~31.25 mg
-	ireg_buf[3] = 0x08; // set wake thresholds
-	ireg_buf[4] = 0x08; // set wake thresholds
-	err |= ssi_burst_write(SENSOR_INTERFACE_DEV_IMU, ICM45686_IREG_ADDR_15_8, ireg_buf, 5); // write buffer
+	// IREG bursts beyond {addr, first byte} are unsupported, write the rest through IREG_DATA
+	err |= ssi_burst_write(SENSOR_INTERFACE_DEV_IMU, ICM45686_IREG_ADDR_15_8, ireg_buf, 3); // write buffer
+	k_busy_wait(IREG_ACCESS_GAP_US);
+	err |= ssi_reg_write_byte(SENSOR_INTERFACE_DEV_IMU, ICM45686_IREG_DATA, 0x08); // Y_THR
+	k_busy_wait(IREG_ACCESS_GAP_US);
+	err |= ssi_reg_write_byte(SENSOR_INTERFACE_DEV_IMU, ICM45686_IREG_DATA, 0x08); // Z_THR
+	k_busy_wait(IREG_ACCESS_GAP_US);
 	err |= ssi_reg_write_byte(SENSOR_INTERFACE_DEV_IMU, ICM45686_TMST_WOM_CONFIG, 0x14); // enable WOM, enable WOM interrupt
 	err |= ssi_reg_write_byte(SENSOR_INTERFACE_DEV_IMU, ICM45686_INT1_CONFIG1, 0x0E); // route WOM interrupt
 	if (err)
