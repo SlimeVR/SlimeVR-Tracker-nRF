@@ -1,0 +1,12 @@
+// dummy flash partitions for mcuboot compilation
+&flash0 {
+	partitions {
+		compatible = "fixed-partitions";
+		#address-cells = <1>;
+		#size-cells = <1>;
+
+		slot0_partition: partition@0 {
+			reg = <0 1>;
+		};
+	};
+};

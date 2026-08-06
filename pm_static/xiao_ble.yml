@@ -1,8 +1,13 @@
-bootloader:
+mbr:
   address: 0x0
+  end_address: 0x1000
+  region: flash_primary
+  size: 0x1000
+softdevice:
+  address: 0x1000
   end_address: 0x27000
   region: flash_primary
-  size: 0x27000
+  size: 0x26000
 uf2_bootloader:
   address: 0xf4000
   end_address: 0x100000

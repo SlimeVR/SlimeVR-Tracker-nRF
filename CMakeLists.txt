@@ -44,6 +44,9 @@ list(GET GIT_RELEASE 2 GIT_PATCH)
 
 configure_file(${CMAKE_SOURCE_DIR}/VERSION_SRC ${CMAKE_SOURCE_DIR}/VERSION @ONLY)
 
+# dummy flash partitions for mcuboot compilation
+set(EXTRA_DTC_OVERLAY_FILE "dummy.overlay")
+
 # Zephyr
 find_package(Zephyr REQUIRED HINTS $ENV{ZEPHYR_BASE})
 project(NONE)

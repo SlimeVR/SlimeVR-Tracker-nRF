@@ -1,0 +1,12 @@
+# This board variant is targeted promico stack with the SM-ICM45686-AK09940A
+# where ICM is on SPI, AK is on I2C, external clock disabled
+
+CONFIG_USB_DEVICE_STACK=y
+CONFIG_USB_DEVICE_MANUFACTURER="SlimeVR"
+CONFIG_USB_DEVICE_PRODUCT="SlimeNRF Tracker Pro Micro"
+
+CONFIG_BATTERY_USE_REG_LDO_MAPPING=y
+CONFIG_SENSOR_ROTATION_270=y
+
+# Disable external clock
+CONFIG_USE_SENSOR_CLOCK=n

@@ -1,4 +1,4 @@
-bootloader:
+mbr:
   address: 0x0
   end_address: 0x1000
   region: flash_primary
