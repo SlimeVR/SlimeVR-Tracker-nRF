@@ -39,6 +39,7 @@
 #endif
 
 uint32_t tdma_get_time();
+uint32_t tdma_get_time_with_static_offset();
 uint32_t tdma_get_static_offset();
 uint32_t tdma_get_packet_time();
 uint32_t tdma_get_slot(uint32_t timer);

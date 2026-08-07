@@ -1,6 +1,6 @@
 /*
 	SlimeVR Code is placed under the MIT license
-	Copyright (c) 2025 SlimeVR Contributors
+	Copyright (c) 2026 SlimeVR Contributors
 
 	Permission is hereby granted, free of charge, to any person obtaining a copy
 	of this software and associated documentation files (the "Software"), to deal
@@ -20,12 +20,12 @@
 	OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 	THE SOFTWARE.
 */
-#ifndef SLIMENRF_TIMER
-#define SLIMENRF_TIMER
+#pragma once
+#include <stdbool.h>
 
-#include <nrfx_timer.h>
-
-void timer_handler(nrf_timer_event_t event_type, void *p_context);
-void timer_init(void);
-
-#endif
+bool clocks_get_status(void);
+void clock_pre_shutdown(void);
+void clock_init_external(void);
+int clocks_start(void);
+void clocks_stop(void);
+int clocks_init(void);

@@ -6,6 +6,7 @@
 #include "connection/esb.h"
 #include "build_defines.h"
 #include "parse_args.h"
+#include "connection/pairing.h"
 
 #if CONFIG_USB_DEVICE_STACK
 #define USB DT_NODELABEL(usbd)
@@ -501,7 +502,7 @@ static void print_help(void)
 #if SENSOR_MAG_EXISTS
 	printk("mag                          Clear magnetometer calibration\n");
 #endif
-	printk("\nset <address>                Manually set receiver\n");
+	printk("\nset <address> <id>         Manually set receiver\n");
 	printk("pair                         Enter pairing mode\n");
 	printk("clear                        Clear pairing data\n");
 #if DFU_EXISTS
@@ -645,26 +646,27 @@ static void console_thread(void)
 #endif
 		else if (strcmp(argv[0], command_set) == 0)
 		{
-			if (argc != 2)
+			if (argc != 3)
 			{
 				printk("Invalid number of arguments\n");
 				continue;
 			}
 			uint64_t addr = parse_u64(argv[1], 16);
+			uint64_t tracker_id = parse_u64(argv[2], 10);
 			uint8_t buf[17];
 			snprintk(buf, 17, "%016llx", addr);
 			if (addr != 0 && strcmp(buf, argv[1]) == 0)
-				esb_set_pair(addr);
+				pairing_set_pair(addr, tracker_id);
 			else
 				printk("Invalid address\n");
 		}
 		else if (strcmp(argv[0], command_pair) == 0)
 		{
-			esb_reset_pair();
+			pairing_request_pair();
 		}
 		else if (strcmp(argv[0], command_clear) == 0)
 		{
-			esb_clear_pair();
+			pairing_clear_pair();
 		}
 #if DFU_EXISTS
 		else if (strcmp(argv[0], command_dfu) == 0)

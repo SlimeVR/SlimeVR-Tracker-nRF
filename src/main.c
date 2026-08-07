@@ -80,7 +80,7 @@ int main(void)
 				if (k_uptime_get() - start_time > 1000)
 				{
 					LOG_INF("Pairing requested");
-					esb_reset_pair();
+					pairing_request_pair();
 					break;
 				}
 				k_msleep(1);

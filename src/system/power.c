@@ -38,7 +38,7 @@
 #include <zephyr/drivers/clock_control/nrf_clock_control.h>
 
 #include "power.h"
-#include "clock_control.h"
+#include "clocks.h"
 
 #define DFU_DBL_RESET_MEM 0x20007F7C
 #define DFU_DBL_RESET_APP 0x4ee5677e
