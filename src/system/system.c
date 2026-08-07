@@ -3,6 +3,7 @@
 #include "sensor/calibration.h"
 #include "connection/connection.h"
 #include "connection/esb.h"
+#include "connection/pairing.h"
 
 #include <zephyr/drivers/gpio.h>
 #include <zephyr/drivers/pwm.h>
@@ -393,7 +394,7 @@ static void button_thread(void)
 			if (sys_user_shutdown()) // held for 1 second, reset pairing
 			{
 				LOG_INF("Pairing requested");
-				esb_reset_pair();
+				pairing_request_pair();
 				press_time = 0;
 				set_status(SYS_STATUS_BUTTON_PRESSED, false); // TODO: is needed?
 			}
@@ -500,7 +501,7 @@ void sys_reset_mode(uint8_t mode)
 		break;
 	case 2: // Reset mode pairing reset
 		LOG_INF("Pairing reset requested");
-		esb_reset_pair();
+		pairing_request_pair();
 		break;
 #if DFU_EXISTS // Using DFU bootloader
 	case 3:

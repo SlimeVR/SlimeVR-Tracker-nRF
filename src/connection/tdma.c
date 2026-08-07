@@ -26,7 +26,7 @@
 uint8_t our_window = 0;
 uint32_t last_slot = 0;
 int32_t timer_offset = 0;
-static const int32_t timer_offset_static = 3;
+static const int32_t timer_offset_static = -3;
 uint32_t packet_sent_time = 0;
 
 LOG_MODULE_REGISTER(tdma, LOG_LEVEL_INF);
@@ -61,8 +61,8 @@ void tdma_set_our_window(uint8_t window) {
 
 void tdma_update_timer_offset(int32_t delta) {
 	if(delta != 0) {
-		timer_offset = timer_offset + (delta + 1) / 2;
-		//LOG_INF("New timer offset %d & %d", timer_offset, timer_offset_static);
+		timer_offset = timer_offset + delta;
+		LOG_INF("New timer offset %d & %d", timer_offset, timer_offset_static);
 	}
 }
 

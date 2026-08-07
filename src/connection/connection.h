@@ -23,10 +23,7 @@
 #ifndef SLIMENRF_CONNECTION
 #define SLIMENRF_CONNECTION
 
-void connection_clocks_request_start(void);
-void connection_clocks_request_start_delay_us(uint32_t delay_us);
 void connection_clocks_request_stop(void);
-void connection_clocks_request_stop_delay_us(uint32_t delay_us);
 
 uint8_t connection_get_id(void);
 void connection_set_id(uint8_t id);
@@ -48,5 +45,7 @@ void connection_write_packet_2(void);
 void connection_write_packet_3(void);
 void connection_write_packet_4(void);
 void connection_write_packet_5(void);
+
+void connection_motion_ack(uint8_t packet_sequence);
 
 #endif

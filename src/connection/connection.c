@@ -26,9 +26,12 @@
 #include "build_defines.h"
 #include "hid.h"
 #include "system/battery_tracker.h"
+#include "system/clocks.h"
 
 #include <zephyr/kernel.h>
 #include <zephyr/sys/crc.h>
+
+#define ALWAYS_SEND false
 
 static bool sleep = false;
 
@@ -41,30 +44,16 @@ static uint8_t data_buffer_position = 0;
 static int64_t last_data_time = 0;
 static uint8_t packet_sequence = 0;
 static bool allow_packet_bundling = false; // Can only be used with new server
+static bool motion_acked = false;
 
 LOG_MODULE_REGISTER(connection, LOG_LEVEL_INF);
 
 static void connection_thread(void);
 K_THREAD_DEFINE(connection_thread_id, 512, connection_thread, NULL, NULL, NULL, CONNECTION_THREAD_PRIORITY, K_FP_REGS, 0);
 
-void connection_clocks_request_start(void)
-{
-	clocks_request_start(0);
-}
-
-void connection_clocks_request_start_delay_us(uint32_t delay_us)
-{
-	clocks_request_start(delay_us);
-}
-
 void connection_clocks_request_stop(void)
 {
 	clocks_stop();
-}
-
-void connection_clocks_request_stop_delay_us(uint32_t delay_us)
-{
-	clocks_request_stop(delay_us);
 }
 
 uint8_t connection_get_id(void)
@@ -272,6 +261,7 @@ void connection_write_packet_1() // full precision quat and accel
 	buf[5] = TO_FIXED_7(sensor_a[1]);
 	buf[6] = TO_FIXED_7(sensor_a[2]);
 	data_buffer_write(data, sizeof(data));
+	motion_acked = false;
 }
 
 void connection_write_packet_2() // reduced precision quat and accel with battery, temp, and rssi
@@ -304,6 +294,7 @@ void connection_write_packet_2() // reduced precision quat and accel with batter
 	buf[2] = TO_FIXED_7(sensor_a[2]);
 	data[15] = 0; // rssi (supplied by receiver)
 	data_buffer_write(data, sizeof(data));
+	motion_acked = false;
 }
 
 void connection_write_packet_3() // status
@@ -341,6 +332,7 @@ void connection_write_packet_4() // full precision quat and magnetometer
 	buf[5] = TO_FIXED_10(sensor_m[1]);
 	buf[6] = TO_FIXED_10(sensor_m[2]);
 	data_buffer_write(data, sizeof(data));
+	motion_acked = false;
 }
 
 void connection_write_packet_5() // runtime
@@ -376,6 +368,7 @@ void connection_write_packet_6() // reduced precision quat and accel with button
 		button_update_time = 0;
 	}
 	data_buffer_write(data, sizeof(data));
+	motion_acked = false;
 }
 
 void connection_write_packet_7() // button and sleep time
@@ -409,16 +402,15 @@ void connection_write_packet_7() // button and sleep time
 		button_update_time = 0;
 	}
 	data_buffer_write(data, sizeof(data));
+	motion_acked = false;
 }
 
-// TODO: get radio channel from receiver
-// TODO: new packet format
+void connection_motion_ack(uint8_t packet_sequence) {
+	motion_acked = true;
+	// TODO Check if this sequence is from motion
+}
 
 // TODO: use timing from IMU to get actual delay in tracking
-// TODO: aware of sensor state? error status, timing/phase, maybe "send_precise_quat"
-
-// TODO: queuing, status is lowest priority, info low priority, existing data highest priority (from sensor loop)
-
 // TODO: queue packets directly for HID, or maintain separate loop while connected by USB
 
 static int64_t last_info_time = 0;
@@ -429,7 +421,6 @@ static int64_t last_status2_time = 0;
 void connection_thread(void)
 {
 	uint8_t data_copy[ESB_PACKET_MAX_SIZE];
-	// TODO: checking for connection_update events from sensor_loop, here we will time and send them out
 	while (1)
 	{
 		if (last_data_time != 0) // have valid data
@@ -505,12 +496,19 @@ void connection_thread(void)
 			connection_write_packet_5();
 			continue;
 		}
+		else if(!motion_acked) // Didn't ack last motion packet, will send rotation again
+		{
+			quat_update_time = 0;
+			last_quat_time = k_uptime_get();
+			connection_write_packet_1();
+			continue;
+		}
 		else
 		{
 			connection_clocks_request_stop();
 		}
 		sleep = true;
-		k_msleep(MAX(1, MIN(MIN(MIN(last_info_time + 100, last_info2_time + 100), last_status_time + 1000), last_status2_time + 1000) - k_uptime_get())); // will be woken up if sending immediately
+		k_msleep(1); // will be woken up if sending immediately
 		sleep = false;
 	}
 }
