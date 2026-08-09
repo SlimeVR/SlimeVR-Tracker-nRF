@@ -142,6 +142,9 @@ static inline int ssi_write(enum sensor_interface_dev dev, const uint8_t *buf, u
 #endif
 	case SENSOR_INTERFACE_SPEC_I2C:
 		return i2c_write_dt(sensor_interface_dev_i2c[dev], buf, num_bytes);
+	case SENSOR_INTERFACE_SPEC_EXT:
+		if (ext_ssi != NULL)
+			return ext_ssi->ext_write(ext_addr, buf, num_bytes);
 	default:
 		return -1;
 	}
@@ -177,9 +180,6 @@ static inline int ssi_read(enum sensor_interface_dev dev, uint8_t *buf, uint32_t
 #endif
 	case SENSOR_INTERFACE_SPEC_I2C:
 		return i2c_read_dt(sensor_interface_dev_i2c[dev], buf, num_bytes);
-	case SENSOR_INTERFACE_SPEC_EXT:
-		if (ext_ssi != NULL)
-			return ext_ssi->ext_write(ext_addr, buf, num_bytes);
 	default:
 		return -1;
 	}
