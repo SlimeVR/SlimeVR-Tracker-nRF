@@ -16,6 +16,13 @@
 #include <zephyr/drivers/sensor.h>
 #include <zephyr/logging/log.h>
 
+#if __has_include(<zephyr/dt-bindings/adc/nrf-saadc-v3.h>)
+#include <zephyr/dt-bindings/adc/nrf-saadc-v3.h>
+#else
+#include <zephyr/dt-bindings/adc/nrf-saadc.h>
+#endif
+
+
 #include "battery.h"
 
 LOG_MODULE_REGISTER(BATTERY, CONFIG_ADC_LOG_LEVEL);
@@ -131,16 +138,20 @@ static int divider_setup(void)
 		.acquisition_time = ADC_ACQ_TIME(ADC_ACQ_TIME_MICROSECONDS, 3),
 	};
 
+	// TODO: cam this fine tuning be moved somehow to device tree? this is jank
+
 	if (cfg->output_ohm != 0) {
+#if NCS_VERSION_MAJOR <= 3 && NCS_VERSION_MINOR <= 1
 		accp->input_positive = 1 + iocp->channel; // <=sdk 3.1 SAADC_CH_PSELP_PSELP_AnalogInput0
-//		accp->input_positive = iocp->channel; // >=sdk 3.2.0, SAADC_CH_PSELP_PSELP_AnalogInput0 does not match! Instead use NRF_SAADC_AIN0
+#else
+		accp->input_positive = iocp->channel; // >=sdk 3.2.0, SAADC_CH_PSELP_PSELP_AnalogInput0 does not match! Instead use NRF_SAADC_AIN0
+#endif
 	} else {
 		accp->input_positive = 9; // SAADC_CH_PSELP_PSELP_VDD
 	}
 
-	if (iocp->channel == 12) { // VDDHDIV5
-		// <=sdk 3.1 SAADC_CH_PSELP_PSELP_VDDHDIV5
-//		accp->input_positive = 128 + 4; // >=sdk 3.2.0, SAADC_CH_PSELP_PSELP_VDDHDIV5 does not match! Instead use NRF_SAADC_VDDHDIV5
+	if (iocp->channel == NRF_SAADC_VDDHDIV5) { // VDDHDIV5
+		accp->input_positive = NRF_SAADC_VDDHDIV5;
 		asp->oversampling = 2;
 		accp->acquisition_time = ADC_ACQ_TIME(ADC_ACQ_TIME_MICROSECONDS, 10);
 	}
