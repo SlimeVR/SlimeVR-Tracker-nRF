@@ -42,7 +42,7 @@ enum sensor_interface_spec
 
 typedef struct sensor_ext_ssi {
 	int (*ext_write)(const uint8_t addr, const uint8_t *buf, uint32_t num_bytes);
-	int (*ext_write_read)(const uint8_t addr, const void *write_buf, size_t num_write, void *read_buf, size_t num_read);
+	int (*ext_write_read)(const uint8_t addr, const uint8_t *write_buf, size_t num_write, uint8_t *read_buf, size_t num_read);
 	uint8_t ext_burst;
 } sensor_ext_ssi_t;
 

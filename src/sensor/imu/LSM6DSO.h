@@ -76,7 +76,7 @@ int lsm6dso_ext_setup(void);
 int lsm6dso_ext_passthrough(bool passthrough);
 
 int lsm6dso_ext_write(const uint8_t addr, const uint8_t *buf, uint32_t num_bytes);
-int lsm6dso_ext_write_read(const uint8_t addr, const void *write_buf, size_t num_write, void *read_buf, size_t num_read);
+int lsm6dso_ext_write_read(const uint8_t addr, const uint8_t *write_buf, size_t num_write, uint8_t *read_buf, size_t num_read);
 
 extern const sensor_imu_t sensor_imu_lsm6dso;
 extern const sensor_ext_ssi_t sensor_ext_lsm6dso;
