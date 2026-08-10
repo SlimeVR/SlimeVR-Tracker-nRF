@@ -27,6 +27,8 @@ static float clock_scale = 1; // ODR is scaled by clock_rate/clock_reference
 
 static float fifo_multiplier_factor = FIFO_MULT;
 static float fifo_multiplier = 0;
+static uint8_t aux_addr = 0;
+static uint8_t aux_reg = 0;
 
 LOG_MODULE_REGISTER(ICM45686, LOG_LEVEL_DBG);
 
@@ -74,6 +76,8 @@ void icm45_shutdown(void)
 	last_accel_odr = 0xff; // reset last odr
 	last_gyro_odr = 0xff; // reset last odr
 	int err = ssi_reg_write_byte(SENSOR_INTERFACE_DEV_IMU, ICM45686_REG_MISC2, 0x02); // Don't need to wait for ICM to finish reset
+	aux_addr = 0;
+	aux_reg = 0;
 //	k_msleep(1);
 	// TODO: not working
 //	uint8_t ireg_buf[3];
@@ -413,6 +417,26 @@ int icm45_bank_read_byte(const uint8_t bank, const uint8_t reg, uint8_t *value) 
 	return icm45_bank_read(bank, reg, value, 1);
 }
 
+int icm45_aux_addr_set(const uint8_t addr, const uint8_t reg) {
+	int err = 0;
+	if (aux_addr != addr) { // aux address changed, rewrite both address and register
+		uint8_t dev_profile_data[2] = {reg, addr};
+		err = icm45_bank_write(ICM45686_IPREG_TOP1, ICM45686_DEV_PROFILE_0, dev_profile_data, sizeof(dev_profile_data));
+		if (!err) {
+			aux_addr = addr;
+			aux_reg = reg;
+		}
+	}
+	else if (aux_reg != reg) { // only register changed, aux address remains
+		err = icm45_bank_write_byte(ICM45686_IPREG_TOP1, ICM45686_DEV_PROFILE_0, reg);
+		if (!err) {
+			aux_reg = reg;
+		}
+	}
+
+	return err;
+}
+
 int icm45_ext_write(const uint8_t addr, const uint8_t *buf, uint32_t num_bytes) 
 {
 	if (num_bytes > 6) 
@@ -421,7 +445,7 @@ int icm45_ext_write(const uint8_t addr, const uint8_t *buf, uint32_t num_bytes)
 		return -1;
 	}
 
-	int err = 0;
+	int err = icm45_aux_addr_set(addr, aux_reg);
 
 	err |= icm45_bank_write(ICM45686_IPREG_TOP1, ICM45686_I2CM_WR_DATA_0, buf, num_bytes);
 	err |= icm45_bank_write_byte(ICM45686_IPREG_TOP1, ICM45686_I2CM_COMMAND_0, 0x80 + num_bytes); // Last transaction, channel 0, write num_bytes bytes
@@ -451,17 +475,15 @@ int icm45_ext_write(const uint8_t addr, const uint8_t *buf, uint32_t num_bytes)
 	return err;
 }
 
-int icm45_ext_write_read(const uint8_t addr, const void *write_buf, size_t num_write, void *read_buf, size_t num_read) {
+int icm45_ext_write_read(const uint8_t addr, const uint8_t *write_buf, size_t num_write, uint8_t *read_buf, size_t num_read) {
 	if (num_write != 1 || num_read < 1 || num_read > 15)
 	{
 		LOG_ERR("Unsupported write_read");
 		return -1;
 	}
 
-	int err = 0;
+	int err = icm45_aux_addr_set(addr, write_buf[0]);
 
-	uint8_t dev_profile_data[2] = {((const uint8_t *)write_buf)[0], addr};
-	err |= icm45_bank_write(ICM45686_IPREG_TOP1, ICM45686_DEV_PROFILE_0, dev_profile_data, 2);
 	err |= icm45_bank_write_byte(ICM45686_IPREG_TOP1, ICM45686_I2CM_COMMAND_0, 0x90 + num_read); // Last transaction, channel 0, read num_read bytes with register specified
 	err |= icm45_bank_write_byte(ICM45686_IPREG_TOP1, ICM45686_I2CM_CONTROL, 0x01); // No restarts, fast mode, start transaction
 
