@@ -695,10 +695,13 @@ int sensor_init(void)
 // 55-66ms to wait, get chip ids, and setup icm (50ms spent waiting for accel and gyro to start)
 	if (mag_available && mag_enabled)
 	{
-		// TODO: need to flag passthrough enabled
-//			sensor_imu->ext_passthrough(true); // reenable passthrough
+#if SENSOR_MAG_EXISTS
+		sensor_imu->ext_passthrough(true); // reenable passthrough
+#elif SENSOR_MAG_EXT_EXISTS
+		sensor_imu->ext_setup();
+#endif
 		err = sensor_mag->init(mag_initial_time, &mag_actual_time);
-		mag_interval = mag_actual_time * 0.9f * 1000; // start attemping magnetometer reads before expected new sample
+		mag_interval = mag_actual_time * 1000 - 2; // start attemping magnetometer reads before expected new sample, ask for each sample 2ms earlier
 #if SENSOR_MAG_SPI_EXISTS
 		LOG_INF("Requested SPI frequency: %.2fMHz", (double)sensor_mag_spi_dev.config.frequency / 1000000.0);
 #endif
