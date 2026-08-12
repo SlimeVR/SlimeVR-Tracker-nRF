@@ -190,9 +190,24 @@ void event_handler(struct esb_evt const *event)
 					case ESB_PACKET_CONTROL_PAIR_RESPONSE:
 						pairing_dongle_response(&rx_payload);
 					break;
-					case ESB_PACKET_CONTROL_NO_WINDOWS:
-						// TODO Enter error state and show LED to the user
-						// And/or find new dongle?
+					case ESB_PACKET_DONGLE_CONNECT_REPLY:
+						uint8_t tracker_id = rx_payload.data[2];
+						//uint64_t tracker_hwid = *((uint64_t *) &rx_payload.data[3]) & 0xFFFFFFFFFFFF;
+						if(tracker_id < ESB_STATUS_ERROR) {
+							connection_set_id(tracker_id);
+							esb_set_tracker_state(CONNECTED);
+						} else {
+							if(tracker_id == ESB_STATUS_NOT_PAIRED) {
+								esb_set_tracker_state(NOT_PAIRED);
+							} else if(tracker_id == ESB_STATUS_NO_SLOTS) {
+								// Shouldn't happen really...
+								esb_set_tracker_state(NOT_PAIRED);
+							}
+							esb_set_tracker_state(CONNECTION_ERROR);
+						}
+						break;
+					case ESB_PACKET_DONGLE_RECONNECT:
+						esb_set_tracker_state(DONGLE_CONNECT);
 						break;
 					case ESB_PACKET_CONTROL_WINDOW_INFO: // Window Info (5)
 						int32_t time = tdma_get_time();
@@ -377,7 +392,6 @@ void esb_write(uint8_t *data, uint8_t packet_sequnce)
 {
 	if (!esb_initialized || esb_get_tracker_state() != CONNECTED)
 		return;
-	clocks_start();
 	tx_payload.pipe = 1; // using base address 1
 #if defined(NRF54L15_XXAA) // TODO: esb halts with ack and tx fail
 	tx_payload.noack = true;
@@ -385,6 +399,13 @@ void esb_write(uint8_t *data, uint8_t packet_sequnce)
 	tx_payload.noack = false;
 #endif
 	memcpy(tx_payload.data, data, tx_payload.length);
+	esb_write_payload();
+	last_packet_sequence = packet_sequnce;
+	packets_sent++;
+}
+
+void esb_write_payload() {
+	clocks_start();
 	// Wait for our window to broadcast
 	while(!tdma_is_our_window())
 		k_sleep(K_TICKS(1)); // Spin wait?
@@ -397,8 +418,6 @@ void esb_write(uint8_t *data, uint8_t packet_sequnce)
 	esb_set_rf_channel(ESB_ALLOWED_CHANNEL_BUNDLES[(current_slot) % 10]);
 #endif
 	esb_start_tx();
-	last_packet_sequence = packet_sequnce;
-	packets_sent++;
 }
 
 bool esb_ready(void)
@@ -425,12 +444,28 @@ bool find_dongle() {
 	return dongle_found;
 }
 
+void populate_connect_payload() {
+	uint64_t device_addr = *((uint64_t *) NRF_FICR->DEVICEADDR) & 0xFFFFFFFFFFFF;
+	tx_payload.data[0] = 0;
+	tx_payload.data[1] = ESB_PACKET_DONGLE_CONNECT;
+	tx_payload.data[2] = connection_get_id();
+	memcpy(&tx_payload.data[3], &device_addr, 6);
+	tx_payload.data[7] = ESB_VERSION;
+	tx_payload.data[8] = PROTOCOL_VERSION;
+}
+
 void connect_to_dongle() {
-	// TODO : More robust connection
-	// + frequency hopping
-	// Send packet that we're connecting to the dongle
+	// TODO : Fast connect if we just woke up
+	// TODO : Frequency hopping
 	esb_initialize(true, false);
-	esb_set_tracker_state(CONNECTED);
+	uint64_t start = k_uptime_get();
+	while(esb_get_tracker_state() == DONGLE_CONNECT && start + 1000 > k_uptime_get()) {
+		populate_connect_payload();
+		esb_write_payload();
+		k_msleep(15);
+	}
+	if(esb_get_tracker_state() == DONGLE_CONNECT)
+		esb_set_tracker_state(FIND_DONGLE);
 }
 
 static void esb_thread(void)
