@@ -87,7 +87,9 @@ enum esb_tracker_state_t {
 	NOT_CONNECTED,
 	FIND_DONGLE,
 	DONGLE_CONNECT,
-	CONNECTED
+	CONNECTED,
+	PAIRING_ERROR,
+	CONNECTION_ERROR
 };
 
 enum esb_tracker_state_t esb_get_tracker_state(void);

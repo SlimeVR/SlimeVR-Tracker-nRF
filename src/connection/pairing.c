@@ -43,6 +43,7 @@ bool pairing_is_paired(void) {
 
 bool pairing_find_dongles_to_pair() {
     esb_set_tracker_state(PAIRING_FIND_DONGLES);
+    set_led(SYS_LED_PATTERN_SHORT, SYS_LED_PRIORITY_PAIR);
     // Find dongles around us
     esb_set_addr_discovery();
     esb_initialize(false, true);
@@ -93,6 +94,7 @@ void pairing_set_pair(uint64_t dongle_hwid, uint8_t tracker_id) {
     pairing_needs_saving = true;
 	LOG_INF("Pairing info set");
 	pairing_restore();
+    set_led(SYS_LED_PATTERN_ONESHOT_COMPLETE, SYS_LED_PRIORITY_PAIR);
 }
 
 void pairing_save_retained() {
@@ -140,6 +142,7 @@ int compare_dongles(const void* a, const void* b) {
 }
 
 bool pairing_pick_dongle_and_pair(void) {
+    set_led(SYS_LED_PATTERN_SHORT, SYS_LED_PRIORITY_PAIR);
     int members = 0;
 	for(; members < ESB_CHANNELS_AMOUNT; ++members) {
         struct pairing_discovery_t* dg = &discovered_dongles[members];

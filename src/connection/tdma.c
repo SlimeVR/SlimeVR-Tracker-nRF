@@ -23,6 +23,8 @@
 #include "tdma.h"
 #include <zephyr/kernel.h>
 
+// TODO Timer skew correction
+
 uint8_t our_window = 0;
 uint32_t last_slot = 0;
 int32_t timer_offset = 0;
@@ -62,7 +64,7 @@ void tdma_set_our_window(uint8_t window) {
 void tdma_update_timer_offset(int32_t delta) {
 	if(delta != 0) {
 		timer_offset = timer_offset + delta;
-		LOG_INF("New timer offset %d & %d", timer_offset, timer_offset_static);
+		//LOG_INF("New timer offset %d & %d", timer_offset, timer_offset_static);
 	}
 }
 
