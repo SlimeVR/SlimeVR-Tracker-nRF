@@ -38,7 +38,7 @@
 #include "pairing.h"
 
 #define ALLOW_RETRANSMIT true
-#define TX_ERROR_THRESHOLD 30
+#define TX_ERROR_THRESHOLD 10
 #define TX_ERROR_MAX 100
 #define TX_ERROR_CLEAR_RATE 10
 #define SWEEP_TEST false
@@ -65,6 +65,8 @@ static const uint8_t discovery_addr_prefix[8] = {0xFE, 0xFF, 0x29, 0x27, 0x09, 0
 static uint8_t base_addr_0[4], base_addr_1[4], addr_prefix[8] = {0};
 
 static bool esb_initialized = false;
+static bool esb_tx = false;
+static bool esb_advertize = false;
 static uint8_t esb_channel = ESB_RIMARY_ADVERTISEMENT_CHANNEL;
 static bool dongle_found = false;
 static enum esb_tracker_state_t esb_tracker_state = NOT_PAIRED;
@@ -82,17 +84,34 @@ uint8_t packets_failed;
 uint32_t packets_rssi;
 uint64_t last_received_packet = 0;
 
+void found_dongle(uint64_t dongle_hwid, uint8_t channel, int32_t received_time) {
+	esb_channel = channel;
+	dongle_found = true;
+	int32_t time = tdma_get_time();
+	int32_t diff = (received_time - time);
+	LOG_INF("Our time: %d, rcvd time: %d", time, received_time);
+	tdma_update_timer_offset(diff);
+	for(int i = 0; i < sizeof(ESB_ALLOWED_CHANNEL_BUNDLES); ++i) {
+		if(ESB_ALLOWED_CHANNEL_BUNDLES[i] == channel) {
+			currentChannelBundle = i;
+			break;
+		}
+	}
+	retained->last_dongle_channel = esb_channel;
+	retained_update();
+	esb_deinitialize();
+	clocks_stop();
+	LOG_INF("Dongle successfully found!");
+	esb_set_tracker_state(DONGLE_CONNECT);
+}
+
 // TODO Split into multiple functions
 void event_handler(struct esb_evt const *event)
 {
 	switch (event->evt_id)
 	{
 	case ESB_EVENT_TX_SUCCESS:
-		if (tx_errors >= TX_ERROR_THRESHOLD && tx_errors < TX_ERROR_THRESHOLD + TX_ERROR_CLEAR_RATE && last_tx_fail == 0)
-		{
-			last_tx_success = 0; // reset last_tx_success on threshold reached
-			last_tx_fail = k_uptime_get();
-		}
+		last_tx_success = k_uptime_get();
 		if (tx_errors > TX_ERROR_CLEAR_RATE)
 			tx_errors -= TX_ERROR_CLEAR_RATE;
 		else
@@ -103,13 +122,9 @@ void event_handler(struct esb_evt const *event)
 			clocks_stop();
 		break;
 	case ESB_EVENT_TX_FAILED:
+		last_tx_fail = k_uptime_get();
 		if (tx_errors < TX_ERROR_MAX)
 			tx_errors++;
-		if (tx_errors == TX_ERROR_THRESHOLD && last_tx_success == 0) // consecutive failure to transmit
-		{
-			last_tx_fail = 0; // reset last_tx_fail on threshold reached
-			last_tx_success = k_uptime_get();
-		}
 		packets_failed++;
 		LOG_DBG("TX FAILED, last packet %d", last_packet_sequence);
 		// TODO : Better clocks blocking and control based on state
@@ -152,7 +167,7 @@ void event_handler(struct esb_evt const *event)
 			packets_rssi += (uint8_t) rx_payload.rssi;
 			
 			//LOG_INF("Packet %016llX", *(uint64_t *)tx_payload_pair.data);
-			if(rx_payload.data[1] > ESB_PACKET_CONTROL_PACKETS) {
+			if(rx_payload.data[1] > ESB_PACKET_DONGLE_PACKETS) {
 				// Control packet received
 				switch(rx_payload.data[1]) {
 					case ESB_PACKET_CONTROL_DONGLE_STATUS:
@@ -165,21 +180,8 @@ void event_handler(struct esb_evt const *event)
         				LOG_INF("Found dongle %012llX on channel %d, rssi %d", dongle_hwid, channel, rx_payload.rssi);
 						if(pairing_is_paired()) {
 							// Looking for dongle when paired
-							if(pairing_get_paired_dongle() == dongle_hwid) {
-								// We found our dongle? Joyous occasion!
-								esb_channel = channel;
-								dongle_found = true;
-								int32_t time = tdma_get_time();
-								int32_t received_time = *((uint32_t *) &rx_payload.data[10]);
-								int32_t diff = (received_time - time);
-								LOG_INF("Our time: %d, rcvd time: %d", time, received_time);
-								tdma_update_timer_offset(diff);
-								for(int i = 0; i < sizeof(ESB_ALLOWED_CHANNEL_BUNDLES); ++i) {
-									if(ESB_ALLOWED_CHANNEL_BUNDLES[i] == channel) {
-										currentChannelBundle = i;
-										break;
-									}
-								}
+							if(!dongle_found && pairing_get_paired_dongle() == dongle_hwid) {
+								found_dongle(dongle_hwid, channel, *((uint32_t *) &rx_payload.data[10]));
 							}
 						} else {
 							pairing_dongle_found(&rx_payload);
@@ -197,6 +199,7 @@ void event_handler(struct esb_evt const *event)
 						int32_t packet_time = tdma_get_packet_time();
 						uint8_t window = rx_payload.data[2];
 						tdma_set_our_window(window);
+						retained->tdma_window = window;
 						int32_t received_time = *((uint32_t *) &rx_payload.data[3]);
 						
 						// See NTP algorithm
@@ -255,8 +258,13 @@ void fill_packets_stat(uint8_t *data) {
 
 int esb_initialize(bool tx, bool advertize)
 {
-	if(esb_initialized)
-		return 0;
+	if(esb_initialized) {
+		if(tx == esb_tx && advertize == esb_advertize)
+			return 0;
+		esb_deinitialize();
+	}
+	esb_tx = tx;
+	esb_advertize = advertize;
 	esb_initialized = true;
 	int err;
 
@@ -403,6 +411,7 @@ void esb_set_channel(uint8_t channel) {
 }
 
 bool find_dongle() {
+	dongle_found = false;
 	LOG_INF("Searching for our dongle %012llX...", (*(uint64_t *)&retained->paired_addr[0] >> 16) & 0xFFFFFFFFFFFF);
 	esb_initialize(false, true);
 	clocks_start();
@@ -413,19 +422,7 @@ bool find_dongle() {
 		if(esb_get_tracker_state() != FIND_DONGLE)
 			return true;
 	}
-	if(dongle_found) {
-		retained->last_dongle_channel = esb_channel;
-		retained_update();
-		LOG_INF("Dongle successfully found!");
-	} else {
-		LOG_WRN("Couldn't find our dongle, powering off");
-		sys_request_system_off(false);
-		return false;
-	}
-	esb_deinitialize();
-	clocks_stop();
-	esb_set_tracker_state(DONGLE_CONNECT);
-	return true;
+	return dongle_found;
 }
 
 void connect_to_dongle() {
@@ -447,16 +444,13 @@ static void esb_thread(void)
 		dongle_found = true;
 		esb_set_tracker_state(DONGLE_CONNECT);
 	}
-	// TODO Restore TDMA timer, window & frequency hopping
+	tdma_set_our_window(retained->tdma_window);
+	// TODO Restore TDMA timer & frequency hopping
 	// But we need RTC for this...
-
 
 #if SWEEP_TEST
 	sweep_test_run();
 #endif
-
-	// TODO blink correctly during pairing
-	// TODO Find dongle if it doesn't respond for more than 1 second
 
 	while (1)
 	{
@@ -468,6 +462,7 @@ static void esb_thread(void)
 			case PAIRING_FIND_DONGLES:
 				if(!pairing_find_dongles_to_pair()) {
 					LOG_WRN("Pairing timeout");
+					esb_set_tracker_state(PAIRING_ERROR);
 					sys_request_system_off(false);
 					return;
 				}
@@ -475,17 +470,34 @@ static void esb_thread(void)
 			case PAIRING_PICK_DONGLE:
 				if(!pairing_pick_dongle_and_pair()) {
 					LOG_WRN("No dongles approved pairing");
+					esb_set_tracker_state(PAIRING_ERROR);
 					sys_request_system_off(false);
 					return;
 				}
 				break;
 			case FIND_DONGLE:
-				if(!find_dongle())
+				if(!find_dongle()) {
+					LOG_WRN("Couldn't find our dongle");
+					esb_set_tracker_state(CONNECTION_ERROR);
+					sys_request_system_off(false);
 					return;
+				}
 				break;
 			case DONGLE_CONNECT:
 				connect_to_dongle();
 				break;
+			case PAIRING_ERROR:
+			case CONNECTION_ERROR:
+				// only raise error while not potentially communicating by usb
+				if (!get_status(SYS_STATUS_CONNECTION_ERROR) && (!use_hid || !get_status(SYS_STATUS_USB_CONNECTED)))
+					set_status(SYS_STATUS_CONNECTION_ERROR, true);
+				if (use_shutdown && k_uptime_get() - last_tx_success > CONFIG_3_SETTINGS_READ(CONFIG_3_CONNECTION_TIMEOUT_DELAY)) // shutdown if receiver is not detected // TODO: is shutdown necessary if usb is connected at the time?
+				{
+					LOG_WRN("No response from receiver in %dm", CONFIG_3_SETTINGS_READ(CONFIG_3_CONNECTION_TIMEOUT_DELAY) / 60000);
+					sys_request_system_off(false);
+					break;
+				}
+			break;
 			default: // Other states are handled in a different place
 				break;
 		}
@@ -493,14 +505,7 @@ static void esb_thread(void)
 
 		if (tx_errors >= TX_ERROR_THRESHOLD)
 		{
-			if (!get_status(SYS_STATUS_CONNECTION_ERROR) && (!use_hid || !get_status(SYS_STATUS_USB_CONNECTED))) // only raise error while not potentially communicating by usb
-				set_status(SYS_STATUS_CONNECTION_ERROR, true);
-			if (use_shutdown && k_uptime_get() - last_tx_success > CONFIG_3_SETTINGS_READ(CONFIG_3_CONNECTION_TIMEOUT_DELAY)) // shutdown if receiver is not detected // TODO: is shutdown necessary if usb is connected at the time?
-			{
-				LOG_WRN("No response from receiver in %dm", CONFIG_3_SETTINGS_READ(CONFIG_3_CONNECTION_TIMEOUT_DELAY) / 60000);
-				sys_request_system_off(false);
-				break;
-			}
+			esb_set_tracker_state(FIND_DONGLE); // Try to find dongle again
 		}
 		else if (tx_errors < TX_ERROR_THRESHOLD && get_status(SYS_STATUS_CONNECTION_ERROR) && k_uptime_get() - last_tx_fail > 3000) // TODO: there is possibly some race condition causing tx_error to potentially be above zero more often than not, so the check is more lenient; tx_error under threshold and last errors above threshold was not recent
 		{

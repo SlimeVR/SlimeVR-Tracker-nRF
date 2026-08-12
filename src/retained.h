@@ -51,6 +51,7 @@ struct retained_data {
 	uint8_t reboot_counter;
 	uint8_t paired_addr[8];
 	uint8_t last_dongle_channel;
+	uint8_t tdma_window;
 
 	uint8_t sensor_data[128];
 
