@@ -71,6 +71,7 @@ void esb_set_addr_discovery(void);
 void esb_set_addr_paired(uint8_t *paired_addr);
 
 void esb_set_channel(uint8_t channel);
+uint8_t esb_get_channel();
 void esb_set_receiver_addr(uint64_t receiver_addr);
 int esb_get_frequency(void);
 
