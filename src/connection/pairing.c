@@ -55,7 +55,6 @@ bool pairing_find_dongles_to_pair() {
     if(esb_wait_state_change(PAIRING_FIND_DONGLES, ESB_SEARCH_DONGLES_PAIRING)) {
         return true; // State changed, it's not our problem anymore
     }
-    esb_deinitialize();
     for(int i = 0; i < ESB_CHANNELS_AMOUNT; ++i) {
         struct pairing_discovery_t* dg = &discovered_dongles[i];
         if(dg->dongle_hwid != 0 && (dg->flags & ESB_DONGLE_FLAG_ACCEPTS_NEW_TRACKERS) > 0) {
@@ -183,12 +182,10 @@ bool pairing_pick_dongle_and_pair(void) {
                 case DONGLE_CONNECT:
                     // Yooo??? dongle?? said "yes"???
                     // By this time we already have everything saved, we go directly to finding it
-                    esb_deinitialize();
                     return true;
                 default:
                     return true; // State was changed outside, it's not our problem anymore
             }
-            esb_deinitialize();
         }
     }
 	return false; // No dongle was found and we're still in the state of finding it
