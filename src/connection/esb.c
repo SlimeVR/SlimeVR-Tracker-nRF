@@ -85,7 +85,7 @@ uint32_t packets_rssi;
 uint64_t last_received_packet = 0;
 
 void found_dongle(uint64_t dongle_hwid, uint8_t channel, int32_t received_time) {
-	esb_channel = channel;
+	esb_set_channel(channel);
 	dongle_found = true;
 	int32_t time = tdma_get_time();
 	int32_t diff = (received_time - time);
@@ -97,7 +97,7 @@ void found_dongle(uint64_t dongle_hwid, uint8_t channel, int32_t received_time) 
 			break;
 		}
 	}
-	retained->last_dongle_channel = esb_channel;
+	retained->last_dongle_channel = esb_get_channel();
 	retained_update();
 	clocks_stop();
 	LOG_INF("Dongle successfully found!");
@@ -273,8 +273,14 @@ void fill_packets_stat(uint8_t *data) {
 int esb_initialize(bool tx, bool advertize)
 {
 	if(esb_initialized) {
-		if(tx == esb_tx && advertize == esb_advertize)
-			return 0;
+		if(tx == esb_tx && advertize == esb_advertize) {
+			if(advertize)
+				return 0; // Don't switch channel in advertize mode
+			uint32_t current_channel;
+			esb_get_rf_channel(current_channel);
+			if(esb_channel == current_channel)
+				return 0;		
+		}
 		esb_deinitialize();
 	}
 	esb_tx = tx;
@@ -337,6 +343,14 @@ int esb_initialize(bool tx, bool advertize)
 	LOG_INF("Initialized ESB, %sX mode ch %d", tx ? "T" : "R", ch);
 
 	return 0;
+}
+
+void esb_set_channel(uint8_t ch) {
+	esb_channel = ch;
+}
+
+uint8_t esb_get_channel() {
+	return esb_channel;
 }
 
 void esb_deinitialize(void)
@@ -414,18 +428,15 @@ void esb_write_payload() {
 #if FREQUENCY_HOPPING
 	uint32_t timer = tdma_get_time_with_static_offset();
 	uint32_t current_slot = tdma_get_slot(timer);
-	esb_set_rf_channel(ESB_ALLOWED_CHANNEL_BUNDLES[(current_slot) % 10]);
+	esb_set_channel(ESB_ALLOWED_CHANNEL_BUNDLES[(current_slot) % 10]);
+	esb_set_rf_channel(esb_channel);
 #endif
 	esb_start_tx();
 }
 
 bool esb_ready(void)
 {
-	return esb_initialized && pairing_is_paired() && dongle_found;
-}
-
-void esb_set_channel(uint8_t channel) {
-	esb_channel = channel;
+	return esb_initialized && esb_get_tracker_state() == CONNECTED;
 }
 
 bool find_dongle() {
