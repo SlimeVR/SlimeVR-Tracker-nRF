@@ -99,7 +99,6 @@ void found_dongle(uint64_t dongle_hwid, uint8_t channel, int32_t received_time) 
 	}
 	retained->last_dongle_channel = esb_channel;
 	retained_update();
-	esb_deinitialize();
 	clocks_stop();
 	LOG_INF("Dongle successfully found!");
 	esb_set_tracker_state(DONGLE_CONNECT);
