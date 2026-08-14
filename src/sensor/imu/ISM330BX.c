@@ -62,6 +62,5 @@ const sensor_imu_t sensor_imu_ism330bx = {
 	*lsm_setup_DRDY,
 	*lsm_setup_WOM,
 
-	*lsm_ext_setup,
-	*lsm_ext_passthrough
+	*lsm_ext_setup
 };

@@ -356,22 +356,30 @@ uint8_t icm45_setup_WOM(void) // TODO: check if working
 	return NRF_GPIO_PIN_PULLUP << 4 | NRF_GPIO_PIN_SENSE_LOW; // active low
 }
 
-int icm45_ext_passthrough(bool passthrough)
-{
+int icm45_ext_setup(enum sensor_ext_mode mode) {
 	int err = 0;
-	if (passthrough)
-		err |= ssi_reg_write_byte(SENSOR_INTERFACE_DEV_IMU, ICM45686_IOC_PAD_SCENARIO_AUX_OVRD, 0x18); // AUX1_MODE_OVRD, AUX1 in I2CM Bypass
-	else
-		err |= ssi_reg_write_byte(SENSOR_INTERFACE_DEV_IMU, ICM45686_IOC_PAD_SCENARIO_AUX_OVRD, 0x00); // disable overrides
-	if (err)
-		LOG_ERR("Communication error");
-	return 0;
-}
+	switch (mode) {
+		case SENSOR_EXT_MODE_OFF:
+			err |= ssi_reg_write_byte(SENSOR_INTERFACE_DEV_IMU, ICM45686_IOC_PAD_SCENARIO_AUX_OVRD, 0x00); // disable overrides
+			break;
 
-int icm45_ext_setup() {
-	int err = 0;
-	err |= ssi_reg_write_byte(SENSOR_INTERFACE_DEV_IMU, ICM45686_IOC_PAD_SCENARIO_AUX_OVRD, 0x17); // AUX1_MODE_OVRD, AUX1 in I2CM Master, AUX1_ENABLE_OVRD, AUX1 enabled
-	sensor_interface_ext_configure(&sensor_ext_icm45686);
+		case SENSOR_EXT_MODE_I2C_PASSTHROUGH:
+			err |= ssi_reg_write_byte(SENSOR_INTERFACE_DEV_IMU, ICM45686_IOC_PAD_SCENARIO_AUX_OVRD, 0x18); // AUX1_MODE_OVRD, AUX1 in I2CM Bypass
+			break;
+			
+		case SENSOR_EXT_MODE_I2CM_PROXY:
+			err |= ssi_reg_write_byte(SENSOR_INTERFACE_DEV_IMU, ICM45686_IOC_PAD_SCENARIO_AUX_OVRD, 0x17); // AUX1_MODE_OVRD, AUX1 in I2CM Master, AUX1_ENABLE_OVRD, AUX1 enabled
+			sensor_interface_ext_configure(&sensor_ext_icm45686);
+			break;
+		
+		case SENSOR_EXT_MODE_I2CM_AUTONOMOUS:
+			return -1;
+	}
+
+	if (err) {
+		LOG_ERR("Communication error: %d", err);
+	}
+
 	return err;
 }
 
@@ -544,8 +552,7 @@ const sensor_imu_t sensor_imu_icm45686 = {
 	*icm45_setup_DRDY,
 	*icm45_setup_WOM,
 
-	*icm45_ext_setup,
-	*icm45_ext_passthrough
+	*icm45_ext_setup
 };
 
 const sensor_ext_ssi_t sensor_ext_icm45686 = {

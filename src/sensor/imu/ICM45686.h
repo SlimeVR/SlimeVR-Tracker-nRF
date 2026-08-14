@@ -169,8 +169,7 @@ int icm45_temp_read(float *data);
 uint8_t icm45_setup_DRDY(uint16_t threshold);
 uint8_t icm45_setup_WOM(void);
 
-int icm45_ext_setup(void);
-int icm45_ext_passthrough(bool passthrough);
+int icm45_ext_setup(enum sensor_ext_mode mode);
 
 int icm45_ext_write(const uint8_t addr, const uint8_t *buf, uint32_t num_bytes);
 int icm45_ext_write_read(const uint8_t addr, const uint8_t *write_buf, size_t num_write, uint8_t *read_buf, size_t num_read);

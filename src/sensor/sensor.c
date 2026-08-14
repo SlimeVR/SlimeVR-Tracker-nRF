@@ -36,41 +36,41 @@
 
 #define SPI_OP SPI_MODE_CPOL | SPI_MODE_CPHA | SPI_WORD_SET(8)
 
-#if DT_NODE_HAS_STATUS(DT_NODELABEL(imu_spi), okay)
-#define SENSOR_IMU_SPI_EXISTS true
+#if SENSOR_IMU_SPI_EXISTS
 #define SENSOR_IMU_SPI_NODE DT_NODELABEL(imu_spi)
 static struct spi_dt_spec sensor_imu_spi_dev = SPI_DT_SPEC_GET(SENSOR_IMU_SPI_NODE, SPI_OP, 0);
 #endif
-#if DT_NODE_HAS_STATUS(DT_NODELABEL(imu), okay)
-#define SENSOR_IMU_EXISTS true
+
+
+#if SENSOR_IMU_EXISTS
 #define SENSOR_IMU_NODE DT_NODELABEL(imu)
 static struct i2c_dt_spec sensor_imu_dev = I2C_DT_SPEC_GET(SENSOR_IMU_NODE);
 #else
 static struct i2c_dt_spec sensor_imu_dev = {0};
 #endif
+
 #if !SENSOR_IMU_SPI_EXISTS && !SENSOR_IMU_EXISTS
 #error "IMU node does not exist"
 #endif
 static uint8_t sensor_imu_dev_reg = 0xFF;
 
-#if DT_NODE_HAS_STATUS(DT_NODELABEL(mag_spi), okay)
-#define SENSOR_MAG_SPI_EXISTS true
+#if SENSOR_MAG_SPI_EXISTS
 #define SENSOR_MAG_SPI_NODE DT_NODELABEL(mag_spi)
 static struct spi_dt_spec sensor_mag_spi_dev = SPI_DT_SPEC_GET(SENSOR_MAG_SPI_NODE, SPI_OP, 0);
 #endif
-#if DT_NODE_HAS_STATUS(DT_NODELABEL(mag), okay)
-#define SENSOR_MAG_EXISTS true
+
+
+#if SENSOR_DIRECT_MAG_EXISTS
 #define SENSOR_MAG_NODE DT_NODELABEL(mag)
 static struct i2c_dt_spec sensor_mag_dev = I2C_DT_SPEC_GET(SENSOR_MAG_NODE);
 #else
 static struct i2c_dt_spec sensor_mag_dev = {0};
 #endif
-#if SENSOR_IMU_SPI_EXISTS // might exist
-#define SENSOR_MAG_EXT_EXISTS true
+
+#if !SENSOR_MAG_EXISTS
+#warning "Magnetometer does not exist"
 #endif
-#if !SENSOR_MAG_SPI_EXISTS && !SENSOR_MAG_EXISTS && !SENSOR_MAG_EXT_EXISTS
-#warning "Magnetometer node does not exist"
-#endif
+
 static uint8_t sensor_mag_dev_reg = 0xFF;
 
 static float q[4] = {1.0f, 0.0f, 0.0f, 0.0f}; // vector to hold quaternion
@@ -276,7 +276,7 @@ int sensor_scan(void)
 	if (mag_id >= 0)
 		sensor_interface_register_sensor_mag_spi(&sensor_mag_spi_dev);
 #endif
-#if SENSOR_MAG_EXISTS
+#if SENSOR_DIRECT_MAG_EXISTS
 	if (mag_id < 0)
 	{
 		LOG_INF("Scanning bus for magnetometer");
@@ -287,7 +287,7 @@ int sensor_scan(void)
 	if (mag_id < 0 && !(sensor_imu_dev_reg & 0x80)) // I2C IMU
 	{
 		// IMU may support passthrough mode if the magnetometer is connected through the IMU
-		int err = sensor_imu->ext_passthrough(true); // no need to disable, the imu will be reset later
+		int err = sensor_imu->ext_passthrough(SENSOR_EXT_MODE_I2C_PASSTHROUGH); // no need to disable, the imu will be reset later
 		if (!err)
 		{
 			LOG_INF("Scanning bus for magnetometer through IMU passthrough");
@@ -313,7 +313,7 @@ int sensor_scan(void)
 	if (mag_id < 0 && (sensor_imu_dev_reg & 0x80)) // SPI IMU
 	{
 		// IMU may support I2CM if the magnetometer is connected through the IMU
-		int err = sensor_imu->ext_setup();
+		int err = sensor_imu->ext_setup(SENSOR_EXT_MODE_I2CM_PROXY);
 		if (!err)
 		{
 			LOG_INF("Scanning bus for magnetometer through IMU I2CM");
@@ -340,7 +340,7 @@ int sensor_scan(void)
 		}
 	}
 #endif
-#if !SENSOR_MAG_SPI_EXISTS && !SENSOR_MAG_EXISTS && !SENSOR_MAG_EXT_EXISTS
+#if !SENSOR_MAG_SPI_EXISTS && !SENSOR_DIRECT_MAG_EXISTS && !SENSOR_MAG_EXT_EXISTS
 	LOG_WRN("Magnetometer node does not exist");
 #endif
 	if (mag_id >= (int)ARRAY_SIZE(dev_mag_names))
@@ -699,10 +699,10 @@ int sensor_init(void)
 // 55-66ms to wait, get chip ids, and setup icm (50ms spent waiting for accel and gyro to start)
 	if (mag_available && mag_enabled)
 	{
-#if SENSOR_MAG_EXISTS
-		sensor_imu->ext_passthrough(true); // reenable passthrough
+#if SENSOR_DIRECT_MAG_EXISTS
+		sensor_imu->ext_setup(SENSOR_EXT_MODE_I2C_PASSTHROUGH); // reenable passthrough
 #elif SENSOR_MAG_EXT_EXISTS
-		sensor_imu->ext_setup();
+		sensor_imu->ext_setup(SENSOR_EXT_MODE_I2CM_PROXY); // todo, autonomous if possible
 #endif
 		err = sensor_mag->init(mag_initial_time, &mag_actual_time);
 		mag_interval = mag_actual_time * 1000 - 2; // start attemping magnetometer reads before expected new sample, ask for each sample 2ms earlier

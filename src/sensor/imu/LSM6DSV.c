@@ -306,34 +306,36 @@ uint8_t lsm_setup_WOM(void)
 	return NRF_GPIO_PIN_PULLUP << 4 | NRF_GPIO_PIN_SENSE_LOW; // active low
 }
 
-int lsm_ext_setup(void)
-{
-	// enable internal pull-up for auxiliary I2C
-	int err = ssi_reg_write_byte(SENSOR_INTERFACE_DEV_IMU, LSM6DSV_IF_CFG, 0x58); // SHUB_PU_EN, INT H_LACTIVE active low, PP_OD open-drain
-	if (err)
-		LOG_ERR("Communication error");
-	sensor_interface_ext_configure(&sensor_ext_lsm6dsv);
-	return 0;
-}
-
-int lsm_ext_passthrough(bool passthrough)
-{
+int lsm_ext_setup(enum sensor_ext_mode mode) {
 	int err = 0;
-	if (passthrough)
-	{
-		err |= ssi_reg_write_byte(SENSOR_INTERFACE_DEV_IMU, LSM6DSV_FUNC_CFG_ACCESS, 0x40); // switch to sensor hub registers
-		err |= ssi_reg_write_byte(SENSOR_INTERFACE_DEV_IMU, LSM6DSV_MASTER_CONFIG, 0x10); // passthrough on
-		err |= ssi_reg_write_byte(SENSOR_INTERFACE_DEV_IMU, LSM6DSV_FUNC_CFG_ACCESS, 0x00); // switch to normal registers
+	switch (mode) {
+		case SENSOR_EXT_MODE_OFF:
+			err |= ssi_reg_write_byte(SENSOR_INTERFACE_DEV_IMU, LSM6DSV_FUNC_CFG_ACCESS, 0x40); // switch to sensor hub registers
+			err |= ssi_reg_write_byte(SENSOR_INTERFACE_DEV_IMU, LSM6DSV_MASTER_CONFIG, 0x00); // passthrough off
+			err |= ssi_reg_write_byte(SENSOR_INTERFACE_DEV_IMU, LSM6DSV_FUNC_CFG_ACCESS, 0x00); // switch to normal registers
+			break;
+
+		case SENSOR_EXT_MODE_I2C_PASSTHROUGH:
+			err |= ssi_reg_write_byte(SENSOR_INTERFACE_DEV_IMU, LSM6DSV_FUNC_CFG_ACCESS, 0x40); // switch to sensor hub registers
+			err |= ssi_reg_write_byte(SENSOR_INTERFACE_DEV_IMU, LSM6DSV_MASTER_CONFIG, 0x10); // passthrough on
+			err |= ssi_reg_write_byte(SENSOR_INTERFACE_DEV_IMU, LSM6DSV_FUNC_CFG_ACCESS, 0x00); // switch to normal registers
+			break;
+			
+		case SENSOR_EXT_MODE_I2CM_PROXY:
+			// enable internal pull-up for auxiliary I2C
+			err |= ssi_reg_write_byte(SENSOR_INTERFACE_DEV_IMU, LSM6DSV_IF_CFG, 0x58); // SHUB_PU_EN, INT H_LACTIVE active low, PP_OD open-drain
+			sensor_interface_ext_configure(&sensor_ext_lsm6dsv);
+			break;
+		
+		case SENSOR_EXT_MODE_I2CM_AUTONOMOUS:
+			return -1;
 	}
-	else
-	{
-		err |= ssi_reg_write_byte(SENSOR_INTERFACE_DEV_IMU, LSM6DSV_FUNC_CFG_ACCESS, 0x40); // switch to sensor hub registers
-		err |= ssi_reg_write_byte(SENSOR_INTERFACE_DEV_IMU, LSM6DSV_MASTER_CONFIG, 0x00); // passthrough off
-		err |= ssi_reg_write_byte(SENSOR_INTERFACE_DEV_IMU, LSM6DSV_FUNC_CFG_ACCESS, 0x00); // switch to normal registers
+
+	if (err) {
+		LOG_ERR("Communication error: %d", err);
 	}
-	if (err)
-		LOG_ERR("Communication error");
-	return 0;
+
+	return err;
 }
 
 int lsm_ext_write(const uint8_t addr, const uint8_t *buf, uint32_t num_bytes)
@@ -421,7 +423,6 @@ const sensor_imu_t sensor_imu_lsm6dsv = {
 	*lsm_setup_WOM,
 
 	*lsm_ext_setup,
-	*lsm_ext_passthrough
 };
 
 const sensor_ext_ssi_t sensor_ext_lsm6dsv = {

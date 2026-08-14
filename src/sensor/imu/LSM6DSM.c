@@ -304,6 +304,5 @@ const sensor_imu_t sensor_imu_lsm6dsm = {
 	*lsm6dsm_setup_DRDY,
 	*lsm6dsm_setup_WOM,
 
-	*imu_none_ext_setup,
-	*lsm_ext_passthrough
+	*lsm_ext_setup
 };

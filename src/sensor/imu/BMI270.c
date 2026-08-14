@@ -491,6 +491,5 @@ const sensor_imu_t sensor_imu_bmi270 = {
 	*bmi_setup_DRDY,
 	*bmi_setup_WOM,
 
-	*imu_none_ext_setup,
-	*imu_none_ext_passthrough
+	*imu_none_ext_setup
 };

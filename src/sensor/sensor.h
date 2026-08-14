@@ -51,6 +51,13 @@ void main_imu_resume(void);
 void main_imu_wakeup(void);
 void main_imu_restart(void);
 
+enum sensor_ext_mode {
+	SENSOR_EXT_MODE_OFF = 0, // no external sensor
+	SENSOR_EXT_MODE_I2C_PASSTHROUGH = 1, // shorting external i2c bus to main i2c bus, mcu controls everything
+	SENSOR_EXT_MODE_I2CM_PROXY = 2, // separate buses, imu is as as a proxy / protocol to i2c converter
+	SENSOR_EXT_MODE_I2CM_AUTONOMOUS = 4, // separate buses, mag is autonomically driven by imu, data lands into fifo
+};
+
 typedef struct sensor_fusion {
 	void (*init)(float, float, float); // gyro_time, accel_time, mag_time
 	void (*load)(const void *);
@@ -87,8 +94,7 @@ typedef struct sensor_imu {
 	uint8_t (*setup_DRDY)(uint16_t);
 	uint8_t (*setup_WOM)(void);
 
-	int (*ext_setup)(void); // register write/writeread with interface, return 0 if success, -1 if error or not available
-	int (*ext_passthrough)(bool); // enable/disable passthrough mode, return 0 if success, -1 if error or not available
+	int (*ext_setup)(enum sensor_ext_mode);
 } sensor_imu_t;
 
 typedef struct sensor_mag {

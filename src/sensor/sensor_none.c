@@ -92,15 +92,9 @@ uint8_t imu_none_setup_WOM(void)
 	return 0;
 }
 
-int imu_none_ext_setup(void)
+int imu_none_ext_setup(enum sensor_ext_mode)
 {
 	LOG_DBG("imu_none_ext_setup, sensor has no IMU or IMU has no ext support");
-	return -1;
-}
-
-int imu_none_ext_passthrough(bool passthrough)
-{
-	LOG_DBG("imu_none_ext_passthrough, sensor has no IMU or IMU has no ext passthrough");
 	return -1;
 }
 
@@ -120,8 +114,7 @@ const sensor_imu_t sensor_imu_none = {
 	*imu_none_setup_DRDY,
 	*imu_none_setup_WOM,
 	
-	*imu_none_ext_setup,
-	*imu_none_ext_passthrough
+	*imu_none_ext_setup
 };
 
 int mag_none_init(float time, float *actual_time)

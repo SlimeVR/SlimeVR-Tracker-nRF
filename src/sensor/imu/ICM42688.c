@@ -344,6 +344,5 @@ const sensor_imu_t sensor_imu_icm42688 = {
 	*icm_setup_DRDY,
 	*icm_setup_WOM,
 
-	*imu_none_ext_setup,
-	*imu_none_ext_passthrough
+	*imu_none_ext_setup
 };

@@ -38,8 +38,7 @@ int imu_none_temp_read(float *data);
 
 uint8_t imu_none_setup_WOM(void);
 
-int imu_none_ext_setup(void);
-int imu_none_ext_passthrough(bool passthrough);
+int imu_none_ext_setup(enum sensor_ext_mode);
 
 extern const sensor_imu_t sensor_imu_none;
 
