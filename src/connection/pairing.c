@@ -12,12 +12,11 @@ static struct pairing_discovery_t* discovered_dongles = NULL;
 static struct pairing_discovery_t current_pairing_dongle;
 static struct esb_payload tx_payload_pair = ESB_EMPTY_PAYLOAD(0, 15);
 static uint8_t paired_addr[8] = {0}; // Paired address bytes: <0> Is Paired | <1> Tracker Id | <2-8> Dongle Address
-static bool esb_paired = false;
 static bool pairing_needs_saving = false;
 
 void prepare_pair_payload() {
 	uint64_t device_addr = *((uint64_t *) NRF_FICR->DEVICEADDR) & 0xFFFFFFFFFFFF;
-	tx_payload_pair.pipe = 0;
+	tx_payload_pair.pipe = 1;
 	tx_payload_pair.noack = false;
 	tx_payload_pair.data[0] = 0;
 	tx_payload_pair.data[1] = ESB_PACKET_CONTROL_PAIR_REQEST;
@@ -31,14 +30,9 @@ void pairing_restore(void) {
 	memcpy(paired_addr, retained->paired_addr, sizeof(paired_addr));
     if(paired_addr[0] != 0) {
         connection_set_id(paired_addr[1]);
-        esb_set_addr_paired(&paired_addr);
-        esb_paired = true;
+        esb_set_addr_paired(&paired_addr[2]);
         esb_set_tracker_state(FIND_DONGLE);
     }
-}
-
-bool pairing_is_paired(void) {
-    return esb_paired;
 }
 
 bool pairing_find_dongles_to_pair() {
@@ -78,8 +72,11 @@ void pairing_dongle_found(const struct esb_payload *payload) {
                 dg->flags = payload->data[9];
                 dg->response = 255;
                 dg->response_time = k_uptime_get_32();
+                LOG_INF("New dongle for pairing: %012llX, ch %d, rssi %d, flags %d", dongle_hwid, channel, payload->rssi, payload->data[9]);
+                break;
             } else if(dg->dongle_hwid == dongle_hwid) {
                 dg->rssi = MIN(dg->rssi, payload->rssi);
+                break;
             }
         }
     }
