@@ -28,4 +28,6 @@ void clock_pre_shutdown(void);
 void clock_init_external(void);
 int clocks_start(void);
 void clocks_stop(void);
+void clocks_allow_stopping(bool allow);
 int clocks_init(void);
+bool get_clocks_status();

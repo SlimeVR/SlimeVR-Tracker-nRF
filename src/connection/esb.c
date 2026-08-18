@@ -98,7 +98,6 @@ void found_dongle(uint64_t dongle_hwid, uint8_t channel, int32_t received_time) 
 	}
 	retained->last_dongle_channel = esb_get_channel();
 	retained_update();
-	clocks_stop();
 	LOG_INF("Dongle successfully found!");
 	esb_set_tracker_state(DONGLE_CONNECT);
 }
@@ -239,9 +238,10 @@ void event_handler(struct esb_evt const *event)
 }
 
 void esb_set_tracker_state(enum esb_tracker_state_t state) {
+	enum esb_tracker_state_t old_state = esb_tracker_state;
 	esb_tracker_state_last_change = k_uptime_get_32();
 	esb_tracker_state = state;
-	LOG_INF("New state: %d", state);
+	LOG_INF("ESB state change: %d -> %d", old_state, state);
 }
 
 bool esb_wait_state_change(enum esb_tracker_state_t from_state, uint32_t timeout_ms) {
@@ -329,6 +329,7 @@ int esb_initialize(bool tx, bool advertize)
 	}
 	else
 	{
+		k_msleep(2000);
 		LOG_ERR("ESB initialization failed: %d", err);
 		set_status(SYS_STATUS_CONNECTION_ERROR, true);
 		esb_initialized = false;
@@ -440,8 +441,9 @@ bool esb_ready(void)
 bool find_dongle() {
 	dongle_found = false;
 	LOG_INF("Searching for our dongle %012llX...", (*(uint64_t *)&retained->paired_addr[0] >> 16) & 0xFFFFFFFFFFFF);
-	esb_initialize(false, true);
+	clocks_allow_stopping(false);
 	clocks_start();
+	esb_initialize(false, true);
 	esb_start_rx();
 	uint64_t start = k_uptime_get();
 	while(!dongle_found && start + ESB_SEARCH_TIMEOUT > k_uptime_get()) {
@@ -467,6 +469,8 @@ void populate_connect_payload() {
 void connect_to_dongle() {
 	// TODO : Fast connect if we just woke up
 	// TODO : Frequency hopping
+	clocks_allow_stopping(false);
+	clocks_start();
 	esb_initialize(true, false);
 	uint64_t start = k_uptime_get();
 	while(esb_get_tracker_state() == DONGLE_CONNECT && start + 1000 > k_uptime_get()) {
@@ -545,6 +549,9 @@ static void esb_thread(void)
 					sys_request_system_off(false);
 					break;
 				}
+				// Fall-trhough
+			case CONNECTED:
+				clocks_allow_stopping(true);
 			break;
 			default: // Other states are handled in a different place
 				break;
@@ -553,8 +560,7 @@ static void esb_thread(void)
 
 		if(esb_get_tracker_state() == CONNECTED && tx_errors >= TX_ERROR_THRESHOLD)
 		{
-				esb_set_tracker_state(FIND_DONGLE); // Try to find dongle again
-			
+			esb_set_tracker_state(FIND_DONGLE); // Try to find dongle again
 		}
 		else if (tx_errors < TX_ERROR_THRESHOLD && get_status(SYS_STATUS_CONNECTION_ERROR) && k_uptime_get() - last_tx_fail > 3000) // TODO: there is possibly some race condition causing tx_error to potentially be above zero more often than not, so the check is more lenient; tx_error under threshold and last errors above threshold was not recent
 		{

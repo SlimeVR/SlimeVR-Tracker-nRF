@@ -3,6 +3,7 @@
 #include "pairing.h"
 #include "system/system.h"
 #include "connection.h"
+#include "system/clocks.h"
 #include <zephyr/sys/crc.h>
 #include <stdlib.h>
 
@@ -36,24 +37,35 @@ void pairing_restore(void) {
 }
 
 bool pairing_find_dongles_to_pair() {
+    uint64_t start = k_uptime_get();
     esb_set_tracker_state(PAIRING_FIND_DONGLES);
     set_led(SYS_LED_PATTERN_SHORT, SYS_LED_PRIORITY_PAIR);
     // Find dongles around us
     esb_set_addr_discovery();
+	clocks_allow_stopping(false);
+	clocks_start();
     esb_initialize(false, true);
-    esb_start_rx();
-    discovered_dongles = k_calloc(sizeof(struct pairing_discovery_t), ESB_CHANNELS_AMOUNT);
-    memset(discovered_dongles, 0, sizeof(struct pairing_discovery_t) * ESB_CHANNELS_AMOUNT);
-    // Gather dongles for 2 seconds
-    // TODO Move ESB_SEARCH_DONGLES_PAIRING to CONFIG
-    if(esb_wait_state_change(PAIRING_FIND_DONGLES, ESB_SEARCH_DONGLES_PAIRING)) {
-        return true; // State changed, it's not our problem anymore
+    int code = esb_start_rx();
+    if(code < 0) {
+        LOG_ERR("RX Start error %d", code);
     }
-    for(int i = 0; i < ESB_CHANNELS_AMOUNT; ++i) {
-        struct pairing_discovery_t* dg = &discovered_dongles[i];
-        if(dg->dongle_hwid != 0 && (dg->flags & ESB_DONGLE_FLAG_ACCEPTS_NEW_TRACKERS) > 0) {
-            esb_set_tracker_state(PAIRING_PICK_DONGLE);
-            return true;
+    if(discovered_dongles == NULL)
+        discovered_dongles = k_calloc(sizeof(struct pairing_discovery_t), ESB_CHANNELS_AMOUNT);
+    memset(discovered_dongles, 0, sizeof(struct pairing_discovery_t) * ESB_CHANNELS_AMOUNT);
+    // TODO Move PAIRING_FIND_DONGLES to CONFIG
+    // Wait for any dongle for up to 30 seconds, but continue if we find any in the first 2 seconds
+    while(esb_get_tracker_state() == PAIRING_FIND_DONGLES && start + ESB_SEARCH_TIMEOUT > k_uptime_get()) {
+        // Gather dongles for 2 seconds
+        // TODO Move ESB_SEARCH_DONGLES_PAIRING to CONFIG
+        if(esb_wait_state_change(PAIRING_FIND_DONGLES, ESB_SEARCH_DONGLES_PAIRING)) {
+            return true; // State changed, it's not our problem anymore
+        }
+        for(int i = 0; i < ESB_CHANNELS_AMOUNT; ++i) {
+            struct pairing_discovery_t* dg = &discovered_dongles[i];
+            if(dg->dongle_hwid != 0 && (dg->flags & ESB_DONGLE_FLAG_ACCEPTS_NEW_TRACKERS) > 0) {
+                esb_set_tracker_state(PAIRING_PICK_DONGLE);
+                return true;
+            }
         }
     }
 	return false;
