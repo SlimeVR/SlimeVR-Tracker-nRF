@@ -183,20 +183,23 @@ void event_handler(struct esb_evt const *event)
 						pairing_dongle_response(&rx_payload);
 					break;
 					case ESB_PACKET_DONGLE_CONNECT_REPLY:
-						uint8_t tracker_id = rx_payload.data[2];
-						LOG_INF("Connect reply from dongle: %d", tracker_id);
-						//uint64_t tracker_hwid = *((uint64_t *) &rx_payload.data[3]) & 0xFFFFFFFFFFFF;
-						if(tracker_id < ESB_STATUS_ERROR) {
-							connection_set_id(tracker_id);
-							esb_set_tracker_state(CONNECTED);
-						} else {
-							if(tracker_id == ESB_STATUS_NOT_PAIRED) {
-								esb_set_tracker_state(NOT_PAIRED);
-							} else if(tracker_id == ESB_STATUS_NO_SLOTS) {
-								// Shouldn't happen really...
-								esb_set_tracker_state(NOT_PAIRED);
+						if(esb_get_tracker_state() == DONGLE_CONNECT) {
+							uint8_t tracker_id = rx_payload.data[2];
+							LOG_INF("Connect reply from dongle: %d", tracker_id);
+							//uint64_t tracker_hwid = *((uint64_t *) &rx_payload.data[3]) & 0xFFFFFFFFFFFF;
+							if(tracker_id < ESB_STATUS_ERROR) {
+								connection_set_id(tracker_id);
+								esb_set_tracker_state(CONNECTED);
+							} else {
+								if(tracker_id == ESB_STATUS_NOT_PAIRED) {
+									esb_set_tracker_state(NOT_PAIRED);
+								} else if(tracker_id == ESB_STATUS_NO_SLOTS) {
+									// Shouldn't happen really...
+									esb_set_tracker_state(NOT_PAIRED);
+								} else {
+									esb_set_tracker_state(CONNECTION_ERROR);
+								}
 							}
-							esb_set_tracker_state(CONNECTION_ERROR);
 						}
 						break;
 					case ESB_PACKET_DONGLE_RECONNECT:
@@ -548,9 +551,10 @@ static void esb_thread(void)
 		}
 		pairing_save_retained();
 
-		if (tx_errors >= TX_ERROR_THRESHOLD)
+		if(esb_get_tracker_state() == CONNECTED && tx_errors >= TX_ERROR_THRESHOLD)
 		{
-			esb_set_tracker_state(FIND_DONGLE); // Try to find dongle again
+				esb_set_tracker_state(FIND_DONGLE); // Try to find dongle again
+			
 		}
 		else if (tx_errors < TX_ERROR_THRESHOLD && get_status(SYS_STATUS_CONNECTION_ERROR) && k_uptime_get() - last_tx_fail > 3000) // TODO: there is possibly some race condition causing tx_error to potentially be above zero more often than not, so the check is more lenient; tx_error under threshold and last errors above threshold was not recent
 		{
