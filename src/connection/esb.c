@@ -110,16 +110,16 @@ void event_handler(struct esb_evt const *event)
 	{
 	case ESB_EVENT_TX_SUCCESS:
 		last_tx_success = k_uptime_get();
-		//if (tx_errors > TX_ERROR_CLEAR_RATE)
-		//	tx_errors -= TX_ERROR_CLEAR_RATE;
-		//else
-		//	tx_errors = 0;
+		if (tx_errors > TX_ERROR_CLEAR_RATE)
+			tx_errors -= TX_ERROR_CLEAR_RATE;
+		else
+			tx_errors = 0;
 		LOG_DBG("TX SUCCESS");
 		break;
 	case ESB_EVENT_TX_FAILED:
 		last_tx_fail = k_uptime_get();
-		//if (tx_errors < TX_ERROR_MAX)
-		//	tx_errors++;
+		if (tx_errors < TX_ERROR_MAX)
+			tx_errors++;
 		packets_failed++;
 		LOG_DBG("TX FAILED, last packet %d", last_packet_sequence);
 		break;
@@ -477,7 +477,6 @@ void connect_to_dongle() {
 
 static void esb_thread(void)
 {
-	k_msleep(2000);
 	clocks_start();
 	clock_init_external();
 
@@ -534,15 +533,15 @@ static void esb_thread(void)
 				break;
 			case PAIRING_ERROR:
 			case CONNECTION_ERROR:
-				// // only raise error while not potentially communicating by usb
-				// if (!get_status(SYS_STATUS_CONNECTION_ERROR) && (!use_hid || !get_status(SYS_STATUS_USB_CONNECTED)))
-				// 	set_status(SYS_STATUS_CONNECTION_ERROR, true);
-				// if (use_shutdown && k_uptime_get() - last_tx_success > CONFIG_3_SETTINGS_READ(CONFIG_3_CONNECTION_TIMEOUT_DELAY)) // shutdown if receiver is not detected // TODO: is shutdown necessary if usb is connected at the time?
-				// {
-				// 	LOG_WRN("No response from receiver in %dm", CONFIG_3_SETTINGS_READ(CONFIG_3_CONNECTION_TIMEOUT_DELAY) / 60000);
-				// 	sys_request_system_off(false);
-				// 	break;
-				// }
+				// only raise error while not potentially communicating by usb
+				if (!get_status(SYS_STATUS_CONNECTION_ERROR) && (!use_hid || !get_status(SYS_STATUS_USB_CONNECTED)))
+					set_status(SYS_STATUS_CONNECTION_ERROR, true);
+				if (use_shutdown && k_uptime_get() - last_tx_success > CONFIG_3_SETTINGS_READ(CONFIG_3_CONNECTION_TIMEOUT_DELAY)) // shutdown if receiver is not detected // TODO: is shutdown necessary if usb is connected at the time?
+				{
+					LOG_WRN("No response from receiver in %dm", CONFIG_3_SETTINGS_READ(CONFIG_3_CONNECTION_TIMEOUT_DELAY) / 60000);
+					sys_request_system_off(false);
+					break;
+				}
 			break;
 			default: // Other states are handled in a different place
 				break;
