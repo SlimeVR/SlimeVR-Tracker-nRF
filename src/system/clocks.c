@@ -29,12 +29,17 @@
 LOG_MODULE_REGISTER(clocks, LOG_LEVEL_INF);
 
 bool clocks_status = false;
+bool allow_clocks_stopping = false;
 
 #if defined(CONFIG_CLOCK_CONTROL_NRF)
 static struct onoff_manager *clk_mgr;
 
 bool clocks_get_status(void) {
 	return clocks_status;
+}
+
+void clocks_allow_stopping(bool allow) {
+	allow_clocks_stopping = allow;
 }
 
 int clocks_init(void)
@@ -95,10 +100,14 @@ int clocks_start(void)
 	return 0;
 }
 
+bool get_clocks_status() {
+	return clocks_status;
+}
+
 void clocks_stop(void)
 {
 #if !SWEEP_TEST
-	if (!clocks_status)
+	if (!clocks_status || !allow_clocks_stopping)
 	 	return;
 	clocks_status = false;
 
