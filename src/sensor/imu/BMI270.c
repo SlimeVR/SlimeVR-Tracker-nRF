@@ -166,7 +166,7 @@ int bmi_update_odr(float accel_time, float gyro_time, float *accel_actual_time, 
 }
 
 // TODO: gyro rotation data is delayed for some reason, accelerometer still responds instantly
-uint16_t bmi_fifo_read(uint8_t *data, uint16_t len)
+uint16_t bmi_data_read(uint8_t *data, uint16_t len)
 {
 	int err = 0;
 	uint16_t total = 0;
@@ -200,7 +200,7 @@ static const uint8_t overread[2] = {0x00, 0x80};
 static const uint8_t invalid_accel[6] = {0x01, 0x7F, 0x00, 0x80, 0x00, 0x80};
 static const uint8_t invalid_gyro[6] = {0x02, 0x7F, 0x00, 0x80, 0x00, 0x80};
 
-int bmi_fifo_process(uint16_t index, uint8_t *data, float a[3], float g[3])
+int bmi_data_process(uint16_t index, uint8_t *data, float a[3], float g[3], float m[3])
 {
 	index *= PACKET_SIZE;
 	if (!memcmp(&data[index], overread, sizeof(overread)))
@@ -482,8 +482,8 @@ const sensor_imu_t sensor_imu_bmi270 = {
 	*bmi_update_fs,
 	*bmi_update_odr,
 
-	*bmi_fifo_read,
-	*bmi_fifo_process,
+	*bmi_data_read,
+	*bmi_data_process,
 	*bmi_accel_read,
 	*bmi_gyro_read,
 	*bmi_temp_read,

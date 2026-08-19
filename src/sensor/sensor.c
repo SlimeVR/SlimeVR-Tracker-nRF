@@ -107,6 +107,7 @@ static bool main_suspended;
 
 static bool mag_available;
 static bool mag_enabled; // TODO: toggle from server
+static bool mag_manual;
 
 static int fusion_id = 0;
 static const sensor_fusion_t *sensor_fusion = &sensor_fusion_none;
@@ -313,7 +314,7 @@ int sensor_scan(void)
 	if (mag_id < 0 && (sensor_imu_dev_reg & 0x80)) // SPI IMU
 	{
 		// IMU may support I2CM if the magnetometer is connected through the IMU
-		int err = sensor_imu->ext_setup(SENSOR_EXT_MODE_I2CM_PROXY);
+		int err = sensor_imu->ext_setup(SENSOR_EXT_MODE_I2CM_PROXY, NULL, 0);
 		if (!err)
 		{
 			LOG_INF("Scanning bus for magnetometer through IMU I2CM");
@@ -544,7 +545,7 @@ static void set_update_time_ms(int time_ms)
 	sensor_update_time_ms = time_ms; // TODO: terrible naming
 }
 
-bool main_wfi = false;
+volatile bool main_wfi = false;
 
 static void sensor_interrupt_handler(const struct device *dev, struct gpio_callback *cb, uint32_t pins)
 {
@@ -700,12 +701,22 @@ int sensor_init(void)
 	if (mag_available && mag_enabled)
 	{
 #if SENSOR_DIRECT_MAG_EXISTS
-		sensor_imu->ext_setup(SENSOR_EXT_MODE_I2C_PASSTHROUGH); // reenable passthrough
+		sensor_imu->ext_setup(SENSOR_EXT_MODE_I2C_PASSTHROUGH, NULL); // reenable passthrough
 #elif SENSOR_MAG_EXT_EXISTS
-		sensor_imu->ext_setup(SENSOR_EXT_MODE_I2CM_PROXY); // todo, autonomous if possible
+		sensor_imu->ext_setup(SENSOR_EXT_MODE_I2CM_PROXY, NULL, sensor_mag_dev.addr & 0x7F);
 #endif
 		err = sensor_mag->init(mag_initial_time, &mag_actual_time);
 		mag_interval = mag_actual_time * 1000 - 2; // start attemping magnetometer reads before expected new sample, ask for each sample 2ms earlier
+		mag_manual = true;
+
+#if SENSOR_MAG_EXT_EXISTS
+		// try to switch to autonomous mode
+		if (sensor_imu->ext_setup(SENSOR_EXT_MODE_I2CM_AUTONOMOUS, sensor_mag, sensor_mag_dev.addr & 0x7F) == 0) {
+			// switched to autonomous, no need to handle mag manually
+			mag_manual = false;
+		}
+#endif
+
 #if SENSOR_MAG_SPI_EXISTS
 		LOG_INF("Requested SPI frequency: %.2fMHz", (double)sensor_mag_spi_dev.config.frequency / 1000000.0);
 #endif
@@ -837,7 +848,7 @@ void sensor_loop(void)
 				connection_update_sensor_temp(temp);
 			}
 
-			// Read gyroscope (FIFO)
+			// Read IMU (FIFO)
 			uint16_t data_size = CONFIG_1_SETTINGS_READ(CONFIG_1_SENSOR_USE_LOW_POWER_2) ? 1900 : 1024; // Limit FIFO read to 2048 bytes (worst case is ICM 20 byte packet at 1000Hz and 100ms update time)
 			uint8_t* raw_data = (uint8_t*)k_malloc(data_size);
 			if (raw_data == NULL)
@@ -846,7 +857,7 @@ void sensor_loop(void)
 				set_status(SYS_STATUS_SENSOR_ERROR, true);
 				main_ok = false;
 			}
-			uint16_t packets = sensor_imu->fifo_read(raw_data, data_size); // TODO: name this better?
+			uint16_t packets = sensor_imu->data_read(raw_data, data_size); // TODO: name this better?
 
 			// Debug info
 #if DEBUG
@@ -860,10 +871,10 @@ void sensor_loop(void)
 			last_acquisition_time = acquisition_time;
 #endif
 
-			// Read magnetometer
+			// Read magnetometer, if in manual mode
 			float raw_m[3];
 			bool mag_read = false;
-			if (mag_available && mag_enabled && (k_uptime_get() - last_mag_time > mag_interval)) // some magnetometer do not have int pin // TODO: implement for magnetometer that does, or read status byte
+			if (mag_manual && (k_uptime_get() - last_mag_time > mag_interval)) // some magnetometer do not have int pin // TODO: implement for magnetometer that does, or read status byte
 			{
 				mag_read = true;
 				sensor_mag->mag_read(raw_m); // reading mag last, and it will be processed last
@@ -907,7 +918,7 @@ void sensor_loop(void)
 			{
 				float raw_a[3] = {0};
 				float raw_g[3] = {0};
-				if (sensor_imu->fifo_process(i, raw_data, raw_a, raw_g))
+				if (sensor_imu->data_process(i, raw_data, raw_a, raw_g, raw_m))
 					continue; // skip on error
 
 				// TODO: split into separate functions
@@ -972,6 +983,11 @@ void sensor_loop(void)
 					a_count++;
 				}
 
+				if (raw_m[0] != 0 || raw_m[1] != 0 || raw_m[2] != 0)
+				{
+					mag_read = true;
+				}
+
 				processed_packets++;
 			}
 
@@ -986,7 +1002,7 @@ void sensor_loop(void)
 				total_processed_packets += processed_packets;
 #endif
 
-			if (mag_available && mag_enabled && mag_read && memcmp(raw_m, last_m, sizeof(last_m))) // check data has changed from last acquisition
+			if (mag_read && memcmp(raw_m, last_m, sizeof(last_m))) // check data has changed from last acquisition
 			{
 #if DEBUG
 				total_mag_samples++;

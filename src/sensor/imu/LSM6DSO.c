@@ -164,7 +164,7 @@ int lsm6dso_update_odr(float accel_time, float gyro_time, float *accel_actual_ti
 	return 0;
 }
 
-uint16_t lsm6dso_fifo_read(uint8_t *data, uint16_t len)
+uint16_t lsm6dso_data_read(uint8_t *data, uint16_t len)
 {
 	int err = 0;
 	uint16_t total = 0;
@@ -213,7 +213,7 @@ uint8_t lsm6dso_setup_WOM(void)
 	return NRF_GPIO_PIN_PULLUP << 4 | NRF_GPIO_PIN_SENSE_LOW; // active low
 }
 
-int lsm6dso_ext_setup(enum sensor_ext_mode mode) {
+int lsm6dso_ext_setup(enum sensor_ext_mode mode, const sensor_mag_t *mag, uint8_t mag_addr) {
 	int err = 0;
 	switch (mode) {
 		case SENSOR_EXT_MODE_OFF:
@@ -318,8 +318,8 @@ const sensor_imu_t sensor_imu_lsm6dso = {
 	*lsm6dso_update_fs,
 	*lsm6dso_update_odr,
 
-	*lsm6dso_fifo_read,
-	*lsm_fifo_process,
+	*lsm6dso_data_read,
+	*lsm_data_process,
 	*lsm_accel_read,
 	*lsm_gyro_read,
 	*lsm_temp_read,

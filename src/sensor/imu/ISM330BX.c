@@ -8,7 +8,7 @@
 
 LOG_MODULE_REGISTER(ISM330BX, LOG_LEVEL_DBG);
 
-int ism_fifo_process(uint16_t index, uint8_t *data, float a[3], float g[3])
+int ism_data_process(uint16_t index, uint8_t *data, float a[3], float g[3], float m[3])
 {
 	index *= PACKET_SIZE;
 	switch (data[index] >> 3)
@@ -53,8 +53,8 @@ const sensor_imu_t sensor_imu_ism330bx = {
 	*lsm_update_fs,
 	*lsm_update_odr,
 
-	*lsm_fifo_read,
-	*ism_fifo_process,
+	*lsm_data_read,
+	*ism_data_process,
 	*ism_accel_read,
 	*lsm_gyro_read,
 	*lsm_temp_read,

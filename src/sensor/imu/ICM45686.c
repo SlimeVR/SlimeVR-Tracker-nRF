@@ -27,8 +27,10 @@ static float clock_scale = 1; // ODR is scaled by clock_rate/clock_reference
 
 static float fifo_multiplier_factor = FIFO_MULT;
 static float fifo_multiplier = 0;
-static uint8_t aux_addr = 0;
-static uint8_t aux_reg = 0;
+static uint8_t ext_mode = SENSOR_EXT_MODE_OFF;
+static uint8_t ext_addr = 0;
+static uint8_t ext_reg = 0;
+static const sensor_mag_t *ext_mag = NULL;
 
 LOG_MODULE_REGISTER(ICM45686, LOG_LEVEL_DBG);
 
@@ -78,8 +80,10 @@ void icm45_shutdown(void)
 	last_accel_odr = 0xff; // reset last odr
 	last_gyro_odr = 0xff; // reset last odr
 	int err = ssi_reg_write_byte(SENSOR_INTERFACE_DEV_IMU, ICM45686_REG_MISC2, 0x02);
-	aux_addr = 0;
-	aux_reg = 0;
+	ext_mode = SENSOR_EXT_MODE_OFF;
+	ext_addr = 0;
+	ext_reg = 0;
+
 //	uint8_t ireg_buf[3];
 //	ireg_buf[1] = ICM45686_IPREG_BAR_REG_60;
 //	ireg_buf[2] = 0x6D & ~0x05; // set internal pull down resistors for AP pins (pin 10, 7)
@@ -205,73 +209,6 @@ int icm45_update_odr(float accel_time, float gyro_time, float *accel_actual_time
 	return 0;
 }
 
-uint16_t icm45_fifo_read(uint8_t *data, uint16_t len) // TODO: check if working
-{
-	int err = 0;
-	uint16_t total = 0;
-	uint16_t packets = UINT16_MAX;
-	while (packets > 0 && len >= PACKET_SIZE)
-	{
-		uint8_t rawCount[2];
-		err |= ssi_burst_read(SENSOR_INTERFACE_DEV_IMU, ICM45686_FIFO_COUNT_0, &rawCount[0], 2);
-		packets = (uint16_t)(rawCount[0] << 8 | rawCount[1]); // Turn the 16 bits into a unsigned 16-bit value
-		if (!packets) // nothing to do
-			break;
-		float extra_read_packets = packets * fifo_multiplier;
-		packets += extra_read_packets;
-		uint16_t count = packets * PACKET_SIZE;
-		uint16_t limit = len / PACKET_SIZE;
-		if (packets > limit)
-		{
-			LOG_WRN("FIFO read buffer limit reached, %d packets dropped", packets - limit);
-			packets = limit;
-			count = packets * PACKET_SIZE;
-		}
-		err |= ssi_burst_read_interval(SENSOR_INTERFACE_DEV_IMU, ICM45686_FIFO_DATA, data, count, PACKET_SIZE);
-		if (err)
-			LOG_ERR("Communication error");
-		data += packets * PACKET_SIZE;
-		len -= packets * PACKET_SIZE;
-		total += packets;
-	}
-	return total;
-}
-
-static const uint8_t invalid[6] = {0x80, 0x00, 0x80, 0x00, 0x80, 0x00};
-
-int icm45_fifo_process(uint16_t index, uint8_t *data, float a[3], float g[3])
-{
-	index *= PACKET_SIZE;
-	if (data[index] != 0x78) // ACCEL_EN, GYRO_EN, HIRES_EN, TMST_FIELD_EN
-		return 1; // Skip invalid header
-	// Empty packet is 7F filled
-	// combine into 20 bit values in 32 bit int
-	float a_raw[3] = {0};
-	float g_raw[3] = {0};
-	if (memcmp(&data[index + 1], invalid, sizeof(invalid))) // valid accel data
-	{
-		for (int i = 0; i < 3; i++) // accel x, y, z
-			a_raw[i] = (int32_t)((((uint32_t)data[index + 1 + (i * 2)]) << 24) | (((uint32_t)data[index + 2 + (i * 2)]) << 16) | (((uint32_t)data[index + 17 + i] & 0xF0) << 8));
-	}
-	if (memcmp(&data[index + 7], invalid, sizeof(invalid))) // valid gyro data
-	{
-		for (int i = 0; i < 3; i++) // gyro x, y, z
-			g_raw[i] = (int32_t)((((uint32_t)data[index + 7 + (i * 2)]) << 24) | (((uint32_t)data[index + 8 + (i * 2)]) << 16) | (((uint32_t)data[index + 17 + i] & 0x0F) << 12));
-	}
-	else if (!memcmp(&data[index + 1], invalid, sizeof(invalid))) // Skip invalid data
-	{
-		return 1;
-	}
-	for (int i = 0; i < 3; i++) // x, y, z
-	{
-		a_raw[i] *= accel_sensitivity_32;
-		g_raw[i] *= gyro_sensitivity_32;
-	}
-	memcpy(a, a_raw, sizeof(a_raw));
-	memcpy(g, g_raw, sizeof(g_raw));
-	return 0;
-}
-
 void icm45_accel_read(float a[3])
 {
 	uint8_t rawAccel[6];
@@ -350,37 +287,10 @@ uint8_t icm45_setup_WOM(void) // TODO: check if working
 	ireg_buf[4] = 0x08; // set wake thresholds
 	err |= ssi_burst_write(SENSOR_INTERFACE_DEV_IMU, ICM45686_IREG_ADDR_15_8, ireg_buf, 5); // write buffer
 	err |= ssi_reg_write_byte(SENSOR_INTERFACE_DEV_IMU, ICM45686_TMST_WOM_CONFIG, 0x14); // enable WOM, enable WOM interrupt
-	err |= ssi_reg_write_byte(SENSOR_INTERFACE_DEV_IMU, ICM45686_INT1_CONFIG1, 0x0E); // route WOM interrupt
+	err |= ssi_reg_write_byte(SENSOR_INTERFACE_DEV_IMU, ICM45686_INT1_CONFIG1, INT1_STATUS_WOM_X | INT1_STATUS_WOM_Y | INT1_STATUS_WOM_Z);
 	if (err)
 		LOG_ERR("Communication error");
 	return NRF_GPIO_PIN_PULLUP << 4 | NRF_GPIO_PIN_SENSE_LOW; // active low
-}
-
-int icm45_ext_setup(enum sensor_ext_mode mode) {
-	int err = 0;
-	switch (mode) {
-		case SENSOR_EXT_MODE_OFF:
-			err |= ssi_reg_write_byte(SENSOR_INTERFACE_DEV_IMU, ICM45686_IOC_PAD_SCENARIO_AUX_OVRD, 0x00); // disable overrides
-			break;
-
-		case SENSOR_EXT_MODE_I2C_PASSTHROUGH:
-			err |= ssi_reg_write_byte(SENSOR_INTERFACE_DEV_IMU, ICM45686_IOC_PAD_SCENARIO_AUX_OVRD, 0x18); // AUX1_MODE_OVRD, AUX1 in I2CM Bypass
-			break;
-			
-		case SENSOR_EXT_MODE_I2CM_PROXY:
-			err |= ssi_reg_write_byte(SENSOR_INTERFACE_DEV_IMU, ICM45686_IOC_PAD_SCENARIO_AUX_OVRD, 0x17); // AUX1_MODE_OVRD, AUX1 in I2CM Master, AUX1_ENABLE_OVRD, AUX1 enabled
-			sensor_interface_ext_configure(&sensor_ext_icm45686);
-			break;
-		
-		case SENSOR_EXT_MODE_I2CM_AUTONOMOUS:
-			return -1;
-	}
-
-	if (err) {
-		LOG_ERR("Communication error: %d", err);
-	}
-
-	return err;
 }
 
 int icm45_bank_write(const uint8_t bank, const uint8_t reg, const uint8_t *buf, uint32_t num_bytes)
@@ -440,20 +350,20 @@ int icm45_bank_read_byte(const uint8_t bank, const uint8_t reg, uint8_t *value) 
 	return icm45_bank_read(bank, reg, value, 1);
 }
 
-int icm45_aux_addr_set(const uint8_t addr, const uint8_t reg) {
+int icm45_ext_addr_set(const uint8_t addr, const uint8_t reg) {
 	int err = 0;
-	if (aux_addr != addr) { // aux address changed, rewrite both address and register
+	if (ext_addr != addr) { // aux address changed, rewrite both address and register
 		uint8_t dev_profile_data[2] = {reg, addr};
 		err = icm45_bank_write(ICM45686_IPREG_TOP1, ICM45686_DEV_PROFILE_0, dev_profile_data, sizeof(dev_profile_data));
 		if (!err) {
-			aux_addr = addr;
-			aux_reg = reg;
+			ext_addr = addr;
+			ext_reg = reg;
 		}
 	}
-	else if (aux_reg != reg) { // only register changed, aux address remains
+	else if (ext_reg != reg) { // only register changed, aux address remains
 		err = icm45_bank_write_byte(ICM45686_IPREG_TOP1, ICM45686_DEV_PROFILE_0, reg);
 		if (!err) {
-			aux_reg = reg;
+			ext_reg = reg;
 		}
 	}
 
@@ -462,13 +372,17 @@ int icm45_aux_addr_set(const uint8_t addr, const uint8_t reg) {
 
 int icm45_ext_write(const uint8_t addr, const uint8_t *buf, uint32_t num_bytes) 
 {
+	if (ext_mode != SENSOR_EXT_MODE_I2CM_PROXY) {
+		LOG_ERR("Sensor not in correct mode to perform ext write: %d", ext_mode);
+	}
+
 	if (num_bytes > 6) 
 	{
 		LOG_ERR("Unsupported write");
 		return -1;
 	}
 
-	int err = icm45_aux_addr_set(addr, aux_reg);
+	int err = icm45_ext_addr_set(addr, ext_reg);
 
 	err |= icm45_bank_write(ICM45686_IPREG_TOP1, ICM45686_I2CM_WR_DATA_0, buf, num_bytes);
 	err |= icm45_bank_write_byte(ICM45686_IPREG_TOP1, ICM45686_I2CM_COMMAND_0, 0x80 + num_bytes); // Last transaction, channel 0, write num_bytes bytes
@@ -505,7 +419,11 @@ int icm45_ext_write_read(const uint8_t addr, const uint8_t *write_buf, size_t nu
 		return -1;
 	}
 
-	int err = icm45_aux_addr_set(addr, write_buf[0]);
+	if (ext_mode != SENSOR_EXT_MODE_I2CM_PROXY) {
+		LOG_ERR("Sensor not in correct mode to perform ext write read: %d", ext_mode);
+	}
+
+	int err = icm45_ext_addr_set(addr, write_buf[0]);
 
 	err |= icm45_bank_write_byte(ICM45686_IPREG_TOP1, ICM45686_I2CM_COMMAND_0, 0x90 + num_read); // Last transaction, channel 0, read num_read bytes with register specified
 	err |= icm45_bank_write_byte(ICM45686_IPREG_TOP1, ICM45686_I2CM_CONTROL, 0x01); // No restarts, fast mode, start transaction
@@ -536,6 +454,180 @@ int icm45_ext_write_read(const uint8_t addr, const uint8_t *write_buf, size_t nu
 	return err;
 }
 
+int icm45_ext_setup(enum sensor_ext_mode mode, const sensor_mag_t *mag, uint8_t mag_addr) {
+	int err = 0;
+	ext_mag = NULL; // only autonomous mode will set this 
+
+	switch (mode) {
+		case SENSOR_EXT_MODE_OFF:
+			err |= ssi_reg_write_byte(SENSOR_INTERFACE_DEV_IMU, ICM45686_IOC_PAD_SCENARIO_AUX_OVRD, 0x01); // override AUX1_ENABLE=0
+			break;
+
+		case SENSOR_EXT_MODE_I2C_PASSTHROUGH:
+			err |= ssi_reg_write_byte(SENSOR_INTERFACE_DEV_IMU, ICM45686_IOC_PAD_SCENARIO_AUX_OVRD, 0x1B); // AUX1_ENABLE=1 AUX1_MODE=I2CM Bypass
+			break;
+			
+		case SENSOR_EXT_MODE_I2CM_PROXY:
+			err |= ssi_reg_write_byte(SENSOR_INTERFACE_DEV_IMU, ICM45686_IOC_PAD_SCENARIO_AUX_OVRD, 0x17); // AUX1_ENABLE=1 AUX1_MODE=I2CM
+			if (!err) {
+				sensor_interface_ext_configure(&sensor_ext_icm45686);
+			}
+			break;
+		
+		case SENSOR_EXT_MODE_I2CM_AUTONOMOUS:
+			ext_mag = mag;
+			const uint8_t total_bytes = mag->ext_burst + mag->ext_dummy_bytes;
+			if (total_bytes > 9) {
+				return -1; // not supported (for now)
+			}
+
+			// we're going to do periodic burst read of length defined by mag starting from ext_burst_reg
+			// not asking IMU to put that data info FIFO, as we would lose hi-res mode
+
+			err |= ssi_reg_write_byte(SENSOR_INTERFACE_DEV_IMU, ICM45686_IOC_PAD_SCENARIO_AUX_OVRD, 0x17); // AUX1_ENABLE=1 AUX1_MODE=I2CM
+			err |= icm45_ext_addr_set(mag_addr, mag->ext_burst_reg);
+			// prepare transaction that will be repeated periodically
+			err |= icm45_bank_write_byte(ICM45686_IPREG_TOP1, ICM45686_I2CM_COMMAND_0, 0x90 | total_bytes); // read operation with register address, ch 0, endflag_0=1
+			err |= icm45_bank_write_byte(ICM45686_IPREG_TOP1, ICM45686_I2CM_CONTROL, 0x40); // allow restarts, fast mode
+
+			// the following lines would put data in fifo, resulting in lost of hi-res mode. Also, fifo read function is not prepared for that
+			//err |= ssi_reg_write_byte(SENSOR_INTERFACE_DEV_IMU, ICM45686_FIFO_CONFIG4, (total_bytes > 6 ? 1 : 0)); // set FIFO_ES0_6B_9B
+			//err |= ssi_reg_write_byte(SENSOR_INTERFACE_DEV_IMU, ICM45686_FIFO_CONFIG3, 0x1f); // everything like on _init, with FIFO_ES0_EN=1
+
+			const float ext_intervals[] = {1.0f/3.125f, 1.0f/6.25f, 1.0f/12.5f, 1.0f/25, 1.0f/50, 1.0f/100, 1.0f/200, 1.0f/400};
+			const uint8_t ext_odr[] = {EXT_ODR_3_125Hz, EXT_ODR_6_25Hz, EXT_ODR_12_5Hz, EXT_ODR_25Hz, EXT_ODR_50Hz, EXT_ODR_100Hz, EXT_ODR_200Hz, EXT_ODR_400Hz};
+
+			// select odr that is just higher or equal to mag odr, we might consider higher value
+			const float mag_odr = mag->get_odr();
+			size_t sel_odr;
+
+			for (sel_odr = 0; sel_odr<sizeof(ext_intervals)/sizeof(ext_intervals[0]); sel_odr++)
+			{
+				if (ext_intervals[sel_odr] <= mag_odr) break;
+			}
+
+			// this is apparently needed https://github.com/tdk-invn-oss/motion.arduino.ICM45686/blob/main/src/ICM45686.cpp#L859
+			err |= icm45_bank_write_byte(ICM45686_IPREG_TOP1, ICM45686_INT_I2CM_SOURCE, INT_STATUS_I2CM_SMC_EXT_ODR_EN);
+
+			err |= ssi_reg_write_byte(SENSOR_INTERFACE_DEV_IMU, ICM45686_DMP_EXT_SEN_ODR_CFG, EXT_SENSOR_EN | (ext_odr[sel_odr] << EXT_ODR_OFFSET));
+			err |= ssi_reg_write_byte(SENSOR_INTERFACE_DEV_IMU, ICM45686_INT1_CONFIG1, INT1_STATUS_I2CM_DONE);
+
+			break;
+	}
+
+	if (err) {
+		LOG_ERR("Communication error: %d", err);
+	}
+	else {
+		ext_mode = mode;
+	}
+
+	return err;
+}
+
+uint16_t icm45_data_read(uint8_t *data, uint16_t len)
+{
+	int err = 0;
+	uint16_t total = 0;
+	uint16_t packets = UINT16_MAX;
+
+	if (ext_mag)
+	{
+		// we have aux mag working in autonomous mode
+		uint8_t interrupts;
+		err = ssi_reg_read_byte(SENSOR_INTERFACE_DEV_IMU, ICM45686_INT1_STATUS1, &interrupts);
+
+		if (interrupts & INT1_STATUS_I2CM_DONE)
+		{
+			// i2c master finished transfer, that means we have data for mag
+			if (len >= PACKET_SIZE) {
+				data[0] = 0x70; // magic tag for mag entry
+				// put data as fifo entry
+				err |= icm45_bank_read(ICM45686_IPREG_TOP1, ICM45686_I2CM_RD_DATA_0 + ext_mag->ext_dummy_bytes, &data[1], ext_mag->ext_burst);
+
+				data += PACKET_SIZE;
+				len -= PACKET_SIZE; 
+				total++;
+			}
+			else {
+				LOG_WRN("Cannot read mag data, as buffer is too small: %d bytes", len);
+			}
+		}
+	}
+
+	while (packets > 0 && len >= PACKET_SIZE)
+	{
+		uint8_t rawCount[2];
+		err |= ssi_burst_read(SENSOR_INTERFACE_DEV_IMU, ICM45686_FIFO_COUNT_0, &rawCount[0], 2);
+		packets = (uint16_t)(rawCount[0] << 8 | rawCount[1]); // Turn the 16 bits into a unsigned 16-bit value
+		if (!packets) // nothing to do
+			break;
+		float extra_read_packets = packets * fifo_multiplier;
+		packets += extra_read_packets;
+		uint16_t count = packets * PACKET_SIZE;
+		uint16_t limit = len / PACKET_SIZE;
+		if (packets > limit)
+		{
+			LOG_WRN("FIFO read buffer limit reached, %d packets dropped", packets - limit);
+			packets = limit;
+			count = packets * PACKET_SIZE;
+		}
+		err |= ssi_burst_read_interval(SENSOR_INTERFACE_DEV_IMU, ICM45686_FIFO_DATA, data, count, PACKET_SIZE);
+		if (err)
+			LOG_ERR("Communication error");
+		data += packets * PACKET_SIZE;
+		len -= packets * PACKET_SIZE;
+		total += packets;
+	}
+	return total;
+}
+
+static const uint8_t invalid[6] = {0x80, 0x00, 0x80, 0x00, 0x80, 0x00};
+
+int icm45_data_process(uint16_t index, uint8_t *data, float a[3], float g[3], float m[3])
+{
+	index *= PACKET_SIZE;
+
+	if (data[index] == 0x70)
+	{
+		// our artifical mag entry we read earlier
+		if (ext_mag)
+		{
+			ext_mag->mag_process(&data[index+1], m);
+		}
+		return 0;
+	}
+
+	if (data[index] != 0x78) // ACCEL_EN, GYRO_EN, HIRES_EN, TMST_FIELD_EN
+		return 1; // Skip invalid header
+	// Empty packet is 7F filled
+	// combine into 20 bit values in 32 bit int
+	float a_raw[3] = {0};
+	float g_raw[3] = {0};
+	if (memcmp(&data[index + 1], invalid, sizeof(invalid))) // valid accel data
+	{
+		for (int i = 0; i < 3; i++) // accel x, y, z
+			a_raw[i] = (int32_t)((((uint32_t)data[index + 1 + (i * 2)]) << 24) | (((uint32_t)data[index + 2 + (i * 2)]) << 16) | (((uint32_t)data[index + 17 + i] & 0xF0) << 8));
+	}
+	if (memcmp(&data[index + 7], invalid, sizeof(invalid))) // valid gyro data
+	{
+		for (int i = 0; i < 3; i++) // gyro x, y, z
+			g_raw[i] = (int32_t)((((uint32_t)data[index + 7 + (i * 2)]) << 24) | (((uint32_t)data[index + 8 + (i * 2)]) << 16) | (((uint32_t)data[index + 17 + i] & 0x0F) << 12));
+	}
+	else if (!memcmp(&data[index + 1], invalid, sizeof(invalid))) // Skip invalid data
+	{
+		return 1;
+	}
+	for (int i = 0; i < 3; i++) // x, y, z
+	{
+		a_raw[i] *= accel_sensitivity_32;
+		g_raw[i] *= gyro_sensitivity_32;
+	}
+	memcpy(a, a_raw, sizeof(a_raw));
+	memcpy(g, g_raw, sizeof(g_raw));
+	return 0;
+}
+
 const sensor_imu_t sensor_imu_icm45686 = {
 	*icm45_init,
 	*icm45_shutdown,
@@ -543,8 +635,8 @@ const sensor_imu_t sensor_imu_icm45686 = {
 	*icm45_update_fs,
 	*icm45_update_odr,
 
-	*icm45_fifo_read,
-	*icm45_fifo_process,
+	*icm45_data_read,
+	*icm45_data_process,
 	*icm45_accel_read,
 	*icm45_gyro_read,
 	*icm45_temp_read,

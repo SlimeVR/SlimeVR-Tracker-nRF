@@ -180,7 +180,7 @@ int lsm6dsm_update_odr(float accel_time, float gyro_time, float *accel_actual_ti
 	return 0;
 }
 
-uint16_t lsm6dsm_fifo_read(uint8_t *data, uint16_t len)
+uint16_t lsm6dsm_data_read(uint8_t *data, uint16_t len)
 {
 	int err = 0;
 	uint16_t total = 0;
@@ -223,7 +223,7 @@ uint16_t lsm6dsm_fifo_read(uint8_t *data, uint16_t len)
 	return total;
 }
 
-int lsm6dsm_fifo_process(uint16_t index, uint8_t *data, float a[3], float g[3])
+int lsm6dsm_data_process(uint16_t index, uint8_t *data, float a[3], float g[3], float m[3])
 {
 	index *= PACKET_SIZE;
 	uint8_t pattern = data[index];
@@ -295,8 +295,8 @@ const sensor_imu_t sensor_imu_lsm6dsm = {
 	*lsm6dsm_update_fs,
 	*lsm6dsm_update_odr,
 
-	*lsm6dsm_fifo_read,
-	*lsm6dsm_fifo_process,
+	*lsm6dsm_data_read,
+	*lsm6dsm_data_process,
 	*lsm_accel_read,
 	*lsm_gyro_read,
 	*lsm_temp_read,

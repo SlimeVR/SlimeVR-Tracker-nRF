@@ -78,30 +78,12 @@ typedef struct sensor_fusion {
 	void (*get_quat)(float *);
 } sensor_fusion_t;
 
-typedef struct sensor_imu {
-	int (*init)(float, float, float, float*, float*); // first float is clock_rate, nonzero means use CLKIN, return update time, return 0 if success, -1 if general error
-	void (*shutdown)(void);
-
-	void (*update_fs)(float, float, float*, float*); // return actual range
-	int (*update_odr)(float, float, float*, float*); // return actual update time, return 0 if success, 1 if odr is same, -1 if general error
-
-	uint16_t (*fifo_read)(uint8_t*, uint16_t);
-	int (*fifo_process)(uint16_t, uint8_t*, float[3], float[3]); // g, deg/s
-	void (*accel_read)(float[3]); // g
-	void (*gyro_read)(float[3]); // deg/s
-	int (*temp_read)(float*); // deg C, return 0 if success, -1 if error
-
-	uint8_t (*setup_DRDY)(uint16_t);
-	uint8_t (*setup_WOM)(void);
-
-	int (*ext_setup)(enum sensor_ext_mode);
-} sensor_imu_t;
-
 typedef struct sensor_mag {
 	int (*init)(float, float*); // return update time, return 0 if success, 1 if general error
 	void (*shutdown)(void);
 
-	int (*update_odr)(float, float*); // return actual update time, return 0 if success, 1 if odr is same, -1 if general error
+	int (*update_odr)(float, float*); // change update time, return real one, return 0 if success, 1 if odr is same, -1 if general error
+	float (*get_odr)(void); // return real update time
 
 	void (*mag_oneshot)(void); // trigger oneshot if exists
 	void (*mag_read)(float[3]); // any unit (usually gauss)
@@ -110,6 +92,27 @@ typedef struct sensor_mag {
 	void (*mag_process)(uint8_t*, float[3]); // use if magnetometer is present as an auxiliary sensor, from data read by IMU
 	uint8_t ext_min_burst; // minimum supported burst length for external interface
 	uint8_t ext_burst; // default supported burst length
+	uint8_t ext_dummy_bytes; // required dummy bytes to skip during every read
+	uint8_t ext_burst_reg; // first register address to read in burst
 } sensor_mag_t;
+
+typedef struct sensor_imu {
+	int (*init)(float, float, float, float*, float*); // first float is clock_rate, nonzero means use CLKIN, return update time, return 0 if success, -1 if general error
+	void (*shutdown)(void);
+
+	void (*update_fs)(float, float, float*, float*); // return actual range
+	int (*update_odr)(float, float, float*, float*); // return actual update time, return 0 if success, 1 if odr is same, -1 if general error
+
+	uint16_t (*data_read)(uint8_t*, uint16_t);
+	int (*data_process)(uint16_t, uint8_t*, float[3], float[3], float[3]); // g, deg/s
+	void (*accel_read)(float[3]); // g
+	void (*gyro_read)(float[3]); // deg/s
+	int (*temp_read)(float*); // deg C, return 0 if success, -1 if error
+
+	uint8_t (*setup_DRDY)(uint16_t);
+	uint8_t (*setup_WOM)(void);
+
+	int (*ext_setup)(enum sensor_ext_mode, const sensor_mag_t *mag, uint8_t mag_addr); // mag used for autonomous mode
+} sensor_imu_t;
 
 #endif

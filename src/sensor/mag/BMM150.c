@@ -54,6 +54,7 @@ static int8_t dig_xy2;
 static uint16_t dig_xyz1;
 
 static uint8_t last_odr = 0xff;
+static float last_real_time = 0.0f;
 
 LOG_MODULE_REGISTER(BMM150, LOG_LEVEL_DBG);
 
@@ -81,6 +82,11 @@ void bmm1_shutdown(void)
 	int err = ssi_reg_write_byte(SENSOR_INTERFACE_DEV_MAG, BMM150_POWER_CTRL, 0x00);
 	if (err)
 		LOG_ERR("Communication error");
+}
+
+float bmm1_get_odr(void)
+{
+	return last_real_time;
 }
 
 int bmm1_update_odr(float time, float *actual_time)
@@ -174,6 +180,7 @@ int bmm1_update_odr(float time, float *actual_time)
 		LOG_ERR("Communication error");
 
 	*actual_time = time;
+	last_real_time = time;
 	return err;
 }
 
@@ -303,11 +310,13 @@ const sensor_mag_t sensor_mag_bmm150 = {
 	*bmm1_shutdown,
 
 	*bmm1_update_odr,
+	*bmm1_get_odr,
 
 	*bmm1_mag_oneshot,
 	*bmm1_mag_read,
 	*mag_none_temp_read,
 
 	*bmm1_mag_process,
-	6, 8 // rhall does not get read by limited external interface
+	6, 8, // rhall does not get read by limited external interface
+	0, BMM150_DATAX_LSB
 };

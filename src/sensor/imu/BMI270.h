@@ -81,8 +81,8 @@ void bmi_shutdown(void);
 void bmi_update_fs(float accel_range, float gyro_range, float *accel_actual_range, float *gyro_actual_range);
 int bmi_update_odr(float accel_time, float gyro_time, float *accel_actual_time, float *gyro_actual_time);
 
-uint16_t bmi_fifo_read(uint8_t *data, uint16_t len);
-int bmi_fifo_process(uint16_t index, uint8_t *data, float a[3], float g[3]);
+uint16_t bmi_data_read(uint8_t *data, uint16_t len);
+int bmi_data_process(uint16_t index, uint8_t *data, float a[3], float g[3], float m[3]);
 void bmi_accel_read(float a[3]);
 void bmi_gyro_read(float g[3]);
 int bmi_temp_read(float *data);

@@ -183,7 +183,7 @@ int icm_update_odr(float accel_time, float gyro_time, float *accel_actual_time, 
 	return 0;
 }
 
-uint16_t icm_fifo_read(uint8_t *data, uint16_t len)
+uint16_t icm_data_read(uint8_t *data, uint16_t len)
 {
 	int err = 0;
 	uint16_t total = 0;
@@ -217,7 +217,7 @@ uint16_t icm_fifo_read(uint8_t *data, uint16_t len)
 
 static const uint8_t invalid[6] = {0x80, 0x00, 0x80, 0x00, 0x80, 0x00};
 
-int icm_fifo_process(uint16_t index, uint8_t *data, float a[3], float g[3])
+int icm_data_process(uint16_t index, uint8_t *data, float a[3], float g[3], float m[3])
 {
 	index *= PACKET_SIZE;
 	if ((data[index] & 0x80) == 0x80)
@@ -335,8 +335,8 @@ const sensor_imu_t sensor_imu_icm42688 = {
 	*icm_update_fs,
 	*icm_update_odr,
 
-	*icm_fifo_read,
-	*icm_fifo_process,
+	*icm_data_read,
+	*icm_data_process,
 	*icm_accel_read,
 	*icm_gyro_read,
 	*icm_temp_read,
