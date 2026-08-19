@@ -6,6 +6,7 @@
 #include "system/clocks.h"
 #include <zephyr/sys/crc.h>
 #include <stdlib.h>
+#include <zephyr/kernel.h>
 
 LOG_MODULE_REGISTER(pairing, LOG_LEVEL_INF);
 
