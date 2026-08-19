@@ -28,7 +28,7 @@
 uint8_t our_window = 0;
 uint32_t last_slot = 0;
 int32_t timer_offset = 0;
-static const int32_t timer_offset_static = -3;
+static const int32_t timer_offset_static = 0;
 uint32_t packet_sent_time = 0;
 
 LOG_MODULE_REGISTER(tdma, LOG_LEVEL_INF);
