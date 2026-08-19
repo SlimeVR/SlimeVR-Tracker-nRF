@@ -315,17 +315,22 @@ config RADIO_TX_POWER
         Radio output power level.
         A lower value may reduce power consumption.
 
-config ESB_CHANNEL
-    int "Initial ESB channel"
-    range 0 100
-    default 50
-    help
-        ESB channel frequency used on initialization.
-
 config CONNECTION_OVER_HID
     bool "Use HID for data output"
     help
         Use HID if available.
         Otherwise, use ESB only.
+
+config CLOCK_SOURCE_XTAL_FULL
+    bool "Use XTAL FULL clock source for TDMA timer"
+    default y
+    help
+        Use XTAL FULL, otherwise use RC or XTAL
+
+config CLOCK_SOURCE_XTAL
+    bool "Use XTAL clock source for TDMA timer"
+    default n
+    help
+        Use XTAL, otherwise use RC or XTAL FULL
 
 source "Kconfig.zephyr"

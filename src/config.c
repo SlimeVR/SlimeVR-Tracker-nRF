@@ -106,7 +106,6 @@ const int16_t config_2_settings_defaults[16] = {
 	0,
 #endif
 	CONFIG_RADIO_TX_POWER, // -128-127
-	CONFIG_ESB_CHANNEL, // 0-100
 };
 
 const int32_t config_3_settings_defaults[16] = {
