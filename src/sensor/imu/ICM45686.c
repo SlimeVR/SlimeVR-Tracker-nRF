@@ -556,19 +556,6 @@ uint16_t icm45_data_read(uint8_t *data, uint16_t len)
 				LOG_WRN("Cannot read mag data, as buffer is too small: %d bytes", len);
 			}
 		}
-
-		// // set if we should maybe also read fifo
-		// err = ssi_reg_read_byte(SENSOR_INTERFACE_DEV_IMU, ICM45686_INT1_STATUS0, &int1_status);
-		// int1 = int1_status;
-
-		// if (!(int1_status & INT1_STATUS_FIFO_THS))
-		// {
-		// 	// fifo threshold not exceeded, skip reading it for now
-		// 	if (total == 0) {
-		// 		LOG_WRN("No data to read int flags 0x%x 0x%x", int0, int1);
-		// 	}
-		// 	return total;
-		// }
 	}
 
 	if (int1_status[0] & INT1_STATUS_FIFO_THS) {
@@ -600,8 +587,7 @@ uint16_t icm45_data_read(uint8_t *data, uint16_t len)
 	}
 
 	if (total == 0) {
-		LOG_WRN("no data");
-		LOG_WRN("flags 0x%x 0x%x", int1_status[0], int1_status[1]);
+		LOG_WRN("No data, interrupts 0x%x 0x%x", int1_status[0], int1_status[1]);
 	}
 
 	return total;
