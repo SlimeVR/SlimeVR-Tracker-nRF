@@ -217,38 +217,41 @@ uint16_t icm_data_read(uint8_t *data, uint16_t len)
 
 static const uint8_t invalid[6] = {0x80, 0x00, 0x80, 0x00, 0x80, 0x00};
 
-int icm_data_process(uint16_t index, uint8_t *data, float a[3], float g[3], float m[3])
+sensor_data_attrs_t icm_data_process(uint16_t index, uint8_t *data, float a[3], float g[3], float m[3])
 {
 	index *= PACKET_SIZE;
 	if ((data[index] & 0x80) == 0x80)
-		return 1; // Skip empty packets
+		return DATA_INVALID; // Skip empty packets
 	if ((data[index] & 0x7F) == 0x7F)
-		return 1; // Skip empty packets
+		return DATA_INVALID; // Skip empty packets
+
+	sensor_data_attrs_t result = 0;
+
 	// combine into 20 bit values in 32 bit int
-	float a_raw[3] = {0};
-	float g_raw[3] = {0};
 	if (memcmp(&data[index + 1], invalid, sizeof(invalid))) // valid accel data
 	{
 		for (int i = 0; i < 3; i++) // accel x, y, z
-			a_raw[i] = (int32_t)((((uint32_t)data[index + 1 + (i * 2)]) << 24) | (((uint32_t)data[index + 2 + (i * 2)]) << 16) | (((uint32_t)data[index + 17 + i] & 0xF0) << 8));
+			a[i] = (int32_t)((((uint32_t)data[index + 1 + (i * 2)]) << 24) | (((uint32_t)data[index + 2 + (i * 2)]) << 16) | (((uint32_t)data[index + 17 + i] & 0xF0) << 8));
+
+		result |= DATA_VALID_ACCEL;
 	}
 	if (memcmp(&data[index + 7], invalid, sizeof(invalid))) // valid gyro data
 	{
 		for (int i = 0; i < 3; i++) // gyro x, y, z
-			g_raw[i] = (int32_t)((((uint32_t)data[index + 7 + (i * 2)]) << 24) | (((uint32_t)data[index + 8 + (i * 2)]) << 16) | (((uint32_t)data[index + 17 + i] & 0x0F) << 12));
+			g[i] = (int32_t)((((uint32_t)data[index + 7 + (i * 2)]) << 24) | (((uint32_t)data[index + 8 + (i * 2)]) << 16) | (((uint32_t)data[index + 17 + i] & 0x0F) << 12));
+		
+		result |= DATA_VALID_GYRO;
 	}
 	else if (!memcmp(&data[index + 1], invalid, sizeof(invalid))) // Skip invalid data
 	{
-		return 1;
+		return DATA_INVALID;
 	}
 	for (int i = 0; i < 3; i++) // x, y, z
 	{
-		a_raw[i] *= accel_sensitivity_32;
-		g_raw[i] *= gyro_sensitivity_32;
+		a[i] *= accel_sensitivity_32;
+		g[i] *= gyro_sensitivity_32;
 	}
-	memcpy(a, a_raw, sizeof(a_raw));
-	memcpy(g, g_raw, sizeof(g_raw));
-	return 0;
+	return result;
 }
 
 void icm_accel_read(float a[3])

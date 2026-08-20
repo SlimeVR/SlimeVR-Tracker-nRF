@@ -205,7 +205,7 @@ uint16_t lsm_data_read(uint8_t *data, uint16_t len)
 	return total;
 }
 
-int lsm_data_process(uint16_t index, uint8_t *data, float a[3], float g[3], float m[3])
+sensor_data_attrs_t lsm_data_process(uint16_t index, uint8_t *data, float a[3], float g[3], float m[3])
 {
 	index *= PACKET_SIZE;
 	switch (data[index] >> 3)
@@ -216,18 +216,19 @@ int lsm_data_process(uint16_t index, uint8_t *data, float a[3], float g[3], floa
 			a[i] = (int16_t)((((uint16_t)data[index + 2 + (i * 2)]) << 8) | data[index + 1 + (i * 2)]);
 			a[i] *= accel_sensitivity;
 		}
-		return 0;
+		return DATA_VALID_ACCEL;
 	case 0x01: // Gyroscope NC (Gyroscope uncompressed data)
 		for (int i = 0; i < 3; i++) // x, y, z
 		{
 			g[i] = (int16_t)((((uint16_t)data[index + 2 + (i * 2)]) << 8) | data[index + 1 + (i * 2)]);
 			g[i] *= gyro_sensitivity;
+			
 		}
-		return 0;
+		return DATA_VALID_GYRO;
 	default:
 	}
 	// TODO: need to skip invalid data
-	return 1;
+	return DATA_INVALID;
 }
 
 void lsm_accel_read(float a[3])
@@ -306,7 +307,7 @@ uint8_t lsm_setup_WOM(void)
 	return NRF_GPIO_PIN_PULLUP << 4 | NRF_GPIO_PIN_SENSE_LOW; // active low
 }
 
-int lsm_ext_setup(enum sensor_ext_mode mode, const sensor_mag_t *mag, uint8_t mag_addr) {
+int lsm_ext_setup(sensor_ext_mode_t mode, const sensor_mag_t *mag, uint8_t mag_addr) {
 	int err = 0;
 	switch (mode) {
 		case SENSOR_EXT_MODE_OFF:

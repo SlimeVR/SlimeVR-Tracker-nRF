@@ -70,6 +70,9 @@ int icm45_init(float clock_rate, float accel_time, float gyro_time, float *accel
 	err |= icm45_update_odr(accel_time, gyro_time, accel_actual_time, gyro_actual_time);
 	err |= ssi_reg_write_byte(SENSOR_INTERFACE_DEV_IMU, ICM45686_FIFO_CONFIG0, 0x80 | 0b000111); // set FIFO stop-on-full mode, set FIFO depth to 2K bytes (see AN-000364)
 	err |= ssi_reg_write_byte(SENSOR_INTERFACE_DEV_IMU, ICM45686_FIFO_CONFIG3, 0x0F); // begin FIFO stream, hires, a+g
+
+	err |= ssi_reg_write_byte(SENSOR_INTERFACE_DEV_IMU, ICM45686_INT1_CONFIG2, INT1_MODE); // latch mode, push pull
+
 	if (err)
 		LOG_ERR("Communication error");
 	return (err < 0 ? err : 0);
@@ -454,7 +457,7 @@ int icm45_ext_write_read(const uint8_t addr, const uint8_t *write_buf, size_t nu
 	return err;
 }
 
-int icm45_ext_setup(enum sensor_ext_mode mode, const sensor_mag_t *mag, uint8_t mag_addr) {
+int icm45_ext_setup(sensor_ext_mode_t mode, const sensor_mag_t *mag, uint8_t mag_addr) {
 	int err = 0;
 	ext_mag = NULL; // only autonomous mode will set this 
 
@@ -531,13 +534,13 @@ uint16_t icm45_data_read(uint8_t *data, uint16_t len)
 	uint16_t total = 0;
 	uint16_t packets = UINT16_MAX;
 
+	uint8_t int1_status[2] = {0};
+	err = ssi_burst_read(SENSOR_INTERFACE_DEV_IMU, ICM45686_INT1_STATUS0, int1_status, 2);
+
 	if (ext_mag)
 	{
 		// we have aux mag working in autonomous mode
-		uint8_t interrupts;
-		err = ssi_reg_read_byte(SENSOR_INTERFACE_DEV_IMU, ICM45686_INT1_STATUS1, &interrupts);
-
-		if (interrupts & INT1_STATUS_I2CM_DONE)
+		if (int1_status[1] & INT1_STATUS_I2CM_DONE)
 		{
 			// i2c master finished transfer, that means we have data for mag
 			if (len >= PACKET_SIZE) {
@@ -553,38 +556,60 @@ uint16_t icm45_data_read(uint8_t *data, uint16_t len)
 				LOG_WRN("Cannot read mag data, as buffer is too small: %d bytes", len);
 			}
 		}
+
+		// // set if we should maybe also read fifo
+		// err = ssi_reg_read_byte(SENSOR_INTERFACE_DEV_IMU, ICM45686_INT1_STATUS0, &int1_status);
+		// int1 = int1_status;
+
+		// if (!(int1_status & INT1_STATUS_FIFO_THS))
+		// {
+		// 	// fifo threshold not exceeded, skip reading it for now
+		// 	if (total == 0) {
+		// 		LOG_WRN("No data to read int flags 0x%x 0x%x", int0, int1);
+		// 	}
+		// 	return total;
+		// }
 	}
 
-	while (packets > 0 && len >= PACKET_SIZE)
-	{
-		uint8_t rawCount[2];
-		err |= ssi_burst_read(SENSOR_INTERFACE_DEV_IMU, ICM45686_FIFO_COUNT_0, &rawCount[0], 2);
-		packets = (uint16_t)(rawCount[0] << 8 | rawCount[1]); // Turn the 16 bits into a unsigned 16-bit value
-		if (!packets) // nothing to do
-			break;
-		float extra_read_packets = packets * fifo_multiplier;
-		packets += extra_read_packets;
-		uint16_t count = packets * PACKET_SIZE;
-		uint16_t limit = len / PACKET_SIZE;
-		if (packets > limit)
+	if (int1_status[0] & INT1_STATUS_FIFO_THS) {
+
+		while (packets > 0 && len >= PACKET_SIZE)
 		{
-			LOG_WRN("FIFO read buffer limit reached, %d packets dropped", packets - limit);
-			packets = limit;
-			count = packets * PACKET_SIZE;
+			uint8_t rawCount[2];
+			err |= ssi_burst_read(SENSOR_INTERFACE_DEV_IMU, ICM45686_FIFO_COUNT_0, &rawCount[0], 2);
+			packets = (uint16_t)(rawCount[0] << 8 | rawCount[1]); // Turn the 16 bits into a unsigned 16-bit value
+			if (!packets) // nothing to do
+				break;
+			float extra_read_packets = packets * fifo_multiplier;
+			packets += extra_read_packets;
+			uint16_t count = packets * PACKET_SIZE;
+			uint16_t limit = len / PACKET_SIZE;
+			if (packets > limit)
+			{
+				LOG_WRN("FIFO read buffer limit reached, %d packets dropped", packets - limit);
+				packets = limit;
+				count = packets * PACKET_SIZE;
+			}
+			err |= ssi_burst_read_interval(SENSOR_INTERFACE_DEV_IMU, ICM45686_FIFO_DATA, data, count, PACKET_SIZE);
+			if (err)
+				LOG_ERR("Communication error");
+			data += packets * PACKET_SIZE;
+			len -= packets * PACKET_SIZE;
+			total += packets;
 		}
-		err |= ssi_burst_read_interval(SENSOR_INTERFACE_DEV_IMU, ICM45686_FIFO_DATA, data, count, PACKET_SIZE);
-		if (err)
-			LOG_ERR("Communication error");
-		data += packets * PACKET_SIZE;
-		len -= packets * PACKET_SIZE;
-		total += packets;
 	}
+
+	if (total == 0) {
+		LOG_WRN("no data");
+		LOG_WRN("flags 0x%x 0x%x", int1_status[0], int1_status[1]);
+	}
+
 	return total;
 }
 
 static const uint8_t invalid[6] = {0x80, 0x00, 0x80, 0x00, 0x80, 0x00};
 
-int icm45_data_process(uint16_t index, uint8_t *data, float a[3], float g[3], float m[3])
+sensor_data_attrs_t icm45_data_process(uint16_t index, uint8_t *data, float a[3], float g[3], float m[3])
 {
 	index *= PACKET_SIZE;
 
@@ -594,38 +619,46 @@ int icm45_data_process(uint16_t index, uint8_t *data, float a[3], float g[3], fl
 		if (ext_mag)
 		{
 			ext_mag->mag_process(&data[index+1], m);
+			return DATA_VALID_MAG | DATA_OUTSIDE_FIFO;
+
 		}
-		return 0;
+		else {
+			return DATA_OUTSIDE_FIFO;
+		}
 	}
 
 	if (data[index] != 0x78) // ACCEL_EN, GYRO_EN, HIRES_EN, TMST_FIELD_EN
-		return 1; // Skip invalid header
+		return DATA_INVALID; // Skip invalid header
+
+	sensor_data_attrs_t result = 0;
+
 	// Empty packet is 7F filled
 	// combine into 20 bit values in 32 bit int
-	float a_raw[3] = {0};
-	float g_raw[3] = {0};
 	if (memcmp(&data[index + 1], invalid, sizeof(invalid))) // valid accel data
 	{
 		for (int i = 0; i < 3; i++) // accel x, y, z
-			a_raw[i] = (int32_t)((((uint32_t)data[index + 1 + (i * 2)]) << 24) | (((uint32_t)data[index + 2 + (i * 2)]) << 16) | (((uint32_t)data[index + 17 + i] & 0xF0) << 8));
+			a[i] = (int32_t)((((uint32_t)data[index + 1 + (i * 2)]) << 24) | (((uint32_t)data[index + 2 + (i * 2)]) << 16) | (((uint32_t)data[index + 17 + i] & 0xF0) << 8));
+
+		result |= DATA_VALID_ACCEL;
 	}
 	if (memcmp(&data[index + 7], invalid, sizeof(invalid))) // valid gyro data
 	{
 		for (int i = 0; i < 3; i++) // gyro x, y, z
-			g_raw[i] = (int32_t)((((uint32_t)data[index + 7 + (i * 2)]) << 24) | (((uint32_t)data[index + 8 + (i * 2)]) << 16) | (((uint32_t)data[index + 17 + i] & 0x0F) << 12));
+			g[i] = (int32_t)((((uint32_t)data[index + 7 + (i * 2)]) << 24) | (((uint32_t)data[index + 8 + (i * 2)]) << 16) | (((uint32_t)data[index + 17 + i] & 0x0F) << 12));
+
+		result |= DATA_VALID_GYRO;
 	}
 	else if (!memcmp(&data[index + 1], invalid, sizeof(invalid))) // Skip invalid data
 	{
-		return 1;
+		return DATA_INVALID;
 	}
 	for (int i = 0; i < 3; i++) // x, y, z
 	{
-		a_raw[i] *= accel_sensitivity_32;
-		g_raw[i] *= gyro_sensitivity_32;
+		a[i] *= accel_sensitivity_32;
+		g[i] *= gyro_sensitivity_32;
 	}
-	memcpy(a, a_raw, sizeof(a_raw));
-	memcpy(g, g_raw, sizeof(g_raw));
-	return 0;
+
+	return result;
 }
 
 const sensor_imu_t sensor_imu_icm45686 = {

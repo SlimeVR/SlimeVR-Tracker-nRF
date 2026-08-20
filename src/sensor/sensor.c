@@ -918,11 +918,12 @@ void sensor_loop(void)
 			{
 				float raw_a[3] = {0};
 				float raw_g[3] = {0};
-				if (sensor_imu->data_process(i, raw_data, raw_a, raw_g, raw_m))
+				sensor_data_attrs_t attrs = sensor_imu->data_process(i, raw_data, raw_a, raw_g, raw_m);
+				if (attrs & DATA_INVALID)
 					continue; // skip on error
 
 				// TODO: split into separate functions
-				if (raw_g[0] != 0 || raw_g[1] != 0 || raw_g[2] != 0)
+				if (attrs & DATA_VALID_GYRO)
 				{
 #if DEBUG
 					if (valid_acquisition)
@@ -956,7 +957,7 @@ void sensor_loop(void)
 					}
 				}
 
-				if (raw_a[0] != 0 || raw_a[1] != 0 || raw_a[2] != 0)
+				if (attrs & DATA_VALID_ACCEL)
 				{
 #if DEBUG
 					if (valid_acquisition)
@@ -983,7 +984,7 @@ void sensor_loop(void)
 					a_count++;
 				}
 
-				if (raw_m[0] != 0 || raw_m[1] != 0 || raw_m[2] != 0)
+				if (attrs & DATA_VALID_MAG)
 				{
 					mag_read = true;
 				}
@@ -1156,7 +1157,7 @@ void sensor_loop(void)
 		}
 		else // if signal was sent during processing, loop immediately to catch up (I2C could cause this to happen constantly)
 		{
-			LOG_DBG("FIFO THS/WM/WTM triggered during loop");
+			LOG_DBG("Interrupt triggered during loop");
 			k_yield();
 			main_wfi = false;
 		}

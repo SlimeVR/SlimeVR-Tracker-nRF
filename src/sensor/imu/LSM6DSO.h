@@ -72,7 +72,7 @@ uint16_t lsm6dso_data_read(uint8_t *data, uint16_t len);
 
 uint8_t lsm6dso_setup_WOM(void);
 
-int lsm6dso_ext_setup(enum sensor_ext_mode, const sensor_mag_t *mag, uint8_t mag_addr);
+int lsm6dso_ext_setup(sensor_ext_mode_t, const sensor_mag_t *mag, uint8_t mag_addr);
 
 int lsm6dso_ext_write(const uint8_t addr, const uint8_t *buf, uint32_t num_bytes);
 int lsm6dso_ext_write_read(const uint8_t addr, const uint8_t *write_buf, size_t num_write, uint8_t *read_buf, size_t num_read);

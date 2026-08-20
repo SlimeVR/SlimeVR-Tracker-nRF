@@ -19,6 +19,7 @@
 
 #define ICM45686_INT1_CONFIG0              0x16
 #define ICM45686_INT1_CONFIG1              0x17
+#define ICM45686_INT1_CONFIG2              0x18
 
 #define ICM45686_INT1_STATUS0              0x19
 #define ICM45686_INT1_STATUS1              0x1A
@@ -188,10 +189,16 @@ writing to the register pointed by the post-auto-incremented address.
 
 #define INT_STATUS_I2CM_SMC_EXT_ODR_EN (1 << 1) // trigger eDMP operation on target ODR (without that i2cm don't start automatically) 
 
+#define INT1_STATUS_FIFO_THS (1 << 1)
 #define INT1_STATUS_I2CM_DONE (1 << 5) // bit set to 1 in int1_status register when i2cm finished operation
 #define INT1_STATUS_WOM_X  (1 << 1)
 #define INT1_STATUS_WOM_Y  (1 << 2)
 #define INT1_STATUS_WOM_Z  (1 << 3)
+
+#define INT1_POLARITY (1 << 0)
+#define INT1_MODE     (1 << 1)
+#define INT1_DRIVE    (1 << 2)
+
 
 
 int icm45_init(float clock_rate, float accel_time, float gyro_time, float *accel_actual_time, float *gyro_actual_time);
@@ -201,7 +208,7 @@ void icm45_update_fs(float accel_range, float gyro_range, float *accel_actual_ra
 int icm45_update_odr(float accel_time, float gyro_time, float *accel_actual_time, float *gyro_actual_time);
 
 uint16_t icm45_data_read(uint8_t *data, uint16_t len);
-int icm45_data_process(uint16_t index, uint8_t *data, float a[3], float g[3], float m[3]);
+sensor_data_attrs_t icm45_data_process(uint16_t index, uint8_t *data, float a[3], float g[3], float m[3]);
 void icm45_accel_read(float a[3]);
 void icm45_gyro_read(float g[3]);
 int icm45_temp_read(float *data);
@@ -209,7 +216,7 @@ int icm45_temp_read(float *data);
 uint8_t icm45_setup_DRDY(uint16_t threshold);
 uint8_t icm45_setup_WOM(void);
 
-int icm45_ext_setup(enum sensor_ext_mode mode, const sensor_mag_t *, uint8_t mag_addr);
+int icm45_ext_setup(sensor_ext_mode_t mode, const sensor_mag_t *, uint8_t mag_addr);
 
 int icm45_ext_write(const uint8_t addr, const uint8_t *buf, uint32_t num_bytes);
 int icm45_ext_write_read(const uint8_t addr, const uint8_t *write_buf, size_t num_write, uint8_t *read_buf, size_t num_read);

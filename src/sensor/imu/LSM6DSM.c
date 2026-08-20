@@ -223,7 +223,7 @@ uint16_t lsm6dsm_data_read(uint8_t *data, uint16_t len)
 	return total;
 }
 
-int lsm6dsm_data_process(uint16_t index, uint8_t *data, float a[3], float g[3], float m[3])
+sensor_data_attrs_t lsm6dsm_data_process(uint16_t index, uint8_t *data, float a[3], float g[3], float m[3])
 {
 	index *= PACKET_SIZE;
 	uint8_t pattern = data[index];
@@ -234,7 +234,7 @@ int lsm6dsm_data_process(uint16_t index, uint8_t *data, float a[3], float g[3], 
 			g[i] = (int16_t)((((uint16_t)data[index + 2 + (i * 2)]) << 8) | data[index + 1 + (i * 2)]);
 			g[i] *= gyro_sensitivity;
 		}
-		return 0;
+		return DATA_VALID_GYRO;
 	}
 	else
 	{
@@ -243,9 +243,9 @@ int lsm6dsm_data_process(uint16_t index, uint8_t *data, float a[3], float g[3], 
 			a[i] = (int16_t)((((uint16_t)data[index + 2 + (i * 2)]) << 8) | data[index + 1 + (i * 2)]);
 			a[i] *= accel_sensitivity;
 		}
-		return 0;
+		return DATA_VALID_ACCEL;
 	}
-	return 1;
+	return DATA_INVALID;
 }
 
 /* LSM6DSM does not have COUNTER_BDR, FIFO threshold uses word count, or 3 words per sensor sample

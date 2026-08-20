@@ -31,14 +31,14 @@ void imu_none_shutdown(void);
 int imu_none_update_odr(float accel_time, float gyro_time, float *accel_actual_time, float *gyro_actual_time);
 
 uint16_t imu_none_data_read(uint8_t *data, uint16_t len);
-int imu_none_data_process(uint16_t index, uint8_t *data, float a[3], float g[3], float m[3]);
+sensor_data_attrs_t imu_none_data_process(uint16_t index, uint8_t *data, float a[3], float g[3], float m[3]);
 void imu_none_accel_read(float a[3]);
 void imu_none_gyro_read(float g[3]);
 int imu_none_temp_read(float *data);
 
 uint8_t imu_none_setup_WOM(void);
 
-int imu_none_ext_setup(enum sensor_ext_mode, const sensor_mag_t *mag, uint8_t mag_addr);
+int imu_none_ext_setup(sensor_ext_mode_t, const sensor_mag_t *mag, uint8_t mag_addr);
 
 extern const sensor_imu_t sensor_imu_none;
 

@@ -51,12 +51,20 @@ void main_imu_resume(void);
 void main_imu_wakeup(void);
 void main_imu_restart(void);
 
-enum sensor_ext_mode {
+typedef enum {
 	SENSOR_EXT_MODE_OFF = 0, // no external sensor
 	SENSOR_EXT_MODE_I2C_PASSTHROUGH = 1, // shorting external i2c bus to main i2c bus, mcu controls everything
 	SENSOR_EXT_MODE_I2CM_PROXY = 2, // separate buses, imu is as as a proxy / protocol to i2c converter
 	SENSOR_EXT_MODE_I2CM_AUTONOMOUS = 4, // separate buses, mag is autonomically driven by imu, data lands into fifo
-};
+} sensor_ext_mode_t;
+
+typedef enum {
+	DATA_VALID_ACCEL = 1,
+	DATA_VALID_GYRO = 2,
+	DATA_VALID_MAG = 4,
+	DATA_OUTSIDE_FIFO = 8,
+	DATA_INVALID = 16,
+} sensor_data_attrs_t;
 
 typedef struct sensor_fusion {
 	void (*init)(float, float, float); // gyro_time, accel_time, mag_time
@@ -104,7 +112,7 @@ typedef struct sensor_imu {
 	int (*update_odr)(float, float, float*, float*); // return actual update time, return 0 if success, 1 if odr is same, -1 if general error
 
 	uint16_t (*data_read)(uint8_t*, uint16_t);
-	int (*data_process)(uint16_t, uint8_t*, float[3], float[3], float[3]); // g, deg/s
+	sensor_data_attrs_t (*data_process)(uint16_t, uint8_t*, float[3], float[3], float[3]); // g, deg/s
 	void (*accel_read)(float[3]); // g
 	void (*gyro_read)(float[3]); // deg/s
 	int (*temp_read)(float*); // deg C, return 0 if success, -1 if error
@@ -112,7 +120,7 @@ typedef struct sensor_imu {
 	uint8_t (*setup_DRDY)(uint16_t);
 	uint8_t (*setup_WOM)(void);
 
-	int (*ext_setup)(enum sensor_ext_mode, const sensor_mag_t *mag, uint8_t mag_addr); // mag used for autonomous mode
+	int (*ext_setup)(sensor_ext_mode_t, const sensor_mag_t *mag, uint8_t mag_addr); // mag used for autonomous mode
 } sensor_imu_t;
 
 #endif

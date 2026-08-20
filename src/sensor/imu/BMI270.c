@@ -200,11 +200,13 @@ static const uint8_t overread[2] = {0x00, 0x80};
 static const uint8_t invalid_accel[6] = {0x01, 0x7F, 0x00, 0x80, 0x00, 0x80};
 static const uint8_t invalid_gyro[6] = {0x02, 0x7F, 0x00, 0x80, 0x00, 0x80};
 
-int bmi_data_process(uint16_t index, uint8_t *data, float a[3], float g[3], float m[3])
+sensor_data_attrs_t bmi_data_process(uint16_t index, uint8_t *data, float a[3], float g[3], float m[3])
 {
 	index *= PACKET_SIZE;
 	if (!memcmp(&data[index], overread, sizeof(overread)))
-		return 1; // Skip overread packets
+		return DATA_INVALID; // Skip overread packets
+
+	sensor_data_attrs_t result = 0;
 	float a_bmi[3];
 	float g_bmi[3];
 	for (int i = 0; i < 3; i++) // x, y, z
@@ -219,6 +221,7 @@ int bmi_data_process(uint16_t index, uint8_t *data, float a[3], float g[3], floa
 		a[0] = -a_bmi[1];
 		a[1] = a_bmi[0];
 		a[2] = a_bmi[2];
+		result |= DATA_VALID_ACCEL;
 	}
 	if (memcmp(&data[index], invalid_gyro, sizeof(invalid_gyro))) // valid gyro data
 	{
@@ -227,8 +230,9 @@ int bmi_data_process(uint16_t index, uint8_t *data, float a[3], float g[3], floa
 		g[0] = -g_bmi[1];
 		g[1] = g_bmi[0];
 		g[2] = g_bmi[2];
+		result |= DATA_VALID_GYRO;
 	}
-	return 0;
+	return result;
 }
 
 void bmi_accel_read(float a[3])
