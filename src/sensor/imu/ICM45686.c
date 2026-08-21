@@ -480,7 +480,7 @@ int icm45_ext_setup(sensor_ext_mode_t mode, const sensor_mag_t *mag, uint8_t mag
 		case SENSOR_EXT_MODE_I2CM_AUTONOMOUS:
 			ext_mag = mag;
 			const uint8_t total_bytes = mag->ext_burst + mag->ext_dummy_bytes;
-			if (total_bytes > 9) {
+			if (total_bytes > 15) {
 				return -1; // not supported (for now)
 			}
 
@@ -546,7 +546,7 @@ uint16_t icm45_data_read(uint8_t *data, uint16_t len)
 			if (len >= PACKET_SIZE) {
 				data[0] = 0x70; // magic tag for mag entry
 				// put data as fifo entry
-				err |= icm45_bank_read(ICM45686_IPREG_TOP1, ICM45686_I2CM_RD_DATA_0 + ext_mag->ext_dummy_bytes, &data[1], ext_mag->ext_burst);
+				err |= icm45_bank_read(ICM45686_IPREG_TOP1, ICM45686_I2CM_RD_DATA_0 + ext_mag->ext_dummy_bytes, &data[1], ext_mag->ext_burst + ext_mag->ext_dummy_bytes);
 
 				data += PACKET_SIZE;
 				len -= PACKET_SIZE; 
