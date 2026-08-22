@@ -185,34 +185,25 @@ int icm_update_odr(float accel_time, float gyro_time, float *accel_actual_time, 
 
 uint16_t icm_data_read(uint8_t *data, uint16_t len)
 {
-	int err = 0;
-	uint16_t total = 0;
-	uint16_t packets = UINT16_MAX;
-	while (packets > 0 && len >= PACKET_SIZE)
+	uint8_t rawCount[2] = {0};
+	int err = ssi_burst_read(SENSOR_INTERFACE_DEV_IMU, ICM42688_FIFO_COUNTH, &rawCount[0], 2);;
+	uint16_t packets = (uint16_t)(rawCount[0] << 8 | rawCount[1]); // Turn the 16 bits into a unsigned 16-bit value;
+	float extra_read_packets = packets * fifo_multiplier; // todo: consider removing
+	packets += extra_read_packets;
+
+	const uint16_t limit = len / PACKET_SIZE;
+	if (packets > limit)
 	{
-		uint8_t rawCount[2];
-		err |= ssi_burst_read(SENSOR_INTERFACE_DEV_IMU, ICM42688_FIFO_COUNTH, &rawCount[0], 2);
-		packets = (uint16_t)(rawCount[0] << 8 | rawCount[1]); // Turn the 16 bits into a unsigned 16-bit value
-		if (!packets) // nothing to do
-			break;
-		float extra_read_packets = packets * fifo_multiplier;
-		packets += extra_read_packets;
-		uint16_t count = packets * PACKET_SIZE;
-		uint16_t limit = len / PACKET_SIZE;
-		if (packets > limit)
-		{
-			LOG_WRN("FIFO read buffer limit reached, %d packets dropped", packets - limit);
-			packets = limit;
-			count = packets * PACKET_SIZE;
-		}
-		err |= ssi_burst_read_interval(SENSOR_INTERFACE_DEV_IMU, ICM42688_FIFO_DATA, data, count, PACKET_SIZE);
-		if (err)
-			LOG_ERR("Communication error");
-		data += packets * PACKET_SIZE;
-		len -= packets * PACKET_SIZE;
-		total += packets;
+		LOG_WRN("FIFO read buffer limit reached, %d packets dropped", packets - limit);
+		packets = limit;
 	}
-	return total;
+
+	const uint16_t read_size = packets * PACKET_SIZE;
+	err |= ssi_burst_read_interval(SENSOR_INTERFACE_DEV_IMU, ICM42688_FIFO_DATA, data, read_size, PACKET_SIZE);
+	if (err)
+		LOG_ERR("Communication error");
+
+	return packets;
 }
 
 static const uint8_t invalid[6] = {0x80, 0x00, 0x80, 0x00, 0x80, 0x00};

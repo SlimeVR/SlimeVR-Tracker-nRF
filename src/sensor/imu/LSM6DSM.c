@@ -183,44 +183,38 @@ int lsm6dsm_update_odr(float accel_time, float gyro_time, float *accel_actual_ti
 uint16_t lsm6dsm_data_read(uint8_t *data, uint16_t len)
 {
 	int err = 0;
-	uint16_t total = 0;
-	uint16_t count = UINT16_MAX;
 	uint16_t pattern = 0;
-	while (count > 0 && len >= PACKET_SIZE)
-	{
 
-		uint8_t rawCount[4];
-		err |= ssi_burst_read(SENSOR_INTERFACE_DEV_IMU, LSM6DSM_FIFO_STATUS1, &rawCount[0], 2);
-		count = (uint16_t)((rawCount[1] & 7) << 8 | rawCount[0]); // Turn the 16 bits into a unsigned 16-bit value
-		if (!count) // nothing to do
-			break;
-		count /= PACKET_SIZE / 2; // words to "packets" (actually PACKET_SIZE - 1)
-		uint16_t limit = len / PACKET_SIZE;
-		if (count > limit)
-		{
-			LOG_WRN("FIFO read buffer limit reached, %d packets dropped", count - limit);
-			count = limit;
-		}
-		for (int i = 0; i < count; i++)
-		{
-			err |= ssi_burst_read(SENSOR_INTERFACE_DEV_IMU, LSM6DSM_FIFO_STATUS3, &rawCount[0], 2); // reading pattern
-			pattern = (uint16_t)((rawCount[1] & 3) << 8 | rawCount[0]);
-			if (pattern % 3 != 0) // misaligned!
-			{
-				LOG_WRN("FIFO not aligned");
-				err |= ssi_burst_read(SENSOR_INTERFACE_DEV_IMU, LSM6DSM_FIFO_DATA_OUT_L, rawCount, (pattern % 3) * 2); // read and discard misaligned axes
-				count--;
-			}
-			data[i * PACKET_SIZE] = pattern / 3;
-			err |= ssi_burst_read(SENSOR_INTERFACE_DEV_IMU, LSM6DSM_FIFO_DATA_OUT_L, &data[i * PACKET_SIZE + 1], PACKET_SIZE - 1);
-		}
-		if (err)
-			LOG_ERR("Communication error");
-		data += count * PACKET_SIZE;
-		len -= count * PACKET_SIZE;
-		total += count;
+	uint8_t rawCount[4] = {0};
+
+	err |= ssi_burst_read(SENSOR_INTERFACE_DEV_IMU, LSM6DSM_FIFO_STATUS1, &rawCount[0], 2);
+	uint16_t count = (uint16_t)((rawCount[1] & 7) << 8 | rawCount[0]); // Turn the 16 bits into a unsigned 16-bit value
+
+	count /= PACKET_SIZE / 2; // words to "packets" (actually PACKET_SIZE - 1)
+	
+	const uint16_t limit = len / PACKET_SIZE;
+	if (count > limit)
+	{
+		LOG_WRN("FIFO read buffer limit reached, %d packets dropped", count - limit);
+		count = limit;
 	}
-	return total;
+	for (int i = 0; i < count; i++)
+	{
+		err |= ssi_burst_read(SENSOR_INTERFACE_DEV_IMU, LSM6DSM_FIFO_STATUS3, &rawCount[0], 2); // reading pattern
+		pattern = (uint16_t)((rawCount[1] & 3) << 8 | rawCount[0]);
+		if (pattern % 3 != 0) // misaligned!
+		{
+			LOG_WRN("FIFO not aligned");
+			err |= ssi_burst_read(SENSOR_INTERFACE_DEV_IMU, LSM6DSM_FIFO_DATA_OUT_L, rawCount, (pattern % 3) * 2); // read and discard misaligned axes
+			count--;
+		}
+		data[i * PACKET_SIZE] = pattern / 3;
+		err |= ssi_burst_read(SENSOR_INTERFACE_DEV_IMU, LSM6DSM_FIFO_DATA_OUT_L, &data[i * PACKET_SIZE + 1], PACKET_SIZE - 1);
+	}
+	if (err)
+		LOG_ERR("Communication error");
+
+	return count;
 }
 
 sensor_data_attrs_t lsm6dsm_data_process(uint16_t index, uint8_t *data, float a[3], float g[3], float m[3])

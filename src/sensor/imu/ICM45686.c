@@ -532,7 +532,6 @@ uint16_t icm45_data_read(uint8_t *data, uint16_t len)
 {
 	int err = 0;
 	uint16_t total = 0;
-	uint16_t packets = UINT16_MAX;
 
 	uint8_t int1_status[2] = {0};
 	err = ssi_burst_read(SENSOR_INTERFACE_DEV_IMU, ICM45686_INT1_STATUS0, int1_status, 2);
@@ -559,35 +558,28 @@ uint16_t icm45_data_read(uint8_t *data, uint16_t len)
 	}
 
 	if (int1_status[0] & INT1_STATUS_FIFO_THS) {
+		uint8_t rawCount[2] = {0};
+		err |= ssi_burst_read(SENSOR_INTERFACE_DEV_IMU, ICM45686_FIFO_COUNT_0, &rawCount[0], 2);
+		uint16_t packets  = (uint16_t)(rawCount[0] << 8 | rawCount[1]); // Turn the 16 bits into a unsigned 16-bit value
 
-		while (packets > 0 && len >= PACKET_SIZE)
+		// this is to compensate transport delay, TODO: consider removing it
+		float extra_read_packets = packets * fifo_multiplier;
+		packets += extra_read_packets;
+
+		const uint16_t limit = len / PACKET_SIZE;
+		if (packets > limit)
 		{
-			uint8_t rawCount[2];
-			err |= ssi_burst_read(SENSOR_INTERFACE_DEV_IMU, ICM45686_FIFO_COUNT_0, &rawCount[0], 2);
-			packets = (uint16_t)(rawCount[0] << 8 | rawCount[1]); // Turn the 16 bits into a unsigned 16-bit value
-			if (!packets) // nothing to do
-				break;
-			float extra_read_packets = packets * fifo_multiplier;
-			packets += extra_read_packets;
-			uint16_t count = packets * PACKET_SIZE;
-			uint16_t limit = len / PACKET_SIZE;
-			if (packets > limit)
-			{
-				LOG_WRN("FIFO read buffer limit reached, %d packets dropped", packets - limit);
-				packets = limit;
-				count = packets * PACKET_SIZE;
-			}
-			err |= ssi_burst_read_interval(SENSOR_INTERFACE_DEV_IMU, ICM45686_FIFO_DATA, data, count, PACKET_SIZE);
-			if (err)
-				LOG_ERR("Communication error");
-			data += packets * PACKET_SIZE;
-			len -= packets * PACKET_SIZE;
-			total += packets;
+			LOG_WRN("FIFO read buffer limit reached, %d packets dropped", packets - limit);
+			packets = limit;
 		}
-	}
+		
+		const uint16_t read_size = packets * PACKET_SIZE;
 
-	if (total == 0) {
-		LOG_WRN("No data, interrupts 0x%x 0x%x", int1_status[0], int1_status[1]);
+		err |= ssi_burst_read_interval(SENSOR_INTERFACE_DEV_IMU, ICM45686_FIFO_DATA, data, read_size, PACKET_SIZE);
+		if (err)
+			LOG_ERR("Communication error");
+
+		total += packets;
 	}
 
 	return total;
