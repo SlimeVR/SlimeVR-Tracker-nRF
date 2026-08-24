@@ -157,10 +157,14 @@ void clock_pre_shutdown() {
 // Switch to external oscillator for LF clock for good TDMA precision
 void clock_init_external() {
 	#if defined(NRF_CLOCK_USE_EXTERNAL_LFCLK_SOURCES) || defined(__NRFX_DOXYGEN__)
-		#if CONFIG_CLOCK_SOURCE_XTAL_FULL
+		#if CONFIG_CLOCK_SOURCE_LFCLK_FULL_SWING
 			clock_switch(NRF_CLOCK_LFCLK_XTAL_FULL_SWING);
-		#elif CONFIG_CLOCK_SOURCE_XTAL
-			clock_switch(NRF_CLOCK_LFCLK_XTAL_FULL);
+		#elif CONFIG_CLOCK_SOURCE_LFCLK_LOW_SWING
+			clock_switch(NRF_CLOCK_LFCLK_XTAL_LOW_SWING);
+		#elif CONFIG_CLOCK_SOURCE_LFCLK_XTAL
+			clock_switch(NRF_CLOCK_LFCLK_XTAL);
+		#elif CONFIG_CLOCK_SOURCE_LFCLK_SYNTH
+			clock_switch(NRF_CLOCK_LFCLK_SYNTH);
 		#endif
 	#endif
 }

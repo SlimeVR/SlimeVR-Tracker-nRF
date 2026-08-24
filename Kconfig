@@ -321,16 +321,29 @@ config CONNECTION_OVER_HID
         Use HID if available.
         Otherwise, use ESB only.
 
-config CLOCK_SOURCE_XTAL_FULL
-    bool "Use XTAL FULL clock source for TDMA timer"
-    default y
+choice CLOCK_SOURCE_LFCLK
+    prompt "LF clock source for TDMA"
+    default CLOCK_SOURCE_LFCLK_FULL_SWING
     help
-        Use XTAL FULL, otherwise use RC or XTAL
+        Chose which crystal or oscillator is connected
+        to XL1/XL2 pins, if any. External 32.768kHz crystal
+        or oscillator is recommended.
 
-config CLOCK_SOURCE_XTAL
-    bool "Use XTAL clock source for TDMA timer"
-    default n
-    help
-        Use XTAL, otherwise use RC or XTAL FULL
+config CLOCK_SOURCE_LFCLK_XTAL
+    bool "External passive crystal"
+
+config CLOCK_SOURCE_LFCLK_LOW_SWING
+    bool "External low-swing oscillator"
+
+config CLOCK_SOURCE_LFCLK_FULL_SWING
+    bool "External full-swing oscillator"
+
+config CLOCK_SOURCE_LFCLK_SYNTH
+    bool "Synthesized from internal HF clock (high power consumption)"
+
+config CLOCK_SOURCE_LFCLK_RC
+    bool "Internal RC clock (bad performance)"
+
+endchoice
 
 source "Kconfig.zephyr"
