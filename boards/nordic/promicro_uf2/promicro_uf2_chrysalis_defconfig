@@ -15,3 +15,6 @@ CONFIG_SENSOR_ROTATION_270=y
 #generate for adafruit uf2 bootloader flashing
 CONFIG_BUILD_OUTPUT_UF2=y
 CONFIG_FLASH_LOAD_OFFSET=0x1000
+
+# Use passive XTAL clock source for TDMA
+CONFIG_CLOCK_SOURCE_LFCLK_XTAL=y

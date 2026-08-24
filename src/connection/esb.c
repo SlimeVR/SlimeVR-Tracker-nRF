@@ -38,7 +38,7 @@
 #include "pairing.h"
 
 #define ALLOW_RETRANSMIT true
-#define TX_ERROR_THRESHOLD 10
+#define TX_ERROR_THRESHOLD 100
 #define TX_ERROR_MAX 100
 #define TX_ERROR_CLEAR_RATE 10
 #define FREQUENCY_HOPPING false
