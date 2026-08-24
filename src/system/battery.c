@@ -138,7 +138,7 @@ static int divider_setup(void)
 		.acquisition_time = ADC_ACQ_TIME(ADC_ACQ_TIME_MICROSECONDS, 3),
 	};
 
-	// TODO: cam this fine tuning be moved somehow to device tree? this is jank
+	// TODO: can this fine tuning be moved somehow to device tree? this is jank
 
 	if (cfg->output_ohm != 0) {
 #if NCS_VERSION_MAJOR <= 3 && NCS_VERSION_MINOR <= 1

@@ -68,7 +68,7 @@ static struct i2c_dt_spec sensor_mag_dev = {0};
 #endif
 
 #if !SENSOR_MAG_EXISTS
-#warning "Magnetometer does not exist"
+#warning "Magnetometer node does not exist"
 #endif
 
 static uint8_t sensor_mag_dev_reg = 0xFF;
@@ -1157,7 +1157,7 @@ void sensor_loop(void)
 		}
 		else // if signal was sent during processing, loop immediately to catch up (I2C could cause this to happen constantly)
 		{
-			LOG_DBG("Interrupt triggered during loop");
+			LOG_DBG("Sensor interrupt triggered during loop");
 			k_yield();
 			main_wfi = false;
 		}
