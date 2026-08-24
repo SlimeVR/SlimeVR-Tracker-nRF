@@ -74,6 +74,11 @@ static const struct pwm_dt_spec clk_out = PWM_DT_SPEC_GET(CLKOUT_NODE);
 static const struct pwm_dt_spec clk_out = {0};
 #endif
 
+#if DT_NODE_HAS_PROP(ZEPHYR_USER_NODE, test_gpios)
+#define TEST_PIN_EXISTS true
+static const struct gpio_dt_spec test_pin = GPIO_DT_SPEC_GET(ZEPHYR_USER_NODE, test_gpios);
+#endif
+
 #define DFU_EXISTS CONFIG_BUILD_OUTPUT_UF2 || CONFIG_BOARD_HAS_NRF5_BOOTLOADER
 #define ADAFRUIT_BOOTLOADER CONFIG_BUILD_OUTPUT_UF2
 #define NRF5_BOOTLOADER CONFIG_BOARD_HAS_NRF5_BOOTLOADER
@@ -411,6 +416,12 @@ static void button_thread(void)
 }
 #endif
 
+void test_pin_set(int value) {
+#if TEST_PIN_EXISTS
+	gpio_pin_set_dt(&test_pin, value);
+#endif
+}
+
 static int sys_gpio_init(void)
 {
 #if DOCK_EXISTS // configure if exists
@@ -424,6 +435,9 @@ static int sys_gpio_init(void)
 #endif
 #if CLK_EN_EXISTS
 	gpio_pin_configure_dt(&clk_en, GPIO_OUTPUT);
+#endif
+#ifdef TEST_PIN_EXISTS
+	gpio_pin_configure_dt(&test_pin, GPIO_OUTPUT);
 #endif
 #if DCDC_EN_EXISTS
 	gpio_pin_configure_dt(&dcdc_en, GPIO_OUTPUT);
