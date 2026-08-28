@@ -28,6 +28,7 @@
 #include "system.h"
 #include "led.h"
 #include "connection/esb.h"
+#include "usb.h"
 
 #include <zephyr/drivers/gpio.h>
 #include <zephyr/logging/log_ctrl.h>
@@ -64,6 +65,7 @@ static bool battery_low = false;
 
 static bool plugged = false;
 static bool power_init = false;
+static bool usb_plugged = false;
 static bool device_plugged = false;
 static bool device_charged = false;
 
@@ -601,10 +603,18 @@ static void power_thread(void)
 			plugged = true;
 		else if ((plugged && battery_mV <= 4250) || abnormal_reading)
 			plugged = false;
+
 #ifdef POWER_USBREGSTATUS_VBUSDETECT_Msk
-		bool usb_plugged = NRF_POWER->USBREGSTATUS & POWER_USBREGSTATUS_VBUSDETECT_Msk;
-#else
-		bool usb_plugged = false;
+		if (!usb_plugged && (NRF_POWER->USBREGSTATUS & POWER_USBREGSTATUS_VBUSDETECT_Msk))
+		{
+			usb_plugged = true;
+			usb_initialize();
+		}
+		else if (usb_plugged && !(NRF_POWER->USBREGSTATUS & POWER_USBREGSTATUS_VBUSDETECT_Msk))
+		{
+			usb_plugged = false;
+			usb_deinitialize();
+		}
 #endif
 
 		if (!device_plugged && (charging || charged || plugged || usb_plugged))

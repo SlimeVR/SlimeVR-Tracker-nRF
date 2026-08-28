@@ -22,7 +22,6 @@
 #include "system/rtt_console.h"
 #endif
 #include <zephyr/drivers/gpio.h>
-#include <zephyr/sys/reboot.h>
 #include <zephyr/sys/base64.h>
 
 #include <ctype.h>
@@ -524,19 +523,6 @@ static void print_help(void)
 
 static void console_thread(void)
 {
-#if USB_EXISTS && DFU_EXISTS
-	if (button_read()) // button held on usb connect, enter DFU
-	{
-#if ADAFRUIT_BOOTLOADER
-		NRF_POWER->GPREGRET = 0x57;
-		sys_request_system_reboot(false);
-#endif
-#if NRF5_BOOTLOADER
-		gpio_pin_configure(gpio_dev, 19, GPIO_OUTPUT | GPIO_OUTPUT_INIT_LOW);
-#endif
-	}
-#endif
-
 #if USB_EXISTS
 	console_getline_init();
 	while (log_data_pending())
