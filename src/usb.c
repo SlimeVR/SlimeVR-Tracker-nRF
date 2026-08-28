@@ -146,7 +146,7 @@ static void usb_ctrl_thread(void)
 				if (baudrate == 1200)
 				{
 #if ADAFRUIT_BOOTLOADER
-					NRF_POWER->GPREGRET = 0x57;
+					NRF_POWER->GPREGRET = 0x4e; // DFU_MAGIC_SERIAL_ONLY_RESET
 					sys_request_system_reboot(false);
 #endif
 					// TODO: not sure if nrf5 bootloader can make use of this
