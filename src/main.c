@@ -28,11 +28,6 @@
 
 #include <zephyr/sys/reboot.h>
 
-#define DFU_DBL_RESET_MEM 0x20007F7C
-#define DFU_DBL_RESET_APP 0x4ee5677e
-
-static uint32_t *dbl_reset_mem __attribute__((unused)) = ((uint32_t *)DFU_DBL_RESET_MEM); // retained
-
 LOG_MODULE_REGISTER(main, LOG_LEVEL_INF);
 
 #if DT_NODE_HAS_PROP(DT_ALIAS(sw0), gpios)
@@ -108,9 +103,9 @@ int main(void)
 #if ADAFRUIT_BOOTLOADER
 #if BUTTON_EXISTS
 		if (!CONFIG_0_SETTINGS_READ(CONFIG_0_IGNORE_RESET))
-			(*dbl_reset_mem) = DFU_DBL_RESET_APP; // Using Adafruit bootloader, skip DFU if reset button could be used
+			NRF_POWER->GPREGRET = 0x6d; // Using Adafruit bootloader, skip DFU if reset button could be used
 #else
-		(*dbl_reset_mem) = DFU_DBL_RESET_APP; // Using Adafruit bootloader, skip DFU since reset button is used
+		NRF_POWER->GPREGRET = 0x6d; // Using Adafruit bootloader, skip DFU since reset button is used
 #endif
 #endif
 		k_msleep(1000); // Wait before clearing counter and continuing

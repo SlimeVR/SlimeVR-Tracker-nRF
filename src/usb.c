@@ -111,7 +111,7 @@ static void usb_ctrl_thread(void)
 	if (k_uptime_get() - start_time < 100 ? button_read_filtered() : button_read()) // button held on usb connect, enter DFU. if held from wake and usb is plugged in after, then allow initial button hold
 	{
 #if ADAFRUIT_BOOTLOADER
-		NRF_POWER->GPREGRET = 0x57;
+		NRF_POWER->GPREGRET = 0x57; // DFU_MAGIC_UF2_RESET
 		sys_request_system_reboot(false);
 #endif
 #if NRF5_BOOTLOADER
