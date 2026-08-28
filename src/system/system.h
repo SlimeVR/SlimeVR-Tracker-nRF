@@ -34,6 +34,7 @@ void sys_nvs_stats(void);
 
 int set_sensor_clock(bool enable, float rate, float *actual_rate);
 
+bool button_read_filtered(void);
 bool button_read(void);
 void test_pin_set(int);
 
