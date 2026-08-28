@@ -41,11 +41,7 @@
 #include "power.h"
 #include "clocks.h"
 
-#define DFU_DBL_RESET_MEM 0x20007F7C
-#define DFU_DBL_RESET_APP 0x4ee5677e
 #define ADAFRUIT_BOOTLOADER CONFIG_BUILD_OUTPUT_UF2
-
-static uint32_t *dbl_reset_mem __attribute__((unused)) = ((uint32_t *)DFU_DBL_RESET_MEM); // retained
 
 enum sys_regulator {
 	SYS_REGULATOR_DCDC,
@@ -111,8 +107,6 @@ static const struct gpio_dt_spec chg_en = GPIO_DT_SPEC_GET(ZEPHYR_USER_NODE, chg
 #else
 #pragma message "Charge enable GPIO does not exist"
 #endif
-
-#define ADAFRUIT_BOOTLOADER CONFIG_BUILD_OUTPUT_UF2
 
 static void sys_disconnect_interface_pins(void)
 {
@@ -354,7 +348,7 @@ static void sys_WOM(bool force) // TODO: if IMU interrupt does not exist what do
 //	retained_update();
 	wait_for_logging();
 #if ADAFRUIT_BOOTLOADER // if using Adafruit bootloader, always skip dfu for next boot
-	(*dbl_reset_mem) = DFU_DBL_RESET_APP; // Skip DFU
+	NRF_POWER->GPREGRET = 0x6d; // DFU_MAGIC_SKIP
 #endif
 	sys_poweroff();
 #else
@@ -399,7 +393,7 @@ static void sys_system_off(bool silent) // TODO: add timeout
 		wait_for_logging();
 	}
 #if ADAFRUIT_BOOTLOADER // if using Adafruit bootloader, always skip dfu for next boot
-	(*dbl_reset_mem) = DFU_DBL_RESET_APP; // Skip DFU
+	NRF_POWER->GPREGRET = 0x6d; // DFU_MAGIC_SKIP
 #endif
 	sys_poweroff();
 }
@@ -414,8 +408,9 @@ static void sys_system_reboot(void) // TODO: add timeout
 	sys_update_battery_tracker(current_battery_pptt, device_plugged);
 //	retained_update();
 	wait_for_logging();
-#if ADAFRUIT_BOOTLOADER // if using Adafruit bootloader, always skip dfu for next boot
-	(*dbl_reset_mem) = DFU_DBL_RESET_APP; // Skip DFU
+#if ADAFRUIT_BOOTLOADER // if using Adafruit bootloader, skip dfu for next boot
+	if (!NRF_POWER->GPREGRET) // no other request
+		NRF_POWER->GPREGRET = 0x6d; // DFU_MAGIC_SKIP
 #endif
 	sys_reboot(SYS_REBOOT_COLD);
 }
@@ -451,7 +446,8 @@ bool vin_read(void) // blocking
 static void disable_DFU_thread(void)
 {
 #if ADAFRUIT_BOOTLOADER
-	(*dbl_reset_mem) = DFU_DBL_RESET_APP; // Skip DFU
+	if (!NRF_POWER->GPREGRET) // no other request
+		NRF_POWER->GPREGRET = 0x6d; // DFU_MAGIC_SKIP
 #endif
 }
 
