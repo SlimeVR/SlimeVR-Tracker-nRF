@@ -65,7 +65,7 @@ int main(void)
 	/* if button is not held after booting from shutdown, power off again
 	 * if button press is normal, continue boot
 	 * if button is held for 1 second, reset pairing and continue boot
-	 * if button is held but tracker was waking (not booting from shutdown) ignore the press // TODO: should it pass on to regular handler (e.g. intent to shutdown)
+	 * if button is held but tracker was waking (not booting from shutdown) ignore the press // TODO: this should pass on to regular handler (e.g. intent to shutdown)
 	 */
 
 	if (booting_from_shutdown)
