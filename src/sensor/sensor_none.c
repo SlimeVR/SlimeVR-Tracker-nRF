@@ -50,15 +50,15 @@ int imu_none_update_odr(float accel_time, float gyro_time, float *accel_actual_t
 	return -1;
 }
 
-uint16_t imu_none_fifo_read(uint8_t *data, uint16_t len)
+uint16_t imu_none_data_read(uint8_t *data, uint16_t len)
 {
-	LOG_DBG("imu_none_fifo_read, sensor has no IMU or IMU has no FIFO");
+	LOG_DBG("imu_none_data_read, sensor has no IMU or IMU has no FIFO");
 	return 0;
 }
 
-int imu_none_fifo_process(uint16_t index, uint8_t *data, float a[3], float g[3])
+sensor_data_attrs_t imu_none_data_process(uint16_t index, uint8_t *data, float a[3], float g[3], float m[3])
 {
-	LOG_DBG("imu_none_fifo_process, sensor has no IMU or IMU has no FIFO");
+	LOG_DBG("imu_none_data_process, sensor has no IMU or IMU has no FIFO");
 	return -1;
 }
 
@@ -92,15 +92,9 @@ uint8_t imu_none_setup_WOM(void)
 	return 0;
 }
 
-int imu_none_ext_setup(void)
+int imu_none_ext_setup(sensor_ext_mode_t, const sensor_mag_t *mag, uint8_t mag_addr)
 {
 	LOG_DBG("imu_none_ext_setup, sensor has no IMU or IMU has no ext support");
-	return -1;
-}
-
-int imu_none_ext_passthrough(bool passthrough)
-{
-	LOG_DBG("imu_none_ext_passthrough, sensor has no IMU or IMU has no ext passthrough");
 	return -1;
 }
 
@@ -111,8 +105,8 @@ const sensor_imu_t sensor_imu_none = {
 	*imu_none_update_fs,
 	*imu_none_update_odr,
 
-	*imu_none_fifo_read,
-	*imu_none_fifo_process,
+	*imu_none_data_read,
+	*imu_none_data_process,
 	*imu_none_accel_read,
 	*imu_none_gyro_read,
 	*imu_none_temp_read,
@@ -120,8 +114,7 @@ const sensor_imu_t sensor_imu_none = {
 	*imu_none_setup_DRDY,
 	*imu_none_setup_WOM,
 	
-	*imu_none_ext_setup,
-	*imu_none_ext_passthrough
+	*imu_none_ext_setup
 };
 
 int mag_none_init(float time, float *actual_time)
@@ -140,6 +133,11 @@ int mag_none_update_odr(float time, float *actual_time)
 {
 	LOG_DBG("mag_none_update_odr, sensor has no magnetometer or magnetometer has no configurable ODR");
 	return -1;
+}
+
+float mag_none_get_odr(void)
+{
+	return 0.0f;
 }
 
 void mag_none_mag_oneshot(void)
@@ -171,6 +169,7 @@ const sensor_mag_t sensor_mag_none = {
 	*mag_none_shutdown,
 
 	*mag_none_update_odr,
+	*mag_none_get_odr,
 
 	*mag_none_mag_oneshot,
 	*mag_none_mag_read,

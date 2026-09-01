@@ -64,6 +64,8 @@ void bmi_shutdown(void) // this does not reset the device, to avoid clearing the
 	err |= ssi_reg_write_byte(SENSOR_INTERFACE_DEV_IMU, BMI270_PWR_CONF, 0x01); // enable adv_power_save (suspend)
 	if (err)
 		LOG_ERR("Communication error");
+	// TODO : Correctly wait for the reset to finish
+	k_msleep(1);
 }
 
 void bmi_update_fs(float accel_range, float gyro_range, float *accel_actual_range, float *gyro_actual_range)
@@ -164,45 +166,39 @@ int bmi_update_odr(float accel_time, float gyro_time, float *accel_actual_time, 
 }
 
 // TODO: gyro rotation data is delayed for some reason, accelerometer still responds instantly
-uint16_t bmi_fifo_read(uint8_t *data, uint16_t len)
+uint16_t bmi_data_read(uint8_t *data, uint16_t len)
 {
-	int err = 0;
-	uint16_t total = 0;
-	uint16_t packets = UINT16_MAX;
-	while (packets > 0 && len >= PACKET_SIZE)
+	uint8_t rawCount[2] = {0};
+	int err = ssi_burst_read(SENSOR_INTERFACE_DEV_IMU, BMI270_FIFO_LENGTH_0, &rawCount[0], 2);
+
+	uint16_t packets = (uint16_t)((rawCount[1] & 0x3F) << 8 | rawCount[0]); // Turn the 16 bits into a unsigned 16-bit value
+
+	const uint16_t limit = len / PACKET_SIZE;
+	if (packets > limit)
 	{
-		uint8_t rawCount[2];
-		err |= ssi_burst_read(SENSOR_INTERFACE_DEV_IMU, BMI270_FIFO_LENGTH_0, &rawCount[0], 2);
-		uint16_t count = (uint16_t)((rawCount[1] & 0x3F) << 8 | rawCount[0]); // Turn the 16 bits into a unsigned 16-bit value
-		if (!count) // nothing to do
-			break;
-		packets = count / PACKET_SIZE;
-		uint16_t limit = len / PACKET_SIZE;
-		if (packets > limit)
-		{
-			LOG_WRN("FIFO read buffer limit reached, %d packets dropped", packets - limit);
-			packets = limit;
-			count = packets * PACKET_SIZE;
-		}
-		err |= ssi_burst_read_interval(SENSOR_INTERFACE_DEV_IMU, BMI270_FIFO_DATA, data, count, PACKET_SIZE);
-		if (err)
-			LOG_ERR("Communication error");
-		data += packets * PACKET_SIZE;
-		len -= packets * PACKET_SIZE;
-		total += packets;
+		LOG_WRN("FIFO read buffer limit reached, %d packets dropped", packets - limit);
+		packets = limit;
 	}
-	return total;
+
+	const uint16_t read_size = packets * PACKET_SIZE;
+	err |= ssi_burst_read_interval(SENSOR_INTERFACE_DEV_IMU, BMI270_FIFO_DATA, data, read_size, PACKET_SIZE);
+	if (err)
+		LOG_ERR("Communication error");
+	
+	return packets;
 }
 
 static const uint8_t overread[2] = {0x00, 0x80};
 static const uint8_t invalid_accel[6] = {0x01, 0x7F, 0x00, 0x80, 0x00, 0x80};
 static const uint8_t invalid_gyro[6] = {0x02, 0x7F, 0x00, 0x80, 0x00, 0x80};
 
-int bmi_fifo_process(uint16_t index, uint8_t *data, float a[3], float g[3])
+sensor_data_attrs_t bmi_data_process(uint16_t index, uint8_t *data, float a[3], float g[3], float m[3])
 {
 	index *= PACKET_SIZE;
 	if (!memcmp(&data[index], overread, sizeof(overread)))
-		return 1; // Skip overread packets
+		return DATA_INVALID; // Skip overread packets
+
+	sensor_data_attrs_t result = 0;
 	float a_bmi[3];
 	float g_bmi[3];
 	for (int i = 0; i < 3; i++) // x, y, z
@@ -217,6 +213,7 @@ int bmi_fifo_process(uint16_t index, uint8_t *data, float a[3], float g[3])
 		a[0] = -a_bmi[1];
 		a[1] = a_bmi[0];
 		a[2] = a_bmi[2];
+		result |= DATA_VALID_ACCEL;
 	}
 	if (memcmp(&data[index], invalid_gyro, sizeof(invalid_gyro))) // valid gyro data
 	{
@@ -225,8 +222,9 @@ int bmi_fifo_process(uint16_t index, uint8_t *data, float a[3], float g[3])
 		g[0] = -g_bmi[1];
 		g[1] = g_bmi[0];
 		g[2] = g_bmi[2];
+		result |= DATA_VALID_GYRO;
 	}
-	return 0;
+	return result;
 }
 
 void bmi_accel_read(float a[3])
@@ -480,8 +478,8 @@ const sensor_imu_t sensor_imu_bmi270 = {
 	*bmi_update_fs,
 	*bmi_update_odr,
 
-	*bmi_fifo_read,
-	*bmi_fifo_process,
+	*bmi_data_read,
+	*bmi_data_process,
 	*bmi_accel_read,
 	*bmi_gyro_read,
 	*bmi_temp_read,
@@ -489,6 +487,5 @@ const sensor_imu_t sensor_imu_bmi270 = {
 	*bmi_setup_DRDY,
 	*bmi_setup_WOM,
 
-	*imu_none_ext_setup,
-	*imu_none_ext_passthrough
+	*imu_none_ext_setup
 };

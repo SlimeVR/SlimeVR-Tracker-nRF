@@ -180,50 +180,44 @@ int lsm6dsm_update_odr(float accel_time, float gyro_time, float *accel_actual_ti
 	return 0;
 }
 
-uint16_t lsm6dsm_fifo_read(uint8_t *data, uint16_t len)
+uint16_t lsm6dsm_data_read(uint8_t *data, uint16_t len)
 {
 	int err = 0;
-	uint16_t total = 0;
-	uint16_t count = UINT16_MAX;
 	uint16_t pattern = 0;
-	while (count > 0 && len >= PACKET_SIZE)
-	{
 
-		uint8_t rawCount[4];
-		err |= ssi_burst_read(SENSOR_INTERFACE_DEV_IMU, LSM6DSM_FIFO_STATUS1, &rawCount[0], 2);
-		count = (uint16_t)((rawCount[1] & 7) << 8 | rawCount[0]); // Turn the 16 bits into a unsigned 16-bit value
-		if (!count) // nothing to do
-			break;
-		count /= PACKET_SIZE / 2; // words to "packets" (actually PACKET_SIZE - 1)
-		uint16_t limit = len / PACKET_SIZE;
-		if (count > limit)
-		{
-			LOG_WRN("FIFO read buffer limit reached, %d packets dropped", count - limit);
-			count = limit;
-		}
-		for (int i = 0; i < count; i++)
-		{
-			err |= ssi_burst_read(SENSOR_INTERFACE_DEV_IMU, LSM6DSM_FIFO_STATUS3, &rawCount[0], 2); // reading pattern
-			pattern = (uint16_t)((rawCount[1] & 3) << 8 | rawCount[0]);
-			if (pattern % 3 != 0) // misaligned!
-			{
-				LOG_WRN("FIFO not aligned");
-				err |= ssi_burst_read(SENSOR_INTERFACE_DEV_IMU, LSM6DSM_FIFO_DATA_OUT_L, rawCount, (pattern % 3) * 2); // read and discard misaligned axes
-				count--;
-			}
-			data[i * PACKET_SIZE] = pattern / 3;
-			err |= ssi_burst_read(SENSOR_INTERFACE_DEV_IMU, LSM6DSM_FIFO_DATA_OUT_L, &data[i * PACKET_SIZE + 1], PACKET_SIZE - 1);
-		}
-		if (err)
-			LOG_ERR("Communication error");
-		data += count * PACKET_SIZE;
-		len -= count * PACKET_SIZE;
-		total += count;
+	uint8_t rawCount[4] = {0};
+
+	err |= ssi_burst_read(SENSOR_INTERFACE_DEV_IMU, LSM6DSM_FIFO_STATUS1, &rawCount[0], 2);
+	uint16_t count = (uint16_t)((rawCount[1] & 7) << 8 | rawCount[0]); // Turn the 16 bits into a unsigned 16-bit value
+
+	count /= PACKET_SIZE / 2; // words to "packets" (actually PACKET_SIZE - 1)
+	
+	const uint16_t limit = len / PACKET_SIZE;
+	if (count > limit)
+	{
+		LOG_WRN("FIFO read buffer limit reached, %d packets dropped", count - limit);
+		count = limit;
 	}
-	return total;
+	for (int i = 0; i < count; i++)
+	{
+		err |= ssi_burst_read(SENSOR_INTERFACE_DEV_IMU, LSM6DSM_FIFO_STATUS3, &rawCount[0], 2); // reading pattern
+		pattern = (uint16_t)((rawCount[1] & 3) << 8 | rawCount[0]);
+		if (pattern % 3 != 0) // misaligned!
+		{
+			LOG_WRN("FIFO not aligned");
+			err |= ssi_burst_read(SENSOR_INTERFACE_DEV_IMU, LSM6DSM_FIFO_DATA_OUT_L, rawCount, (pattern % 3) * 2); // read and discard misaligned axes
+			count--;
+		}
+		data[i * PACKET_SIZE] = pattern / 3;
+		err |= ssi_burst_read(SENSOR_INTERFACE_DEV_IMU, LSM6DSM_FIFO_DATA_OUT_L, &data[i * PACKET_SIZE + 1], PACKET_SIZE - 1);
+	}
+	if (err)
+		LOG_ERR("Communication error");
+
+	return count;
 }
 
-int lsm6dsm_fifo_process(uint16_t index, uint8_t *data, float a[3], float g[3])
+sensor_data_attrs_t lsm6dsm_data_process(uint16_t index, uint8_t *data, float a[3], float g[3], float m[3])
 {
 	index *= PACKET_SIZE;
 	uint8_t pattern = data[index];
@@ -234,7 +228,7 @@ int lsm6dsm_fifo_process(uint16_t index, uint8_t *data, float a[3], float g[3])
 			g[i] = (int16_t)((((uint16_t)data[index + 2 + (i * 2)]) << 8) | data[index + 1 + (i * 2)]);
 			g[i] *= gyro_sensitivity;
 		}
-		return 0;
+		return DATA_VALID_GYRO;
 	}
 	else
 	{
@@ -243,9 +237,9 @@ int lsm6dsm_fifo_process(uint16_t index, uint8_t *data, float a[3], float g[3])
 			a[i] = (int16_t)((((uint16_t)data[index + 2 + (i * 2)]) << 8) | data[index + 1 + (i * 2)]);
 			a[i] *= accel_sensitivity;
 		}
-		return 0;
+		return DATA_VALID_ACCEL;
 	}
-	return 1;
+	return DATA_INVALID;
 }
 
 /* LSM6DSM does not have COUNTER_BDR, FIFO threshold uses word count, or 3 words per sensor sample
@@ -295,8 +289,8 @@ const sensor_imu_t sensor_imu_lsm6dsm = {
 	*lsm6dsm_update_fs,
 	*lsm6dsm_update_odr,
 
-	*lsm6dsm_fifo_read,
-	*lsm6dsm_fifo_process,
+	*lsm6dsm_data_read,
+	*lsm6dsm_data_process,
 	*lsm_accel_read,
 	*lsm_gyro_read,
 	*lsm_temp_read,
@@ -304,6 +298,5 @@ const sensor_imu_t sensor_imu_lsm6dsm = {
 	*lsm6dsm_setup_DRDY,
 	*lsm6dsm_setup_WOM,
 
-	*imu_none_ext_setup,
-	*lsm_ext_passthrough
+	*lsm_ext_setup
 };

@@ -164,32 +164,24 @@ int lsm6dso_update_odr(float accel_time, float gyro_time, float *accel_actual_ti
 	return 0;
 }
 
-uint16_t lsm6dso_fifo_read(uint8_t *data, uint16_t len)
+uint16_t lsm6dso_data_read(uint8_t *data, uint16_t len)
 {
-	int err = 0;
-	uint16_t total = 0;
-	uint16_t count = UINT16_MAX;
-	while (count > 0 && len >= PACKET_SIZE)
+	uint8_t rawCount[2] = {0};
+	int err = ssi_burst_read(SENSOR_INTERFACE_DEV_IMU, LSM6DSO_FIFO_STATUS1, &rawCount[0], 2);
+		
+	uint16_t count = (uint16_t)((rawCount[1] & 3) << 8 | rawCount[0]); // Turn the 16 bits into a unsigned 16-bit value // TODO: might be 3 bits not 2
+
+	const int16_t limit = len / PACKET_SIZE;
+	if (count > limit)
 	{
-		uint8_t rawCount[2];
-		err |= ssi_burst_read(SENSOR_INTERFACE_DEV_IMU, LSM6DSO_FIFO_STATUS1, &rawCount[0], 2);
-		count = (uint16_t)((rawCount[1] & 3) << 8 | rawCount[0]); // Turn the 16 bits into a unsigned 16-bit value // TODO: might be 3 bits not 2
-		if (!count) // nothing to do
-			break;
-		uint16_t limit = len / PACKET_SIZE;
-		if (count > limit)
-		{
-			LOG_WRN("FIFO read buffer limit reached, %d packets dropped", count - limit);
-			count = limit;
-		}
-		err |= ssi_burst_read_interval(SENSOR_INTERFACE_DEV_IMU, LSM6DSO_FIFO_DATA_OUT_TAG, data, count * PACKET_SIZE, PACKET_SIZE);
-		if (err)
-			LOG_ERR("Communication error");
-		data += count * PACKET_SIZE;
-		len -= count * PACKET_SIZE;
-		total += count;
+		LOG_WRN("FIFO read buffer limit reached, %d packets dropped", count - limit);
+		count = limit;
 	}
-	return total;
+	err |= ssi_burst_read_interval(SENSOR_INTERFACE_DEV_IMU, LSM6DSO_FIFO_DATA_OUT_TAG, data, count * PACKET_SIZE, PACKET_SIZE);
+	if (err)
+		LOG_ERR("Communication error");
+
+	return count;
 }
 
 uint8_t lsm6dso_setup_WOM(void)
@@ -213,30 +205,34 @@ uint8_t lsm6dso_setup_WOM(void)
 	return NRF_GPIO_PIN_PULLUP << 4 | NRF_GPIO_PIN_SENSE_LOW; // active low
 }
 
-int lsm6dso_ext_setup(void)
-{
-	sensor_interface_ext_configure(&sensor_ext_lsm6dsv);
-	return 0;
-}
-
-int lsm6dso_ext_passthrough(bool passthrough)
-{
+int lsm6dso_ext_setup(sensor_ext_mode_t mode, const sensor_mag_t *mag, uint8_t mag_addr) {
 	int err = 0;
-	if (passthrough)
-	{
-		err |= ssi_reg_write_byte(SENSOR_INTERFACE_DEV_IMU, LSM6DSV_FUNC_CFG_ACCESS, 0x40); // switch to sensor hub registers
-		err |= ssi_reg_write_byte(SENSOR_INTERFACE_DEV_IMU, LSM6DSV_MASTER_CONFIG, 0x10); // passthrough on
-		err |= ssi_reg_write_byte(SENSOR_INTERFACE_DEV_IMU, LSM6DSV_FUNC_CFG_ACCESS, 0x00); // switch to normal registers
+	switch (mode) {
+		case SENSOR_EXT_MODE_OFF:
+			err |= ssi_reg_write_byte(SENSOR_INTERFACE_DEV_IMU, LSM6DSV_FUNC_CFG_ACCESS, 0x40); // switch to sensor hub registers
+			err |= ssi_reg_write_byte(SENSOR_INTERFACE_DEV_IMU, LSM6DSV_MASTER_CONFIG, 0x08); // passthrough off
+			err |= ssi_reg_write_byte(SENSOR_INTERFACE_DEV_IMU, LSM6DSV_FUNC_CFG_ACCESS, 0x00); // switch to normal registers
+			break;
+
+		case SENSOR_EXT_MODE_I2C_PASSTHROUGH:
+			err |= ssi_reg_write_byte(SENSOR_INTERFACE_DEV_IMU, LSM6DSV_FUNC_CFG_ACCESS, 0x40); // switch to sensor hub registers
+			err |= ssi_reg_write_byte(SENSOR_INTERFACE_DEV_IMU, LSM6DSV_MASTER_CONFIG, 0x10); // passthrough on
+			err |= ssi_reg_write_byte(SENSOR_INTERFACE_DEV_IMU, LSM6DSV_FUNC_CFG_ACCESS, 0x00); // switch to normal registers
+			break;
+			
+		case SENSOR_EXT_MODE_I2CM_PROXY:
+			sensor_interface_ext_configure(&sensor_ext_lsm6dsv);
+			break;
+		
+		case SENSOR_EXT_MODE_I2CM_AUTONOMOUS:
+			return -1;
 	}
-	else
-	{
-		err |= ssi_reg_write_byte(SENSOR_INTERFACE_DEV_IMU, LSM6DSV_FUNC_CFG_ACCESS, 0x40); // switch to sensor hub registers
-		err |= ssi_reg_write_byte(SENSOR_INTERFACE_DEV_IMU, LSM6DSV_MASTER_CONFIG, 0x08); // passthrough off
-		err |= ssi_reg_write_byte(SENSOR_INTERFACE_DEV_IMU, LSM6DSV_FUNC_CFG_ACCESS, 0x00); // switch to normal registers
+
+	if (err) {
+		LOG_ERR("Communication error: %d", err);
 	}
-	if (err)
-		LOG_ERR("Communication error");
-	return 0;
+
+	return err;
 }
 
 int lsm6dso_ext_write(const uint8_t addr, const uint8_t *buf, uint32_t num_bytes)
@@ -271,7 +267,7 @@ int lsm6dso_ext_write(const uint8_t addr, const uint8_t *buf, uint32_t num_bytes
 	return err;
 }
 
-int lsm6dso_ext_write_read(const uint8_t addr, const void *write_buf, size_t num_write, void *read_buf, size_t num_read)
+int lsm6dso_ext_write_read(const uint8_t addr, const uint8_t *write_buf, size_t num_write, uint8_t *read_buf, size_t num_read)
 {
 	if (num_write != 1 || num_read < 1 || num_read > 8)
 	{
@@ -314,8 +310,8 @@ const sensor_imu_t sensor_imu_lsm6dso = {
 	*lsm6dso_update_fs,
 	*lsm6dso_update_odr,
 
-	*lsm6dso_fifo_read,
-	*lsm_fifo_process,
+	*lsm6dso_data_read,
+	*lsm_data_process,
 	*lsm_accel_read,
 	*lsm_gyro_read,
 	*lsm_temp_read,
@@ -323,8 +319,7 @@ const sensor_imu_t sensor_imu_lsm6dso = {
 	*lsm_setup_DRDY,
 	*lsm6dso_setup_WOM,
 
-	*lsm6dso_ext_setup,
-	*lsm6dso_ext_passthrough
+	*lsm6dso_ext_setup
 };
 
 const sensor_ext_ssi_t sensor_ext_lsm6dso = {

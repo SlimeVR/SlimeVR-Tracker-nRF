@@ -19,6 +19,7 @@ static const float offset = 131072.0f; // mag range unsigned to signed
 
 static uint8_t last_odr = 0xff;
 static float last_time = 0;
+static float last_real_time = 0.0f;
 static uint8_t last_rawTemp = 0xff;
 static int64_t oneshot_trigger_time = 0;
 static bool auto_set_reset = true;
@@ -50,6 +51,11 @@ void mmc_shutdown(void)
 	int err = ssi_reg_write_byte(SENSOR_INTERFACE_DEV_MAG, MMC5983MA_CONTROL_1, 0x80); // Don't need to wait for MMC to finish reset
 	if (err)
 		LOG_ERR("Communication error");
+}
+
+float mmc_get_odr(void)
+{
+	return last_real_time;
 }
 
 int mmc_update_odr(float time, float *actual_time)
@@ -129,6 +135,7 @@ int mmc_update_odr(float time, float *actual_time)
 		LOG_ERR("Communication error");
 
 	*actual_time = time;
+	last_real_time = time;
 	return err;
 }
 
@@ -237,11 +244,13 @@ const sensor_mag_t sensor_mag_mmc5983ma = {
 	*mmc_shutdown,
 
 	*mmc_update_odr,
+	*mmc_get_odr,
 
 	*mmc_mag_oneshot,
 	*mmc_mag_read,
 	*mmc_temp_read,
 
 	*mmc_mag_process,
-	6, 7 // if only reading 6 bytes, the data will be lower precision
+	6, 7, // if only reading 6 bytes, the data will be lower precision
+	0, MMC5983MA_XOUT_0
 };

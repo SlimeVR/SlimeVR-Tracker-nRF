@@ -64,8 +64,8 @@ int lsm6dsm_init(float clock_rate, float accel_time, float gyro_time, float *acc
 void lsm6dsm_update_fs(float accel_range, float gyro_range, float *accel_actual_range, float *gyro_actual_range);
 int lsm6dsm_update_odr(float accel_time, float gyro_time, float *accel_actual_time, float *gyro_actual_time);
 
-uint16_t lsm6dsm_fifo_read(uint8_t *data, uint16_t len);
-uint16_t lsm6dsm_fifo_read(uint8_t *data, uint16_t len);
+uint16_t lsm6dsm_data_read(uint8_t *data, uint16_t len);
+uint16_t lsm6dsm_data_read(uint8_t *data, uint16_t len);
 
 uint8_t lsm6dsm_setup_DRDY(uint16_t threshold);
 uint8_t lsm6dsm_setup_WOM(void);

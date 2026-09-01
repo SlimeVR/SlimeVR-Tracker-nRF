@@ -7,6 +7,7 @@
 static const float sensitivity = 1.0 / 3421; // Always 8G (FS = ±8 gauss: 3421 LSB/Gauss)
 
 static uint8_t last_odr = 0xff;
+static float last_real_time = 0.0f;
 
 LOG_MODULE_REGISTER(LIS3MDL, LOG_LEVEL_DBG);
 
@@ -27,6 +28,11 @@ void lis3_shutdown(void)
 	int err = ssi_reg_write_byte(SENSOR_INTERFACE_DEV_MAG, LIS3MDL_CTRL_REG2, 0x04);
 	if (err)
 		LOG_ERR("Communication error");
+}
+
+float lis3_get_odr(void)
+{
+	return last_real_time;
 }
 
 int lis3_update_odr(float time, float *actual_time)
@@ -144,6 +150,7 @@ int lis3_update_odr(float time, float *actual_time)
 		LOG_ERR("Communication error");
 
 	*actual_time = time;
+	last_real_time = time;
 	return err;
 }
 
@@ -197,11 +204,12 @@ const sensor_mag_t sensor_mag_lis3mdl = {
 	*lis3_shutdown,
 
 	*lis3_update_odr,
+	*lis3_get_odr,
 
 	*lis3_mag_oneshot,
 	*lis3_mag_read,
 	*lis3_temp_read,
 
 	*lis3_mag_process,
-	6, 6
+	6, 6, 0, LIS3MDL_OUT_X_L
 };

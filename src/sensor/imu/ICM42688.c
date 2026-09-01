@@ -77,9 +77,11 @@ void icm_shutdown(void)
 {
 	last_accel_odr = 0xff; // reset last odr
 	last_gyro_odr = 0xff; // reset last odr
-	int err = ssi_reg_write_byte(SENSOR_INTERFACE_DEV_IMU, ICM42688_DEVICE_CONFIG, 0x01); // Don't need to wait for ICM to finish reset
+	int err = ssi_reg_write_byte(SENSOR_INTERFACE_DEV_IMU, ICM42688_DEVICE_CONFIG, 0x01);
 	if (err)
 		LOG_ERR("Communication error");
+	// TODO : Correctly wait for the reset to finish
+	k_msleep(1);
 }
 
 void icm_update_fs(float accel_range, float gyro_range, float *accel_actual_range, float *gyro_actual_range)
@@ -181,72 +183,66 @@ int icm_update_odr(float accel_time, float gyro_time, float *accel_actual_time, 
 	return 0;
 }
 
-uint16_t icm_fifo_read(uint8_t *data, uint16_t len)
+uint16_t icm_data_read(uint8_t *data, uint16_t len)
 {
-	int err = 0;
-	uint16_t total = 0;
-	uint16_t packets = UINT16_MAX;
-	while (packets > 0 && len >= PACKET_SIZE)
+	uint8_t rawCount[2] = {0};
+	int err = ssi_burst_read(SENSOR_INTERFACE_DEV_IMU, ICM42688_FIFO_COUNTH, &rawCount[0], 2);;
+	uint16_t packets = (uint16_t)(rawCount[0] << 8 | rawCount[1]); // Turn the 16 bits into a unsigned 16-bit value;
+	float extra_read_packets = packets * fifo_multiplier; // todo: consider removing
+	packets += extra_read_packets;
+
+	const uint16_t limit = len / PACKET_SIZE;
+	if (packets > limit)
 	{
-		uint8_t rawCount[2];
-		err |= ssi_burst_read(SENSOR_INTERFACE_DEV_IMU, ICM42688_FIFO_COUNTH, &rawCount[0], 2);
-		packets = (uint16_t)(rawCount[0] << 8 | rawCount[1]); // Turn the 16 bits into a unsigned 16-bit value
-		if (!packets) // nothing to do
-			break;
-		float extra_read_packets = packets * fifo_multiplier;
-		packets += extra_read_packets;
-		uint16_t count = packets * PACKET_SIZE;
-		uint16_t limit = len / PACKET_SIZE;
-		if (packets > limit)
-		{
-			LOG_WRN("FIFO read buffer limit reached, %d packets dropped", packets - limit);
-			packets = limit;
-			count = packets * PACKET_SIZE;
-		}
-		err |= ssi_burst_read_interval(SENSOR_INTERFACE_DEV_IMU, ICM42688_FIFO_DATA, data, count, PACKET_SIZE);
-		if (err)
-			LOG_ERR("Communication error");
-		data += packets * PACKET_SIZE;
-		len -= packets * PACKET_SIZE;
-		total += packets;
+		LOG_WRN("FIFO read buffer limit reached, %d packets dropped", packets - limit);
+		packets = limit;
 	}
-	return total;
+
+	const uint16_t read_size = packets * PACKET_SIZE;
+	err |= ssi_burst_read_interval(SENSOR_INTERFACE_DEV_IMU, ICM42688_FIFO_DATA, data, read_size, PACKET_SIZE);
+	if (err)
+		LOG_ERR("Communication error");
+
+	return packets;
 }
 
 static const uint8_t invalid[6] = {0x80, 0x00, 0x80, 0x00, 0x80, 0x00};
 
-int icm_fifo_process(uint16_t index, uint8_t *data, float a[3], float g[3])
+sensor_data_attrs_t icm_data_process(uint16_t index, uint8_t *data, float a[3], float g[3], float m[3])
 {
 	index *= PACKET_SIZE;
 	if ((data[index] & 0x80) == 0x80)
-		return 1; // Skip empty packets
+		return DATA_INVALID; // Skip empty packets
 	if ((data[index] & 0x7F) == 0x7F)
-		return 1; // Skip empty packets
+		return DATA_INVALID; // Skip empty packets
+
+	sensor_data_attrs_t result = 0;
+
 	// combine into 20 bit values in 32 bit int
-	float a_raw[3] = {0};
-	float g_raw[3] = {0};
 	if (memcmp(&data[index + 1], invalid, sizeof(invalid))) // valid accel data
 	{
 		for (int i = 0; i < 3; i++) // accel x, y, z
-			a_raw[i] = (int32_t)((((uint32_t)data[index + 1 + (i * 2)]) << 24) | (((uint32_t)data[index + 2 + (i * 2)]) << 16) | (((uint32_t)data[index + 17 + i] & 0xF0) << 8));
+			a[i] = (int32_t)((((uint32_t)data[index + 1 + (i * 2)]) << 24) | (((uint32_t)data[index + 2 + (i * 2)]) << 16) | (((uint32_t)data[index + 17 + i] & 0xF0) << 8));
+
+		result |= DATA_VALID_ACCEL;
 	}
 	if (memcmp(&data[index + 7], invalid, sizeof(invalid))) // valid gyro data
 	{
 		for (int i = 0; i < 3; i++) // gyro x, y, z
-			g_raw[i] = (int32_t)((((uint32_t)data[index + 7 + (i * 2)]) << 24) | (((uint32_t)data[index + 8 + (i * 2)]) << 16) | (((uint32_t)data[index + 17 + i] & 0x0F) << 12));
+			g[i] = (int32_t)((((uint32_t)data[index + 7 + (i * 2)]) << 24) | (((uint32_t)data[index + 8 + (i * 2)]) << 16) | (((uint32_t)data[index + 17 + i] & 0x0F) << 12));
+		
+		result |= DATA_VALID_GYRO;
 	}
 	else if (!memcmp(&data[index + 1], invalid, sizeof(invalid))) // Skip invalid data
 	{
-		return 1;
+		return DATA_INVALID;
 	}
 	for (int i = 0; i < 3; i++) // x, y, z
 	{
-		a_raw[i] *= accel_sensitivity_32;
-		g_raw[i] *= gyro_sensitivity_32;
+		a[i] *= accel_sensitivity_32;
+		g[i] *= gyro_sensitivity_32;
 	}
-	memcpy(a, a_raw, sizeof(a_raw));
-	memcpy(g, g_raw, sizeof(g_raw));
-	return 0;
+	return result;
 }
 
 void icm_accel_read(float a[3])
@@ -333,8 +329,8 @@ const sensor_imu_t sensor_imu_icm42688 = {
 	*icm_update_fs,
 	*icm_update_odr,
 
-	*icm_fifo_read,
-	*icm_fifo_process,
+	*icm_data_read,
+	*icm_data_process,
 	*icm_accel_read,
 	*icm_gyro_read,
 	*icm_temp_read,
@@ -342,6 +338,5 @@ const sensor_imu_t sensor_imu_icm42688 = {
 	*icm_setup_DRDY,
 	*icm_setup_WOM,
 
-	*imu_none_ext_setup,
-	*imu_none_ext_passthrough
+	*imu_none_ext_setup
 };

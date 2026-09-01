@@ -36,41 +36,41 @@
 
 #define SPI_OP SPI_MODE_CPOL | SPI_MODE_CPHA | SPI_WORD_SET(8)
 
-#if DT_NODE_HAS_STATUS(DT_NODELABEL(imu_spi), okay)
-#define SENSOR_IMU_SPI_EXISTS true
+#if SENSOR_IMU_SPI_EXISTS
 #define SENSOR_IMU_SPI_NODE DT_NODELABEL(imu_spi)
 static struct spi_dt_spec sensor_imu_spi_dev = SPI_DT_SPEC_GET(SENSOR_IMU_SPI_NODE, SPI_OP, 0);
 #endif
-#if DT_NODE_HAS_STATUS(DT_NODELABEL(imu), okay)
-#define SENSOR_IMU_EXISTS true
+
+
+#if SENSOR_IMU_EXISTS
 #define SENSOR_IMU_NODE DT_NODELABEL(imu)
 static struct i2c_dt_spec sensor_imu_dev = I2C_DT_SPEC_GET(SENSOR_IMU_NODE);
 #else
 static struct i2c_dt_spec sensor_imu_dev = {0};
 #endif
+
 #if !SENSOR_IMU_SPI_EXISTS && !SENSOR_IMU_EXISTS
 #error "IMU node does not exist"
 #endif
 static uint8_t sensor_imu_dev_reg = 0xFF;
 
-#if DT_NODE_HAS_STATUS(DT_NODELABEL(mag_spi), okay)
-#define SENSOR_MAG_SPI_EXISTS true
+#if SENSOR_MAG_SPI_EXISTS
 #define SENSOR_MAG_SPI_NODE DT_NODELABEL(mag_spi)
 static struct spi_dt_spec sensor_mag_spi_dev = SPI_DT_SPEC_GET(SENSOR_MAG_SPI_NODE, SPI_OP, 0);
 #endif
-#if DT_NODE_HAS_STATUS(DT_NODELABEL(mag), okay)
-#define SENSOR_MAG_EXISTS true
+
+
+#if SENSOR_DIRECT_MAG_EXISTS
 #define SENSOR_MAG_NODE DT_NODELABEL(mag)
 static struct i2c_dt_spec sensor_mag_dev = I2C_DT_SPEC_GET(SENSOR_MAG_NODE);
 #else
 static struct i2c_dt_spec sensor_mag_dev = {0};
 #endif
-#if SENSOR_IMU_SPI_EXISTS // might exist
-#define SENSOR_MAG_EXT_EXISTS true
-#endif
-#if !SENSOR_MAG_SPI_EXISTS && !SENSOR_MAG_EXISTS && !SENSOR_MAG_EXT_EXISTS
+
+#if !SENSOR_MAG_EXISTS
 #warning "Magnetometer node does not exist"
 #endif
+
 static uint8_t sensor_mag_dev_reg = 0xFF;
 
 static float q[4] = {1.0f, 0.0f, 0.0f, 0.0f}; // vector to hold quaternion
@@ -107,6 +107,7 @@ static bool main_suspended;
 
 static bool mag_available;
 static bool mag_enabled; // TODO: toggle from server
+static bool mag_manual;
 
 static int fusion_id = 0;
 static const sensor_fusion_t *sensor_fusion = &sensor_fusion_none;
@@ -167,6 +168,11 @@ const char *sensor_get_sensor_fusion_name(void)
 	return fusion_names[fusion_id];
 }
 
+/**
+ * @param ptr last read sensor temperature
+ * @return int - 0 if success, -1 if there is IMU errors fetching the temperature or it's too early,
+ * -2 if there is no IMU connected
+ */
 int sensor_get_sensor_temperature(float *ptr)
 {
 	if (sensor_imu == &sensor_imu_none || (k_uptime_get() - last_temp_time > 1000))
@@ -271,7 +277,7 @@ int sensor_scan(void)
 	if (mag_id >= 0)
 		sensor_interface_register_sensor_mag_spi(&sensor_mag_spi_dev);
 #endif
-#if SENSOR_MAG_EXISTS
+#if SENSOR_DIRECT_MAG_EXISTS
 	if (mag_id < 0)
 	{
 		LOG_INF("Scanning bus for magnetometer");
@@ -282,7 +288,7 @@ int sensor_scan(void)
 	if (mag_id < 0 && !(sensor_imu_dev_reg & 0x80)) // I2C IMU
 	{
 		// IMU may support passthrough mode if the magnetometer is connected through the IMU
-		int err = sensor_imu->ext_passthrough(true); // no need to disable, the imu will be reset later
+		int err = sensor_imu->ext_passthrough(SENSOR_EXT_MODE_I2C_PASSTHROUGH); // no need to disable, the imu will be reset later
 		if (!err)
 		{
 			LOG_INF("Scanning bus for magnetometer through IMU passthrough");
@@ -308,7 +314,7 @@ int sensor_scan(void)
 	if (mag_id < 0 && (sensor_imu_dev_reg & 0x80)) // SPI IMU
 	{
 		// IMU may support I2CM if the magnetometer is connected through the IMU
-		int err = sensor_imu->ext_setup();
+		int err = sensor_imu->ext_setup(SENSOR_EXT_MODE_I2CM_PROXY, NULL, 0);
 		if (!err)
 		{
 			LOG_INF("Scanning bus for magnetometer through IMU I2CM");
@@ -335,7 +341,7 @@ int sensor_scan(void)
 		}
 	}
 #endif
-#if !SENSOR_MAG_SPI_EXISTS && !SENSOR_MAG_EXISTS && !SENSOR_MAG_EXT_EXISTS
+#if !SENSOR_MAG_SPI_EXISTS && !SENSOR_DIRECT_MAG_EXISTS && !SENSOR_MAG_EXT_EXISTS
 	LOG_WRN("Magnetometer node does not exist");
 #endif
 	if (mag_id >= (int)ARRAY_SIZE(dev_mag_names))
@@ -539,7 +545,7 @@ static void set_update_time_ms(int time_ms)
 	sensor_update_time_ms = time_ms; // TODO: terrible naming
 }
 
-bool main_wfi = false;
+volatile bool main_wfi = false;
 
 static void sensor_interrupt_handler(const struct device *dev, struct gpio_callback *cb, uint32_t pins)
 {
@@ -654,19 +660,18 @@ static void sensor_update_sensor_state(void)
 int sensor_init(void)
 {
 	int err;
+	LOG_INF("Sensor init, shutdown first");
+	// TODO : Do not reset sensor if we just WOM'ed
 	// TODO: on any errors set main_ok false and skip (make functions return nonzero)
 	if (mag_available) // shutdown magnetometer first (in case of passthrough)
-		sensor_mag->shutdown(); // TODO: is this needed?
-	sensor_imu->shutdown(); // TODO: is this needed?
+		sensor_mag->shutdown();
+	sensor_imu->shutdown();
 
 	float clock_actual_rate = 0;
 	if (CONFIG_1_SETTINGS_READ(CONFIG_1_USE_SENSOR_CLOCK))
 		set_sensor_clock(true, 32768, &clock_actual_rate); // enable the clock source for IMU if present
 	if (clock_actual_rate != 0)
 		LOG_INF("Sensor clock rate: %.2fHz", (double)clock_actual_rate);
-
-	// wait for sensor register reset // TODO: is this needed?
-	k_usleep(250);
 
 	// set FS/range
 	float accel_range = CONFIG_2_SETTINGS_READ(CONFIG_2_SENSOR_ACCEL_FS);
@@ -695,10 +700,23 @@ int sensor_init(void)
 // 55-66ms to wait, get chip ids, and setup icm (50ms spent waiting for accel and gyro to start)
 	if (mag_available && mag_enabled)
 	{
-		// TODO: need to flag passthrough enabled
-//			sensor_imu->ext_passthrough(true); // reenable passthrough
+#if SENSOR_DIRECT_MAG_EXISTS
+		sensor_imu->ext_setup(SENSOR_EXT_MODE_I2C_PASSTHROUGH, NULL); // reenable passthrough
+#elif SENSOR_MAG_EXT_EXISTS
+		sensor_imu->ext_setup(SENSOR_EXT_MODE_I2CM_PROXY, NULL, sensor_mag_dev.addr & 0x7F);
+#endif
 		err = sensor_mag->init(mag_initial_time, &mag_actual_time);
-		mag_interval = mag_actual_time * 0.9f * 1000; // start attemping magnetometer reads before expected new sample
+		mag_interval = mag_actual_time * 1000 - 2; // start attemping magnetometer reads before expected new sample, ask for each sample 2ms earlier
+		mag_manual = true;
+
+#if SENSOR_MAG_EXT_EXISTS
+		// try to switch to autonomous mode
+		if (sensor_imu->ext_setup(SENSOR_EXT_MODE_I2CM_AUTONOMOUS, sensor_mag, sensor_mag_dev.addr & 0x7F) == 0) {
+			// switched to autonomous, no need to handle mag manually
+			mag_manual = false;
+		}
+#endif
+
 #if SENSOR_MAG_SPI_EXISTS
 		LOG_INF("Requested SPI frequency: %.2fMHz", (double)sensor_mag_spi_dev.config.frequency / 1000000.0);
 #endif
@@ -830,7 +848,7 @@ void sensor_loop(void)
 				connection_update_sensor_temp(temp);
 			}
 
-			// Read gyroscope (FIFO)
+			// Read IMU (FIFO)
 			uint16_t data_size = CONFIG_1_SETTINGS_READ(CONFIG_1_SENSOR_USE_LOW_POWER_2) ? 1900 : 1024; // Limit FIFO read to 2048 bytes (worst case is ICM 20 byte packet at 1000Hz and 100ms update time)
 			uint8_t* raw_data = (uint8_t*)k_malloc(data_size);
 			if (raw_data == NULL)
@@ -839,7 +857,7 @@ void sensor_loop(void)
 				set_status(SYS_STATUS_SENSOR_ERROR, true);
 				main_ok = false;
 			}
-			uint16_t packets = sensor_imu->fifo_read(raw_data, data_size); // TODO: name this better?
+			uint16_t packets = sensor_imu->data_read(raw_data, data_size); // TODO: name this better?
 
 			// Debug info
 #if DEBUG
@@ -853,10 +871,10 @@ void sensor_loop(void)
 			last_acquisition_time = acquisition_time;
 #endif
 
-			// Read magnetometer
+			// Read magnetometer, if in manual mode
 			float raw_m[3];
 			bool mag_read = false;
-			if (mag_available && mag_enabled && (k_uptime_get() - last_mag_time > mag_interval)) // some magnetometer do not have int pin // TODO: implement for magnetometer that does, or read status byte
+			if (mag_manual && (k_uptime_get() - last_mag_time > mag_interval)) // some magnetometer do not have int pin // TODO: implement for magnetometer that does, or read status byte
 			{
 				mag_read = true;
 				sensor_mag->mag_read(raw_m); // reading mag last, and it will be processed last
@@ -900,11 +918,12 @@ void sensor_loop(void)
 			{
 				float raw_a[3] = {0};
 				float raw_g[3] = {0};
-				if (sensor_imu->fifo_process(i, raw_data, raw_a, raw_g))
+				sensor_data_attrs_t attrs = sensor_imu->data_process(i, raw_data, raw_a, raw_g, raw_m);
+				if (attrs & DATA_INVALID)
 					continue; // skip on error
 
 				// TODO: split into separate functions
-				if (raw_g[0] != 0 || raw_g[1] != 0 || raw_g[2] != 0)
+				if (attrs & DATA_VALID_GYRO)
 				{
 #if DEBUG
 					if (valid_acquisition)
@@ -938,7 +957,7 @@ void sensor_loop(void)
 					}
 				}
 
-				if (raw_a[0] != 0 || raw_a[1] != 0 || raw_a[2] != 0)
+				if (attrs & DATA_VALID_ACCEL)
 				{
 #if DEBUG
 					if (valid_acquisition)
@@ -965,6 +984,11 @@ void sensor_loop(void)
 					a_count++;
 				}
 
+				if (attrs & DATA_VALID_MAG)
+				{
+					mag_read = true;
+				}
+
 				processed_packets++;
 			}
 
@@ -979,7 +1003,7 @@ void sensor_loop(void)
 				total_processed_packets += processed_packets;
 #endif
 
-			if (mag_available && mag_enabled && mag_read && memcmp(raw_m, last_m, sizeof(last_m))) // check data has changed from last acquisition
+			if (mag_read && memcmp(raw_m, last_m, sizeof(last_m))) // check data has changed from last acquisition
 			{
 #if DEBUG
 				total_mag_samples++;
@@ -1133,7 +1157,7 @@ void sensor_loop(void)
 		}
 		else // if signal was sent during processing, loop immediately to catch up (I2C could cause this to happen constantly)
 		{
-			LOG_DBG("FIFO THS/WM/WTM triggered during loop");
+			LOG_DBG("Sensor interrupt triggered during loop");
 			k_yield();
 			main_wfi = false;
 		}
