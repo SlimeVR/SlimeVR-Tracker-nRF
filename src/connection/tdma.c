@@ -68,6 +68,17 @@ void tdma_update_timer_offset(int32_t delta) {
 	}
 }
 
+k_timeout_t tdma_get_time_till_our_window() {
+	uint32_t timer = tdma_get_time_with_static_offset();
+	uint32_t current_slot = tdma_get_slot(timer);
+	uint16_t row = tdma_get_row(current_slot);
+	uint16_t target_slot = tdma_get_slot_from_window(row, our_window);
+	if(target_slot < current_slot)
+		target_slot = tdma_get_slot_from_window(row + 1, our_window);
+	uint32_t our_time = tdma_get_slot_time(target_slot);
+	return K_CYC(our_time - timer);
+}
+
 bool tdma_is_our_window() {
 	uint32_t timer = tdma_get_time_with_static_offset();
 	uint32_t current_slot = tdma_get_slot(timer);
