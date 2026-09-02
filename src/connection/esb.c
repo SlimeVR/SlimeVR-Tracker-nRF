@@ -356,7 +356,7 @@ void esb_deinitialize(void)
 	if (esb_initialized)
 	{
 		esb_initialized = false;
-		k_msleep(10); // wait for pending transmissions
+		k_msleep(1); // wait for pending transmissions
 		esb_disable();
 	}
 }

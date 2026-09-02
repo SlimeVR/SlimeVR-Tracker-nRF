@@ -45,10 +45,19 @@ bool pairing_find_dongles_to_pair() {
     esb_set_addr_discovery();
 	clocks_allow_stopping(false);
 	clocks_start();
-    esb_initialize(false, true);
-    int code = esb_start_rx();
+    int code = esb_initialize(false, true);
+    if(code < 0) {
+        LOG_ERR("ESB init error %d", code);
+        esb_set_tracker_state(PAIRING_ERROR);
+        return false;
+    }
+    esb_stop_rx();
+    WAIT_FOR(esb_is_idle(), 1000000, k_msleep(1));
+    code = esb_start_rx();
     if(code < 0) {
         LOG_ERR("RX Start error %d", code);
+        esb_set_tracker_state(PAIRING_ERROR);
+        return false;
     }
     if(discovered_dongles == NULL)
         discovered_dongles = k_calloc(sizeof(struct pairing_discovery_t), ESB_CHANNELS_AMOUNT);
