@@ -22,6 +22,7 @@
 */
 #pragma once
 #include <stdint.h>
+#include <zephyr/kernel.h>
 #include "globals.h"
 
 #define TDMA_TIMER_SIZE 32768
@@ -29,9 +30,10 @@
 #define TDMA_SLOT_SHIFT 5
 #define TDMA_SLOT_SIZE (1 << TDMA_SLOT_SHIFT)
 #define TDMA_SLOTS_COUNT (TDMA_TIMER_SIZE / TDMA_SLOT_SIZE)
+#define TDMA_SLOT_TIME_TICKS (k_us_to_ticks_ceil64(1) / 1000000 / TDMA_SLOTS_COUNT)
 #define TDMA_DONGLE_SLOTS 4
 #define TDMA_MAX_TRACKERS 10
-#define TDMA_WINDOWS_PER_TRACKER (TDMA_SLOTS_COUNT - TDMA_DONGLE_SLOTS) / TDMA_MAX_TRACKERS
+#define TDMA_WINDOWS_PER_TRACKER ((TDMA_SLOTS_COUNT - TDMA_DONGLE_SLOTS) / TDMA_MAX_TRACKERS)
 #define TDMA_WRONG_WINDOW 255
 
 #if TDMA_TIMER_SIZE != CONFIG_SYS_CLOCK_HW_CYCLES_PER_SEC
@@ -49,3 +51,18 @@ void tdma_set_our_window(uint8_t window);
 void tdma_update_timer_offset(int32_t diff);
 bool tdma_is_our_window();
 void tdma_tx_started();
+k_timeout_t tdma_get_time_till_our_window();
+
+inline static uint16_t tdma_get_row(uint32_t slot) {
+	if(slot < TDMA_DONGLE_SLOTS)
+		return 0;
+	return (slot - TDMA_DONGLE_SLOTS) / TDMA_MAX_TRACKERS;
+}
+
+inline static uint32_t tdma_get_slot_time(uint32_t slot) {
+	return slot << TDMA_SLOT_SHIFT;
+}
+
+inline static uint32_t tdma_get_slot_from_window(uint16_t row, uint8_t window) {
+	return ((row * TDMA_MAX_TRACKERS) + TDMA_DONGLE_SLOTS) + window;
+}
