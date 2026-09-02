@@ -496,7 +496,7 @@ void connection_thread(void)
 			connection_write_packet_5();
 			continue;
 		}
-		else if(!motion_acked) // Didn't ack last motion packet, will send rotation again
+		else if(!motion_acked || ALWAYS_SEND) // Didn't ack last motion packet, will send rotation again
 		{
 			quat_update_time = 0;
 			last_quat_time = k_uptime_get();
