@@ -26,8 +26,6 @@ if((DEFINED SB_CONFIG_BOARD AND SB_CONFIG_BOARD MATCHES "uf2") OR (DEFINED SB_CO
 endif()
 
 #message("-- Partition manager static configuration search candidates: ${pm_static_candidates}")
-message("SYSBUILD CMAKE_CURRENT_BINARY_DIR ${CMAKE_CURRENT_BINARY_DIR}")
-message("SYSBUILD CMAKE_BINARY_DIR ${CMAKE_BINARY_DIR}")
 
 foreach(pm_static_candidate ${pm_static_candidates})
   if(EXISTS ${pm_static_candidate})
