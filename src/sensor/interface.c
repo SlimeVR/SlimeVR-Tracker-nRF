@@ -2,8 +2,8 @@
 
 #include <zephyr/logging/log.h>
 
-//#define DEBUG true
-//#define DEBUG_RATE true
+#define DEBUG true
+// #define DEBUG_RATE true
 
 #if DEBUG || DEBUG_RATE
 LOG_MODULE_REGISTER(sensor_interface, LOG_LEVEL_DBG);
@@ -294,7 +294,8 @@ int ssi_reg_update_byte(enum sensor_interface_dev dev, uint8_t reg_addr, uint8_t
 	if (err)
 		return err;
 	new_value = (old_value & ~mask) | (value & mask);
-	if (new_value == old_value) {
+	if (new_value == old_value)
+	{
 		return 0;
 	}
 	if (sensor_interface_dev_spec[dev] == SENSOR_INTERFACE_SPEC_SPI)
@@ -310,7 +311,7 @@ int ssi_reg_read_interval(enum sensor_interface_dev dev, uint8_t start_addr, uin
 	// TODO: better way to handle with spi?
 	// TODO: not working
 	if (sensor_interface_dev_spec[dev] == SENSOR_INTERFACE_SPEC_SPI)
-		start_addr |= 0x80; // set read bit
+		start_addr |= 0x80;					  // set read bit
 	int err = ssi_write(dev, &start_addr, 1); // Start read buffer
 //	if (err)
 //		return err;
@@ -330,8 +331,8 @@ int ssi_reg_read_interval(enum sensor_interface_dev dev, uint8_t start_addr, uin
 		if (interval > num_bytes)
 			interval = num_bytes;
 		err |= ssi_read(dev, buf, interval);
-//		if (err)
-//			return err;
+		//		if (err)
+		//			return err;
 		buf += interval;
 		num_bytes -= interval;
 	}
@@ -364,8 +365,8 @@ int ssi_burst_read_interval(enum sensor_interface_dev dev, uint8_t start_addr, u
 		if (interval > num_bytes)
 			interval = num_bytes;
 		err |= ssi_burst_read(dev, start_addr, buf, interval);
-//		if (err)
-//			return err;
+		//		if (err)
+		//			return err;
 		buf += interval;
 		num_bytes -= interval;
 	}

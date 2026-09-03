@@ -48,9 +48,11 @@ static struct i2c_dt_spec sensor_imu_dev = I2C_DT_SPEC_GET(SENSOR_IMU_NODE);
 #else
 static struct i2c_dt_spec sensor_imu_dev = {0};
 #endif
+/*
 #if !SENSOR_IMU_SPI_EXISTS && !SENSOR_IMU_EXISTS
 #error "IMU node does not exist"
 #endif
+*/
 static uint8_t sensor_imu_dev_reg = 0xFF;
 
 #if DT_NODE_HAS_STATUS(DT_NODELABEL(mag_spi), okay)
@@ -73,7 +75,7 @@ static struct i2c_dt_spec sensor_mag_dev = {0};
 #endif
 static uint8_t sensor_mag_dev_reg = 0xFF;
 
-static float q[4] = {1.0f, 0.0f, 0.0f, 0.0f}; // vector to hold quaternion
+static float q[4] = {1.0f, 0.0f, 0.0f, 0.0f};	   // vector to hold quaternion
 static float last_q[4] = {1.0f, 0.0f, 0.0f, 0.0f}; // vector to hold quaternion
 
 static float q3[4] = {SENSOR_QUATERNION_CORRECTION}; // correction quaternion
@@ -116,7 +118,7 @@ static int sensor_mag_id = -1;
 static const sensor_imu_t *sensor_imu = &sensor_imu_none;
 static const sensor_mag_t *sensor_mag = &sensor_mag_none;
 
-//#define DEBUG true
+// #define DEBUG true
 
 #if DEBUG
 LOG_MODULE_REGISTER(sensor, LOG_LEVEL_DBG);
@@ -131,7 +133,7 @@ static struct k_thread sensor_thread_id;
 static K_THREAD_STACK_DEFINE(sensor_thread_id_stack, 1024);
 
 K_THREAD_DEFINE(sensor_init_thread_id, 256, sensor_request_scan, true, NULL, NULL, SENSOR_REQUEST_SCAN_THREAD_PRIORITY, 0, 0);
-//crashing on nrf54l at 256
+// crashing on nrf54l at 256
 
 /* init thread handles starting scanner on the main thread, and then switches to the loop, before returning
    afterwards, other calls to start scanner will stop the loop on their thread and start the scanner on its own; it will also wait for the scanner to finish
@@ -185,7 +187,7 @@ void sensor_scan_thread(void)
 {
 	int err;
 	sys_interface_resume(); // make sure interfaces are enabled
-	err = sensor_scan(); // IMUs discovery
+	err = sensor_scan();	// IMUs discovery
 	if (err)
 	{
 		k_msleep(5);
@@ -197,8 +199,8 @@ void sensor_scan_thread(void)
 		err = sensor_scan(); // on POR, the sensor may not be ready yet
 	}
 	sys_interface_suspend();
-//	if (err)
-//		return err;
+	//	if (err)
+	//		return err;
 }
 
 int sensor_scan(void)
@@ -298,7 +300,7 @@ int sensor_scan(void)
 			mag_id = sensor_scan_mag(&sensor_mag_dev, &sensor_mag_dev_reg);
 			if (mag_id >= 0)
 			{
-				sensor_mag_dev.addr |= 0x80; // mark as external
+				sensor_mag_dev.addr |= 0x80;							   // mark as external
 				sensor_interface_register_sensor_mag_i2c(&sensor_mag_dev); // can register as i2c
 			}
 		}
@@ -369,8 +371,8 @@ int sensor_scan(void)
 	sensor_imu_id = imu_id;
 	sensor_mag_id = mag_id;
 
-	sensor_sensor_init = true; // successfully initialized
-	sensor_sensor_scanning = false; // done
+	sensor_sensor_init = true;					// successfully initialized
+	sensor_sensor_scanning = false;				// done
 	set_status(SYS_STATUS_SENSOR_ERROR, false); // clear error
 	return 0;
 }
@@ -453,7 +455,7 @@ void sensor_retained_read(void) // TODO: move some of this to sys? or move to ca
 	LOG_INF("Gyroscope bias: %.5f %.5f %.5f", (double)retained->gyroBias[0], (double)retained->gyroBias[1], (double)retained->gyroBias[2]);
 	if (mag_available && mag_enabled)
 	{
-//		LOG_INF("Magnetometer bridge offset: %.5f %.5f %.5f", (double)retained->magBias[0], (double)retained->magBias[1], (double)retained->magBias[2]);
+		//		LOG_INF("Magnetometer bridge offset: %.5f %.5f %.5f", (double)retained->magBias[0], (double)retained->magBias[1], (double)retained->magBias[2]);
 		LOG_INF("Magnetometer matrix:");
 		for (int i = 0; i < 3; i++)
 			LOG_INF("%.5f %.5f %.5f %.5f", (double)retained->magBAinv[0][i], (double)retained->magBAinv[1][i], (double)retained->magBAinv[2][i], (double)retained->magBAinv[3][i]);
@@ -466,7 +468,7 @@ void sensor_retained_write(void) // TODO: move to sys?
 {
 	if (!sensor_fusion_init)
 		return;
-//	memcpy(retained->magBias, sensor_calibration_get_magBias(), sizeof(retained->magBias));
+	//	memcpy(retained->magBias, sensor_calibration_get_magBias(), sizeof(retained->magBias));
 	sensor_fusion->save(retained->fusion_data);
 	retained->fusion_id = fusion_id;
 	retained_update();
@@ -517,7 +519,7 @@ void sensor_fusion_invalidate(void)
 		sensor_retained_write();
 	}
 	else
-	{ // TODO: always clearing the fusion?
+	{							 // TODO: always clearing the fusion?
 		retained->fusion_id = 0; // Invalidate retained fusion data
 		retained_update();
 	}
@@ -560,8 +562,9 @@ static void sensor_interrupt_handler(const struct device *dev, struct gpio_callb
 
 static struct gpio_callback sensor_cb_data;
 
-enum sensor_sensor_mode {
-//	SENSOR_SENSOR_MODE_OFF,
+enum sensor_sensor_mode
+{
+	//	SENSOR_SENSOR_MODE_OFF,
 	SENSOR_SENSOR_MODE_LOW_NOISE,
 	SENSOR_SENSOR_MODE_LOW_POWER,
 	SENSOR_SENSOR_MODE_LOW_POWER_2
@@ -570,7 +573,8 @@ enum sensor_sensor_mode {
 static enum sensor_sensor_mode sensor_mode = SENSOR_SENSOR_MODE_LOW_NOISE;
 static enum sensor_sensor_mode last_sensor_mode = SENSOR_SENSOR_MODE_LOW_NOISE;
 
-enum sensor_sensor_timeout {
+enum sensor_sensor_timeout
+{
 	SENSOR_SENSOR_TIMEOUT_IMU,
 	SENSOR_SENSOR_TIMEOUT_IMU_ELAPSED,
 	SENSOR_SENSOR_TIMEOUT_ACTIVITY,
@@ -580,8 +584,8 @@ enum sensor_sensor_timeout {
 static enum sensor_sensor_timeout sensor_timeout = SENSOR_SENSOR_TIMEOUT_IMU;
 
 // Check the IMU gyroscope // TODO: gyro sanity not used
- // TODO: timeouts and power management should be outside sensor! (e.g. sleeping/shutdown even if the imu completely errored out)
- // all this really means is that this should be called in sensor loop while the sensor is in an error state
+// TODO: timeouts and power management should be outside sensor! (e.g. sleeping/shutdown even if the imu completely errored out)
+// all this really means is that this should be called in sensor loop while the sensor is in an error state
 static void sensor_update_sensor_state(void)
 {
 	bool calibrating = get_status(SYS_STATUS_CALIBRATION_RUNNING);
@@ -595,7 +599,7 @@ static void sensor_update_sensor_state(void)
 			sensor_mode = SENSOR_SENSOR_MODE_LOW_POWER;
 		}
 		int64_t imu_timeout = CLAMP(last_data_time - last_suspend_attempt_time, CONFIG_3_SETTINGS_READ(CONFIG_3_IMU_TIMEOUT_RAMP_MIN), CONFIG_3_SETTINGS_READ(CONFIG_3_IMU_TIMEOUT_RAMP_MAX)); // Ramp timeout from last_data_time
-		if (CONFIG_1_SETTINGS_READ(CONFIG_1_SENSOR_USE_LOW_POWER_2) && sensor_mode < SENSOR_SENSOR_MODE_LOW_POWER_2 && last_data_delta > imu_timeout) // No motion in ramp time
+		if (CONFIG_1_SETTINGS_READ(CONFIG_1_SENSOR_USE_LOW_POWER_2) && sensor_mode < SENSOR_SENSOR_MODE_LOW_POWER_2 && last_data_delta > imu_timeout)										   // No motion in ramp time
 			sensor_mode = SENSOR_SENSOR_MODE_LOW_POWER_2;
 		if (CONFIG_1_SETTINGS_READ(CONFIG_1_USE_ACTIVE_TIMEOUT))
 		{
@@ -655,9 +659,9 @@ int sensor_init(void)
 {
 	int err;
 	// TODO: on any errors set main_ok false and skip (make functions return nonzero)
-	if (mag_available) // shutdown magnetometer first (in case of passthrough)
+	if (mag_available)			// shutdown magnetometer first (in case of passthrough)
 		sensor_mag->shutdown(); // TODO: is this needed?
-	sensor_imu->shutdown(); // TODO: is this needed?
+	sensor_imu->shutdown();		// TODO: is this needed?
 
 	float clock_actual_rate = 0;
 	if (CONFIG_1_SETTINGS_READ(CONFIG_1_USE_SENSOR_CLOCK))
@@ -692,11 +696,11 @@ int sensor_init(void)
 	LOG_INF("Gyrometer initial rate: %.2fHz", 1.0 / (double)gyro_actual_time);
 	if (err < 0)
 		return err;
-// 55-66ms to wait, get chip ids, and setup icm (50ms spent waiting for accel and gyro to start)
+	// 55-66ms to wait, get chip ids, and setup icm (50ms spent waiting for accel and gyro to start)
 	if (mag_available && mag_enabled)
 	{
 		// TODO: need to flag passthrough enabled
-//			sensor_imu->ext_passthrough(true); // reenable passthrough
+		//			sensor_imu->ext_passthrough(true); // reenable passthrough
 		err = sensor_mag->init(mag_initial_time, &mag_actual_time);
 		mag_interval = mag_actual_time * 0.9f * 1000; // start attemping magnetometer reads before expected new sample
 #if SENSOR_MAG_SPI_EXISTS
@@ -705,7 +709,7 @@ int sensor_init(void)
 		LOG_INF("Magnetometer initial rate: %.2fHz", 1.0 / (double)mag_actual_time);
 		if (err < 0)
 			return err;
-// 0-1ms to setup mmc
+		// 0-1ms to setup mmc
 	}
 	LOG_INF("Initialized sensors");
 
@@ -718,7 +722,7 @@ int sensor_init(void)
 	if (fusion_id == FUSION_VQF)
 		vqf_update_sensor_ids(sensor_imu_id);
 	if (retained->fusion_id == fusion_id) // Check if the retained fusion data is valid and matches the selected fusion
-	{ // Load state if the data is valid (fusion was initialized before)
+	{									  // Load state if the data is valid (fusion was initialized before)
 		sensor_fusion->load(retained->fusion_data);
 		retained->fusion_id = 0; // Invalidate retained fusion data
 		retained_update();
@@ -794,7 +798,7 @@ void sensor_loop(void)
 	if (!sensor_sensor_init)
 		return;
 	main_running = true;
-	sys_interface_resume(); // make sure interfaces are enabled
+	sys_interface_resume();	 // make sure interfaces are enabled
 	int err = sensor_init(); // Initialize IMUs and Fusion // TODO: run as thread before loop
 	// TODO: handle imu init error, maybe restart device?
 	// TODO: on failure to init, disable sensor interface
@@ -832,7 +836,7 @@ void sensor_loop(void)
 
 			// Read gyroscope (FIFO)
 			uint16_t data_size = CONFIG_1_SETTINGS_READ(CONFIG_1_SENSOR_USE_LOW_POWER_2) ? 1900 : 1024; // Limit FIFO read to 2048 bytes (worst case is ICM 20 byte packet at 1000Hz and 100ms update time)
-			uint8_t* raw_data = (uint8_t*)k_malloc(data_size);
+			uint8_t *raw_data = (uint8_t *)k_malloc(data_size);
 			if (raw_data == NULL)
 			{
 				LOG_ERR("Failed to allocate memory for FIFO buffer");
@@ -1049,7 +1053,7 @@ void sensor_loop(void)
 				LOG_WRN("Expected %d timestep%s, got %d", last_sensor_fifo_threshold, last_sensor_fifo_threshold == 1 ? "" : "s", processed_timesteps);
 
 			// Update fusion gyro sanity? // TODO: use to detect drift and correct or suspend tracking
-//			sensor_fusion->update_gyro_sanity(g, m);
+			//			sensor_fusion->update_gyro_sanity(g, m);
 
 			// Get updated quaternion from fusion
 #if DEBUG
@@ -1078,7 +1082,7 @@ void sensor_loop(void)
 				memcpy(last_lin_a, lin_a, sizeof(lin_a));
 				float q_offset[4];
 				q_multiply(q, q3, q_offset); // quaternion in device orientation, connection will change format from wxyz to xyzw
-				v_rotate(lin_a, q3, lin_a); // linear acceleration in local device frame, no other transformation will be done
+				v_rotate(lin_a, q3, lin_a);	 // linear acceleration in local device frame, no other transformation will be done
 				connection_update_sensor_data(q_offset, lin_a, sensor_data_time);
 			}
 
@@ -1123,9 +1127,9 @@ void sensor_loop(void)
 		sensor_data_time = 0; // reset data time
 		if (!main_wfi)
 		{
-			main_wfi = true; // TODO: this is terrible
+			main_wfi = true;					  // TODO: this is terrible
 			k_msleep(sensor_update_time_ms + 10); // will be resumed by interrupt // TODO: dont use hard timeout
-			if (main_wfi) // timeout
+			if (main_wfi)						  // timeout
 			{
 				LOG_WRN("Sensor interrupt timeout");
 				main_wfi = false;
@@ -1139,7 +1143,7 @@ void sensor_loop(void)
 		}
 #else
 		// TODO: old behavior
-//		led_clock_offset += time_delta;
+		//		led_clock_offset += time_delta;
 		if (time_delta > sensor_update_time_ms)
 			k_yield();
 		else
@@ -1165,9 +1169,9 @@ void main_imu_suspend(void) // TODO: add timeout
 	if (!main_running) // don't suspend if already stopped (TODO: may be called from sensor thread)
 		return;
 	while (sensor_sensor_scanning)
-		k_usleep(1); // try not to interrupt scanning
+		k_usleep(1);	 // try not to interrupt scanning
 	while (main_running) // TODO: change to detect if i2c is busy
-		k_usleep(1); // try not to interrupt anything actually
+		k_usleep(1);	 // try not to interrupt anything actually
 	k_thread_suspend(&sensor_thread_id);
 	LOG_INF("Suspended sensor thread");
 }

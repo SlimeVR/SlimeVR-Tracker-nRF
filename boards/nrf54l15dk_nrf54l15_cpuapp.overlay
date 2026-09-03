@@ -13,7 +13,6 @@
 			low-power-enable;
 		};
 	};
-
 };
 
 &pwm20_default {
@@ -67,7 +66,6 @@
 		label = "mag";
 		reg = <0>;
 	};
-
 };
 
 &spi00 {

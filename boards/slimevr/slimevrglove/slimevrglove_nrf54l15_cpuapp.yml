@@ -1,0 +1,10 @@
+identifier: slimevrglove/nrf54l15/cpuapp
+name: SlimeVR Glove
+vendor: nighty-electronics
+arch: arm
+toolchain:
+  - zephyr
+sysbuild: true
+ram: 188
+flash: 1428
+supported: []

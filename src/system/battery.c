@@ -23,11 +23,13 @@ LOG_MODULE_REGISTER(BATTERY, CONFIG_ADC_LOG_LEVEL);
 #define VBATT DT_PATH(battery_divider)
 #define ZEPHYR_USER DT_PATH(zephyr_user)
 
-struct io_channel_config {
+struct io_channel_config
+{
 	uint8_t channel;
 };
 
-struct divider_config {
+struct divider_config
+{
 	struct io_channel_config io_channel;
 	struct gpio_dt_spec power_gpios;
 	/* output_ohm is used as a flag value: if it is nonzero then
@@ -54,7 +56,8 @@ static const struct divider_config divider_config = {
 #endif /* /vbatt exists */
 };
 
-struct divider_data {
+struct divider_data
+{
 	const struct device *adc;
 	struct adc_channel_cfg adc_cfg;
 	struct adc_sequence adc_seq;
@@ -79,20 +82,24 @@ static int divider_setup(void)
 	struct adc_channel_cfg *accp = &ddp->adc_cfg;
 	int rc;
 
-	if (!device_is_ready(ddp->adc)) {
+	if (!device_is_ready(ddp->adc))
+	{
 		LOG_ERR("ADC device is not ready %s", ddp->adc->name);
 		return -ENOENT;
 	}
 
-	if (gcp->port) {
-		if (!device_is_ready(gcp->port)) {
+	if (gcp->port)
+	{
+		if (!device_is_ready(gcp->port))
+		{
 			LOG_ERR("%s: device not ready", gcp->port->name);
 			return -ENOENT;
 		}
 		rc = gpio_pin_configure_dt(gcp, GPIO_OUTPUT_INACTIVE);
-		if (rc != 0) {
+		if (rc != 0)
+		{
 			LOG_ERR("Failed to control feed %s.%u: %d",
-				gcp->port->name, gcp->pin, rc);
+					gcp->port->name, gcp->pin, rc);
 			return rc;
 		}
 	}
@@ -123,7 +130,7 @@ static int divider_setup(void)
 		battery_adc_gain = ADC_GAIN_1_5;
 
 	LOG_INF("ADC gain enum: %d, max voltage: %.2f mV",
-		battery_adc_gain, (double)(max_adc_voltage * 1000.0f));
+			battery_adc_gain, (double)(max_adc_voltage * 1000.0f));
 
 	*accp = (struct adc_channel_cfg){
 		.gain = battery_adc_gain,
@@ -131,16 +138,20 @@ static int divider_setup(void)
 		.acquisition_time = ADC_ACQ_TIME(ADC_ACQ_TIME_MICROSECONDS, 3),
 	};
 
-	if (cfg->output_ohm != 0) {
+	if (cfg->output_ohm != 0)
+	{
 		accp->input_positive = 1 + iocp->channel; // <=sdk 3.1 SAADC_CH_PSELP_PSELP_AnalogInput0
-//		accp->input_positive = iocp->channel; // >=sdk 3.2.0, SAADC_CH_PSELP_PSELP_AnalogInput0 does not match! Instead use NRF_SAADC_AIN0
-	} else {
+												  //		accp->input_positive = iocp->channel; // >=sdk 3.2.0, SAADC_CH_PSELP_PSELP_AnalogInput0 does not match! Instead use NRF_SAADC_AIN0
+	}
+	else
+	{
 		accp->input_positive = 9; // SAADC_CH_PSELP_PSELP_VDD
 	}
 
-	if (iocp->channel == 12) { // VDDHDIV5
+	if (iocp->channel == 12)
+	{ // VDDHDIV5
 		// <=sdk 3.1 SAADC_CH_PSELP_PSELP_VDDHDIV5
-//		accp->input_positive = 128 + 4; // >=sdk 3.2.0, SAADC_CH_PSELP_PSELP_VDDHDIV5 does not match! Instead use NRF_SAADC_VDDHDIV5
+		//		accp->input_positive = 128 + 4; // >=sdk 3.2.0, SAADC_CH_PSELP_PSELP_VDDHDIV5 does not match! Instead use NRF_SAADC_VDDHDIV5
 		asp->oversampling = 2;
 		accp->acquisition_time = ADC_ACQ_TIME(ADC_ACQ_TIME_MICROSECONDS, 10);
 	}
@@ -172,11 +183,13 @@ int battery_measure_enable(bool enable)
 {
 	int rc = -ENOENT;
 
-	if (battery_ok) {
+	if (battery_ok)
+	{
 		const struct gpio_dt_spec *gcp = &divider_config.power_gpios;
 
 		rc = 0;
-		if (gcp->port) {
+		if (gcp->port)
+		{
 			rc = gpio_pin_set_dt(gcp, enable);
 		}
 	}
@@ -187,27 +200,31 @@ int battery_sample(void)
 {
 	int rc = -ENOENT;
 
-	if (battery_ok) {
+	if (battery_ok)
+	{
 		struct divider_data *ddp = &divider_data;
 		const struct divider_config *dcp = &divider_config;
 		struct adc_sequence *sp = &ddp->adc_seq;
 
 		rc = adc_read(ddp->adc, sp);
 		sp->calibrate = false;
-		if (rc == 0) {
+		if (rc == 0)
+		{
 			int32_t val = ddp->raw;
 
 			adc_raw_to_millivolts(adc_ref_internal(ddp->adc),
-					      ddp->adc_cfg.gain,
-					      sp->resolution,
-					      &val);
+								  ddp->adc_cfg.gain,
+								  sp->resolution,
+								  &val);
 
-			if (dcp->output_ohm != 0) {
-				rc = val * (uint64_t)dcp->full_ohm
-					/ dcp->output_ohm;
+			if (dcp->output_ohm != 0)
+			{
+				rc = val * (uint64_t)dcp->full_ohm / dcp->output_ohm;
 				LOG_INF("raw %u ~ %u mV => %d mV\n",
-					ddp->raw, val, rc);
-			} else {
+						ddp->raw, val, rc);
+			}
+			else
+			{
 				rc = val;
 				LOG_INF("raw %u ~ %u mV\n", ddp->raw, val);
 			}
@@ -218,20 +235,22 @@ int battery_sample(void)
 }
 
 unsigned int battery_level_pptt(unsigned int batt_mV,
-				const struct battery_level_point *curve)
+								const struct battery_level_point *curve)
 {
 	const struct battery_level_point *pb = curve;
 
-	if (batt_mV >= pb->lvl_mV) {
+	if (batt_mV >= pb->lvl_mV)
+	{
 		/* Measured voltage above highest point, cap at maximum. */
 		return pb->lvl_pptt;
 	}
 	/* Go down to the last point at or below the measured voltage. */
-	while ((pb->lvl_pptt > 0)
-	       && (batt_mV < pb->lvl_mV)) {
+	while ((pb->lvl_pptt > 0) && (batt_mV < pb->lvl_mV))
+	{
 		++pb;
 	}
-	if (batt_mV < pb->lvl_mV) {
+	if (batt_mV < pb->lvl_mV)
+	{
 		/* Below lowest point, cap at minimum */
 		return pb->lvl_pptt;
 	}
@@ -239,29 +258,26 @@ unsigned int battery_level_pptt(unsigned int batt_mV,
 	/* Linear interpolation between below and above points. */
 	const struct battery_level_point *pa = pb - 1;
 
-	return pb->lvl_pptt
-	       + ((pa->lvl_pptt - pb->lvl_pptt)
-		  * (batt_mV - pb->lvl_mV)
-		  / (pa->lvl_mV - pb->lvl_mV));
+	return pb->lvl_pptt + ((pa->lvl_pptt - pb->lvl_pptt) * (batt_mV - pb->lvl_mV) / (pa->lvl_mV - pb->lvl_mV));
 }
 
 static const struct battery_level_point levels[] = {
 #if CONFIG_BATTERY_USE_REG_BUCK_MAPPING
-	{ 10000, 4150 },
-	{ 9500, 4075 },
-	{ 3000, 3775 },
-	{ 500, 3450 },
-	{ 0, 3200 },
+	{10000, 4150},
+	{9500, 4075},
+	{3000, 3775},
+	{500, 3450},
+	{0, 3200},
 #elif CONFIG_BATTERY_USE_REG_LDO_MAPPING
-	{ 10000, 4150 },
-	{ 9500, 4025 },
-	{ 3000, 3650 },
-	{ 500, 3400 },
-	{ 0, 3200 },
+	{10000, 4150},
+	{9500, 4025},
+	{3000, 3650},
+	{500, 3400},
+	{0, 3200},
 #else
 #warning "Battery voltage map not defined"
-	{ 10000, 0},
-	{ 0, 0},
+	{10000, 0},
+	{0, 0},
 #endif
 };
 
@@ -269,7 +285,8 @@ int read_batt()
 {
 	int rc = battery_measure_enable(true);
 
-	if (rc != 0) {
+	if (rc != 0)
+	{
 		LOG_ERR("Failed initialize battery measurement: %d", rc);
 		return -1;
 	}
@@ -278,9 +295,10 @@ int read_batt()
 
 	battery_measure_enable(false);
 
-	if (batt_mV < 0) {
+	if (batt_mV < 0)
+	{
 		LOG_DBG("Failed to read battery voltage: %d",
-		       batt_mV);
+				batt_mV);
 		return rc;
 	}
 
@@ -291,7 +309,8 @@ int read_batt_mV(int *out)
 {
 	int rc = battery_measure_enable(true);
 
-	if (rc != 0) {
+	if (rc != 0)
+	{
 		LOG_ERR("Failed initialize battery measurement: %d", rc);
 		return -1;
 	}
@@ -300,9 +319,10 @@ int read_batt_mV(int *out)
 
 	battery_measure_enable(false);
 
-	if (batt_mV < 0) {
+	if (batt_mV < 0)
+	{
 		LOG_DBG("Failed to read battery voltage: %d",
-		       batt_mV);
+				batt_mV);
 		return rc;
 	}
 
