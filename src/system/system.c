@@ -126,9 +126,20 @@ void configure_sense_pins(void)
 #endif
 	}
 	// Configure sw0 sense
-#if BUTTON_EXISTS // Alternate button if available to use as "reset key"
-	nrf_gpio_cfg_input(NRF_DT_GPIOS_TO_PSEL(DT_ALIAS(sw0), gpios), NRF_GPIO_PIN_PULLUP);
-	nrf_gpio_cfg_sense_set(NRF_DT_GPIOS_TO_PSEL(DT_ALIAS(sw0), gpios), NRF_GPIO_PIN_SENSE_LOW);
+#if BUTTON_EXISTS  // Alternate button if available to use as "reset key"
+
+	const struct gpio_dt_spec button0 = GPIO_DT_SPEC_GET(DT_ALIAS(sw0), gpios);
+	uint32_t active_low = button0.dt_flags & GPIO_ACTIVE_LOW;
+
+	nrf_gpio_cfg_input(
+		NRF_DT_GPIOS_TO_PSEL(DT_ALIAS(sw0), gpios), 
+		active_low ? NRF_GPIO_PIN_PULLUP : NRF_GPIO_PIN_PULLDOWN
+	);
+
+	nrf_gpio_cfg_sense_set(
+		NRF_DT_GPIOS_TO_PSEL(DT_ALIAS(sw0), gpios),
+		active_low ? NRF_GPIO_PIN_SENSE_HIGH : NRF_GPIO_PIN_SENSE_LOW
+	);
 	LOG_INF("Configured sw0 sense");
 #endif
 }
