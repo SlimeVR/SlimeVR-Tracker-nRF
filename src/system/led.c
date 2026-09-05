@@ -377,7 +377,7 @@ static void led_thread(void)
 		case SYS_LED_PATTERN_ONESHOT_WAKE:
 			led_pattern_state++;
 			led_pin_set(SYS_LED_COLOR_SUCCESS, 10000, !(led_pattern_state % 2) * 10000);
-			if (led_pattern_state == 3)
+			if (led_pattern_state == 4)
 				set_led(SYS_LED_PATTERN_OFF, SYS_LED_PRIORITY_HIGHEST);
 			else
 				k_msleep(100);
@@ -385,7 +385,7 @@ static void led_thread(void)
 		case SYS_LED_PATTERN_ONESHOT_POWERON:
 			led_pattern_state++;
 			led_pin_set(SYS_LED_COLOR_SUCCESS, 10000, !(led_pattern_state % 2) * 10000);
-			if (led_pattern_state == 5)
+			if (led_pattern_state == 6)
 				set_led(SYS_LED_PATTERN_OFF, SYS_LED_PRIORITY_HIGHEST);
 			else
 				k_msleep(100);
@@ -402,7 +402,7 @@ static void led_thread(void)
 		case SYS_LED_PATTERN_ONESHOT_PROGRESS:
 			led_pattern_state++;
 			led_pin_set(SYS_LED_COLOR_SUCCESS, 10000, !(led_pattern_state % 2) * 10000);
-			if (led_pattern_state == 5)
+			if (led_pattern_state == 6)
 				set_led(SYS_LED_PATTERN_OFF, SYS_LED_PRIORITY_HIGHEST);
 			else
 				k_msleep(200);
@@ -410,7 +410,7 @@ static void led_thread(void)
 		case SYS_LED_PATTERN_ONESHOT_COMPLETE:
 			led_pattern_state++;
 			led_pin_set(SYS_LED_COLOR_SUCCESS, 10000, !(led_pattern_state % 2) * 10000);
-			if (led_pattern_state == 9)
+			if (led_pattern_state == 10)
 				set_led(SYS_LED_PATTERN_OFF, SYS_LED_PRIORITY_HIGHEST);
 			else
 				k_msleep(200);
