@@ -43,7 +43,8 @@
 
 #define ADAFRUIT_BOOTLOADER CONFIG_BUILD_OUTPUT_UF2
 
-enum sys_regulator {
+enum sys_regulator
+{
 	SYS_REGULATOR_DCDC,
 	SYS_REGULATOR_LDO
 };
@@ -77,10 +78,11 @@ static void sys_system_reboot(void);
 static int sys_power_state_request(int id);
 
 static void disable_DFU_thread(void);
-K_THREAD_DEFINE(disable_DFU_thread_id, 128, disable_DFU_thread, NULL, NULL, NULL, DISABLE_DFU_THREAD_PRIORITY, 0, 100); // disable DFU if the system is running correctly
+// K_THREAD_DEFINE(disable_DFU_thread_id, 128, disable_DFU_thread, NULL, NULL, NULL, DISABLE_DFU_THREAD_PRIORITY, 0, 100); // disable DFU if the system is running correctly
 
 static void power_thread(void);
-K_THREAD_DEFINE(power_thread_id, 1024, power_thread, NULL, NULL, NULL, POWER_THREAD_PRIORITY, 0, 0);
+// TODO: Fix power thread
+// K_THREAD_DEFINE(power_thread_id, 1024, power_thread, NULL, NULL, NULL, POWER_THREAD_PRIORITY, 0, 0);
 
 #define ZEPHYR_USER_NODE DT_PATH(zephyr_user)
 
@@ -124,10 +126,10 @@ static void sys_disconnect_interface_pins(void)
 	nrf_gpio_cfg_default(mag_cs_gpios);
 	LOG_INF("Disconnected Magnetometer CS GPIO");
 #endif
-/*
-	TODO: for promicro, leaving ext_vcc on draws ~50uA, disconnect works, pulldown may be more reliable
-	what to do about boards that use ext_vcc? it is not expected to leave on during WOM
-*/
+	/*
+		TODO: for promicro, leaving ext_vcc on draws ~50uA, disconnect works, pulldown may be more reliable
+		what to do about boards that use ext_vcc? it is not expected to leave on during WOM
+	*/
 }
 
 void sys_interface_suspend(void)
@@ -329,7 +331,7 @@ static void sys_WOM(bool force) // TODO: if IMU interrupt does not exist what do
 	}
 	configure_system_off(); // Common subsystem shutdown and prepare sense pins
 	sensor_retained_write();
-#if CONFIG_WOM_USE_DCDC // In case DCDC is more efficient in the ~10-100uA range
+#if CONFIG_WOM_USE_DCDC				   // In case DCDC is more efficient in the ~10-100uA range
 	set_regulator(SYS_REGULATOR_DCDC); // Make sure DCDC is selected
 #else
 	set_regulator(SYS_REGULATOR_LDO); // Switch to LDO
@@ -345,9 +347,9 @@ static void sys_WOM(bool force) // TODO: if IMU interrupt does not exist what do
 	LOG_INF("Configured IMU wake up GPIO");
 	LOG_INF("Powering off nRF");
 	sys_update_battery_tracker(current_battery_pptt, device_plugged);
-//	retained_update();
+	//	retained_update();
 	wait_for_logging();
-#if ADAFRUIT_BOOTLOADER // if using Adafruit bootloader, always skip dfu for next boot
+#if ADAFRUIT_BOOTLOADER			// if using Adafruit bootloader, always skip dfu for next boot
 	NRF_POWER->GPREGRET = 0x6d; // DFU_MAGIC_SKIP
 #endif
 	sys_poweroff();
@@ -367,9 +369,9 @@ static void sys_system_off(bool silent) // TODO: add timeout
 	// Clear sensor addresses
 	sensor_scan_clear();
 	LOG_INF("Requested sensor scan on next boot");
-//	sensor_retained_write();
+	//	sensor_retained_write();
 	set_regulator(SYS_REGULATOR_LDO); // Switch to LDO
-	// Set system off
+									  // Set system off
 #if IMU_INT_EXISTS
 	// Configure interrupt pin as it is not used
 	uint32_t int0_gpios = NRF_DT_GPIOS_TO_PSEL(ZEPHYR_USER_NODE, int0_gpios);
@@ -381,7 +383,7 @@ static void sys_system_off(bool silent) // TODO: add timeout
 	sys_disconnect_interface_pins();
 	LOG_INF("Powering off nRF");
 	sys_update_battery_tracker(current_battery_pptt, device_plugged);
-//	retained_update();
+	//	retained_update();
 	if (!silent)
 	{
 		while (k_uptime_get() - start_time < 650) // wait for pattern to complete
@@ -392,7 +394,7 @@ static void sys_system_off(bool silent) // TODO: add timeout
 	{
 		wait_for_logging();
 	}
-#if ADAFRUIT_BOOTLOADER // if using Adafruit bootloader, always skip dfu for next boot
+#if ADAFRUIT_BOOTLOADER			// if using Adafruit bootloader, always skip dfu for next boot
 	NRF_POWER->GPREGRET = 0x6d; // DFU_MAGIC_SKIP
 #endif
 	sys_poweroff();
@@ -402,14 +404,14 @@ static void sys_system_reboot(void) // TODO: add timeout
 {
 	LOG_INF("System reboot requested");
 	configure_system_off(); // Common subsystem shutdown and prepare sense pins
-//	sensor_retained_write();
+							//	sensor_retained_write();
 	// Set system reboot
 	LOG_INF("Rebooting nRF");
 	sys_update_battery_tracker(current_battery_pptt, device_plugged);
-//	retained_update();
+	//	retained_update();
 	wait_for_logging();
-#if ADAFRUIT_BOOTLOADER // if using Adafruit bootloader, skip dfu for next boot
-	if (!NRF_POWER->GPREGRET) // no other request
+#if ADAFRUIT_BOOTLOADER				// if using Adafruit bootloader, skip dfu for next boot
+	if (!NRF_POWER->GPREGRET)		// no other request
 		NRF_POWER->GPREGRET = 0x6d; // DFU_MAGIC_SKIP
 #endif
 	sys_reboot(SYS_REBOOT_COLD);
@@ -446,7 +448,7 @@ bool vin_read(void) // blocking
 static void disable_DFU_thread(void)
 {
 #if ADAFRUIT_BOOTLOADER
-	if (!NRF_POWER->GPREGRET) // no other request
+	if (!NRF_POWER->GPREGRET)		// no other request
 		NRF_POWER->GPREGRET = 0x6d; // DFU_MAGIC_SKIP
 #endif
 }
@@ -587,9 +589,9 @@ static void power_thread(void)
 		int battery_mV;
 		int16_t battery_pptt = read_batt_mV(&battery_mV);
 		if (battery_pptt < 0)
-			LOG_ERR("Failed to read battery voltage: %d", battery_pptt);
-		if (samples < BATTERY_SAMPLES)
-			samples++;
+			// LOG_ERR("Failed to read battery voltage: %d", battery_pptt);
+			if (samples < BATTERY_SAMPLES)
+				samples++;
 
 		bool abnormal_reading = battery_mV < 100 || battery_mV > 6000;
 		bool battery_available = battery_mV > 1500 && !abnormal_reading; // Keep working without the battery connected, otherwise it is obviously too dead to boot system
@@ -673,17 +675,18 @@ static void power_thread(void)
 
 		connection_update_battery(battery_available, device_plugged, device_charged, calibrated_battery_pptt, battery_mV);
 
+		/*
 		if ((adc_abnormal || chg_ret) && !get_status(SYS_STATUS_SYSTEM_ERROR))
 			set_status(SYS_STATUS_SYSTEM_ERROR, true);
 		else if ((!adc_abnormal && !chg_ret) && get_status(SYS_STATUS_SYSTEM_ERROR))
 			set_status(SYS_STATUS_SYSTEM_ERROR, false);
-
+*/
 		if (chg_ret)
 			set_led(SYS_LED_PATTERN_CRITICAL, SYS_LED_PRIORITY_CRITICAL);
 		else
 			set_led(SYS_LED_PATTERN_OFF, SYS_LED_PRIORITY_CRITICAL);
 
-		if (chg_temp_warn && plugged) // don't need to warn if not plugged in
+		if (chg_temp_warn && plugged)									// don't need to warn if not plugged in
 			set_led(SYS_LED_PATTERN_WARNING, SYS_LED_PRIORITY_CHARGER); // not critical
 		else if (charging)
 			set_led(SYS_LED_PATTERN_PULSE_PERSIST, SYS_LED_PRIORITY_CHARGER);

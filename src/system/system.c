@@ -157,7 +157,7 @@ static inline void sys_nvs_init(void)
 		return;
 	}
 	fs.sector_size = info.size; // sector_size equal to the pagesize
-	fs.sector_count = 4U; // 4 sectors
+	fs.sector_count = 4U;		// 4 sectors
 	int err = nvs_mount(&fs);
 	if (err)
 	{
@@ -304,8 +304,8 @@ void sys_nvs_stats(void)
 int set_sensor_clock(bool enable, float rate, float *actual_rate)
 {
 #if CLK_EN_EXISTS
-	gpio_pin_set_dt(&clk_en, enable); // if enabling some external oscillator is available
-//	*actual_rate = enable ? (float)NSEC_PER_SEC / clk_out.period : 0; // assume pwm period is the same as an equivalent external oscillator
+	gpio_pin_set_dt(&clk_en, enable);  // if enabling some external oscillator is available
+									   //	*actual_rate = enable ? (float)NSEC_PER_SEC / clk_out.period : 0; // assume pwm period is the same as an equivalent external oscillator
 	*actual_rate = enable ? 32768 : 0; // default
 	return 0;
 #endif
@@ -344,7 +344,7 @@ static int sys_button_init(void)
 {
 	// Not clearing RESETREAS here
 #ifdef NRF_RESET
-	bool reset_vbus_reset = NRF_RESET->RESETREAS & RESET_RESETREAS_VBUS_Msk;
+	bool reset_vbus_reset = NRF_RESET->RESETREAS & RESET_RESETREAS_RESETPIN_Msk;
 #else
 	bool reset_vbus_reset = NRF_POWER->RESETREAS & POWER_RESETREAS_VBUS_Msk;
 #endif
@@ -405,8 +405,8 @@ static void button_thread(void)
 		{
 			LOG_INF("Button was pressed %d times", num_presses);
 			last_press = 0;
-//			if (num_presses == 1)
-//				sys_request_system_reboot(false);
+			//			if (num_presses == 1)
+			//				sys_request_system_reboot(false);
 			if (CONFIG_0_SETTINGS_READ(CONFIG_0_USER_EXTRA_ACTIONS)) // TODO: extra actions are default until server can send commands to trackers
 				sys_reset_mode(num_presses - 1);
 			else
@@ -436,7 +436,8 @@ static void button_thread(void)
 }
 #endif
 
-void test_pin_set(int value) {
+void test_pin_set(int value)
+{
 #if TEST_PIN_EXISTS
 	gpio_pin_set_dt(&test_pin, value);
 #endif
@@ -508,7 +509,7 @@ int sys_user_shutdown(void)
 		k_msleep(1);
 	LOG_INF("User shutdown requested");
 	reboot_counter_write(0); // shutdown flag
-	while (!button_read()) // waiting for pattern, if button is pressed again break and reboot immedately
+	while (!button_read())	 // waiting for pattern, if button is pressed again break and reboot immedately
 	{
 		if (k_uptime_get() - start_time > 650) // length of pattern elapsed
 		{
@@ -556,6 +557,11 @@ void sys_reset_mode(uint8_t mode)
 
 static void temp_thread(void)
 {
+	if (temp_dev == NULL)
+	{
+		LOG_ERR("Temperature device not found");
+		return;
+	}
 	while (1)
 	{
 		if (sensor_sample_fetch(temp_dev))

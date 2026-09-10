@@ -25,6 +25,8 @@
 
 #include "interface.h"
 
+#define GLOVE_IMUS 16
+
 const char *sensor_get_sensor_imu_name(void);
 const char *sensor_get_sensor_mag_name(void);
 const char *sensor_get_sensor_fusion_name(void);
@@ -51,14 +53,15 @@ void main_imu_resume(void);
 void main_imu_wakeup(void);
 void main_imu_restart(void);
 
-typedef struct sensor_fusion {
+typedef struct sensor_fusion
+{
 	void (*init)(float, float, float); // gyro_time, accel_time, mag_time
 	void (*load)(const void *);
 	void (*save)(void *);
 
-	void (*update_gyro)(float *, float); // deg/s
+	void (*update_gyro)(float *, float);  // deg/s
 	void (*update_accel)(float *, float); // g
-	void (*update_mag)(float *, float); // any unit (usually gauss)
+	void (*update_mag)(float *, float);	  // any unit (usually gauss)
 	void (*update)(float *, float *, float *, float);
 
 	void (*get_gyro_bias)(float *);
@@ -71,39 +74,41 @@ typedef struct sensor_fusion {
 	void (*get_quat)(float *);
 } sensor_fusion_t;
 
-typedef struct sensor_imu {
-	int (*init)(float, float, float, float*, float*); // first float is clock_rate, nonzero means use CLKIN, return update time, return 0 if success, -1 if general error
+typedef struct sensor_imu
+{
+	int (*init)(float, float, float, float *, float *); // first float is clock_rate, nonzero means use CLKIN, return update time, return 0 if success, -1 if general error
 	void (*shutdown)(void);
 
-	void (*update_fs)(float, float, float*, float*); // return actual range
-	int (*update_odr)(float, float, float*, float*); // return actual update time, return 0 if success, 1 if odr is same, -1 if general error
+	void (*update_fs)(float, float, float *, float *); // return actual range
+	int (*update_odr)(float, float, float *, float *); // return actual update time, return 0 if success, 1 if odr is same, -1 if general error
 
-	uint16_t (*fifo_read)(uint8_t*, uint16_t);
-	int (*fifo_process)(uint16_t, uint8_t*, float[3], float[3]); // g, deg/s
-	void (*accel_read)(float[3]); // g
-	void (*gyro_read)(float[3]); // deg/s
-	int (*temp_read)(float*); // deg C, return 0 if success, -1 if error
+	uint16_t (*fifo_read)(uint8_t *, uint16_t);
+	int (*fifo_process)(uint16_t, uint8_t *, float[3], float[3]); // g, deg/s
+	void (*accel_read)(float[3]);								  // g
+	void (*gyro_read)(float[3]);								  // deg/s
+	int (*temp_read)(float *);									  // deg C, return 0 if success, -1 if error
 
 	uint8_t (*setup_DRDY)(uint16_t);
 	uint8_t (*setup_WOM)(void);
 
-	int (*ext_setup)(void); // register write/writeread with interface, return 0 if success, -1 if error or not available
+	int (*ext_setup)(void);		  // register write/writeread with interface, return 0 if success, -1 if error or not available
 	int (*ext_passthrough)(bool); // enable/disable passthrough mode, return 0 if success, -1 if error or not available
 } sensor_imu_t;
 
-typedef struct sensor_mag {
-	int (*init)(float, float*); // return update time, return 0 if success, 1 if general error
+typedef struct sensor_mag
+{
+	int (*init)(float, float *); // return update time, return 0 if success, 1 if general error
 	void (*shutdown)(void);
 
-	int (*update_odr)(float, float*); // return actual update time, return 0 if success, 1 if odr is same, -1 if general error
+	int (*update_odr)(float, float *); // return actual update time, return 0 if success, 1 if odr is same, -1 if general error
 
-	void (*mag_oneshot)(void); // trigger oneshot if exists
-	void (*mag_read)(float[3]); // any unit (usually gauss)
+	void (*mag_oneshot)(void);	  // trigger oneshot if exists
+	void (*mag_read)(float[3]);	  // any unit (usually gauss)
 	float (*temp_read)(float[3]); // deg C
 
-	void (*mag_process)(uint8_t*, float[3]); // use if magnetometer is present as an auxiliary sensor, from data read by IMU
-	uint8_t ext_min_burst; // minimum supported burst length for external interface
-	uint8_t ext_burst; // default supported burst length
+	void (*mag_process)(uint8_t *, float[3]); // use if magnetometer is present as an auxiliary sensor, from data read by IMU
+	uint8_t ext_min_burst;					  // minimum supported burst length for external interface
+	uint8_t ext_burst;						  // default supported burst length
 } sensor_mag_t;
 
 #endif

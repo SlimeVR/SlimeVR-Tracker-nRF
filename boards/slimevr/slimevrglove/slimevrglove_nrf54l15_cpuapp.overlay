@@ -1,0 +1,22 @@
+/ {
+	cpuapp_sram@2003f000 {
+		compatible = "zephyr,memory-region", "mmio-sram";
+		reg = <0x2003f000 DT_SIZE_K(4)>;
+		zephyr,memory-region = "RETAINED_MEM";
+		status = "okay";
+
+		retainedmem0: retainedmem {
+			compatible = "zephyr,retained-ram";
+			status = "okay";
+		};
+	};
+
+	aliases {
+		retainedmemdevice = &retainedmem0;
+	};
+};
+
+&cpuapp_sram {
+	/* Shrink SRAM size to avoid overlap with retained memory region */
+	reg = <0x20000000 DT_SIZE_K(252)>;
+};

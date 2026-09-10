@@ -1,0 +1,15 @@
+identifier: slimevrglove/nrf54l15/cpuapp
+name: slimevrglove
+type: mcu
+arch: arm
+toolchain:
+  - gnuarmemb
+  - zephyr
+sysbuild: true
+ram: 188
+flash: 1428
+supported:
+  - gpio
+  - spi
+  - watchdog
+vendor: slimevr
