@@ -33,6 +33,7 @@ LOG_MODULE_REGISTER(ICM45686, LOG_LEVEL_DBG);
 int icm45_init(float clock_rate, float accel_time, float gyro_time, float *accel_actual_time, float *gyro_actual_time)
 {
 	// setup interface for SPI
+	// TODO: Fix SPI speed for good on nrf54l15
 	if (!sensor_interface_spi_configure(SENSOR_INTERFACE_DEV_IMU, MHZ(2), 0))
 		fifo_multiplier_factor = FIFO_MULT_SPI; // SPI mode
 	else
