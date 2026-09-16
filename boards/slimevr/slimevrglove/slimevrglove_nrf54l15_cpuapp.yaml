@@ -12,4 +12,5 @@ supported:
   - gpio
   - spi
   - watchdog
+  - uart
 vendor: slimevr

@@ -8,11 +8,11 @@
 
 #define PACKET_SIZE 20
 
-static const float accel_sensitivity = 16.0f / 32768.0f; // Always 16G
+static const float accel_sensitivity = 16.0f / 32768.0f;  // Always 16G
 static const float gyro_sensitivity = 2000.0f / 32768.0f; // Always 2000dps
 
-static const float accel_sensitivity_32 = 32.0f / ((uint32_t)2<<30); // 32G forced
-static const float gyro_sensitivity_32 = 4000.0f / ((uint32_t)2<<30); // 4000dps forced
+static const float accel_sensitivity_32 = 32.0f / ((uint32_t)2 << 30);	// 32G forced
+static const float gyro_sensitivity_32 = 4000.0f / ((uint32_t)2 << 30); // 4000dps forced
 
 static const uint16_t intervals[] = {1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 0};
 static const uint8_t odrs[] = {ACCEL_ODR_6_4kHz, ACCEL_ODR_3_2kHz, ACCEL_ODR_1_6kHz, ACCEL_ODR_800Hz, ACCEL_ODR_400Hz, ACCEL_ODR_200Hz, ACCEL_ODR_100Hz, ACCEL_ODR_50Hz, ACCEL_ODR_25Hz, ACCEL_ODR_12_5Hz};
@@ -22,7 +22,7 @@ static uint8_t last_gyro_odr = 0xff;
 static const float clock_reference = 32000;
 static float clock_scale = 1; // ODR is scaled by clock_rate/clock_reference
 
-#define FIFO_MULT 0.00075f // assuming i2c fast mode
+#define FIFO_MULT 0.00075f	  // assuming i2c fast mode
 #define FIFO_MULT_SPI 0.0001f // ~24MHz
 
 static float fifo_multiplier_factor = FIFO_MULT;
@@ -33,7 +33,7 @@ LOG_MODULE_REGISTER(ICM45686, LOG_LEVEL_DBG);
 int icm45_init(float clock_rate, float accel_time, float gyro_time, float *accel_actual_time, float *gyro_actual_time)
 {
 	// setup interface for SPI
-	if (!sensor_interface_spi_configure(SENSOR_INTERFACE_DEV_IMU, MHZ(24), 0))
+	if (!sensor_interface_spi_configure(SENSOR_INTERFACE_DEV_IMU, MHZ(2), 0))
 		fifo_multiplier_factor = FIFO_MULT_SPI; // SPI mode
 	else
 		fifo_multiplier_factor = FIFO_MULT; // I2C mode
@@ -43,29 +43,29 @@ int icm45_init(float clock_rate, float accel_time, float gyro_time, float *accel
 	{
 		clock_scale = clock_rate / clock_reference;
 		err |= ssi_reg_write_byte(SENSOR_INTERFACE_DEV_IMU, ICM45686_IOC_PAD_SCENARIO_OVRD, 0x06); // override pin 9 to CLKIN
-		err |= ssi_reg_update_byte(SENSOR_INTERFACE_DEV_IMU, ICM45686_RTC_CONFIG, 0x20, 0x20); // enable external CLKIN
-//		err |= ssi_reg_write_byte(SENSOR_INTERFACE_DEV_IMU, ICM45686_RTC_CONFIG, 0x23); // enable external CLKIN (0x20, default register value is 0x03)
+		err |= ssi_reg_update_byte(SENSOR_INTERFACE_DEV_IMU, ICM45686_RTC_CONFIG, 0x20, 0x20);	   // enable external CLKIN
+																								   //		err |= ssi_reg_write_byte(SENSOR_INTERFACE_DEV_IMU, ICM45686_RTC_CONFIG, 0x23); // enable external CLKIN (0x20, default register value is 0x03)
 	}
 	uint8_t ireg_buf[3];
 	ireg_buf[0] = ICM45686_IPREG_BAR; // address is a word, icm is big endian
 	ireg_buf[1] = ICM45686_IPREG_BAR_REG_58;
-	ireg_buf[2] = 0xD9 & ~0x48; // disable internal pull resistors for AP pins (pin 13, 12)
+	ireg_buf[2] = 0xD9 & ~0x48;																// disable internal pull resistors for AP pins (pin 13, 12)
 	err |= ssi_burst_write(SENSOR_INTERFACE_DEV_IMU, ICM45686_IREG_ADDR_15_8, ireg_buf, 3); // write buffer
-	k_usleep(4); // Wait 4uS after writing IREG, as per datasheet
+	k_usleep(4);																			// Wait 4uS after writing IREG, as per datasheet
 	ireg_buf[1] = ICM45686_IPREG_BAR_REG_59;
-	ireg_buf[2] = 0xB6 & ~0x92; // disable internal pull resistors for AP pins (pin 7, 1, 14)
+	ireg_buf[2] = 0xB6 & ~0x92;																// disable internal pull resistors for AP pins (pin 7, 1, 14)
 	err |= ssi_burst_write(SENSOR_INTERFACE_DEV_IMU, ICM45686_IREG_ADDR_15_8, ireg_buf, 3); // write buffer
-	k_usleep(4); // Wait 4uS after writing IREG, as per datasheet
-	ireg_buf[0] = ICM45686_IPREG_TOP1; // address is a word, icm is big endian
+	k_usleep(4);																			// Wait 4uS after writing IREG, as per datasheet
+	ireg_buf[0] = ICM45686_IPREG_TOP1;														// address is a word, icm is big endian
 	ireg_buf[1] = ICM45686_SREG_CTRL;
-	ireg_buf[2] = 0x02; // set big endian
+	ireg_buf[2] = 0x02;																		// set big endian
 	err |= ssi_burst_write(SENSOR_INTERFACE_DEV_IMU, ICM45686_IREG_ADDR_15_8, ireg_buf, 3); // write buffer
-	k_usleep(4); // Wait 4uS after writing IREG, as per datasheet
-	last_accel_odr = 0xff; // reset last odr
-	last_gyro_odr = 0xff; // reset last odr
+	k_usleep(4);																			// Wait 4uS after writing IREG, as per datasheet
+	last_accel_odr = 0xff;																	// reset last odr
+	last_gyro_odr = 0xff;																	// reset last odr
 	err |= icm45_update_odr(accel_time, gyro_time, accel_actual_time, gyro_actual_time);
 	err |= ssi_reg_write_byte(SENSOR_INTERFACE_DEV_IMU, ICM45686_FIFO_CONFIG0, 0x80 | 0b000111); // set FIFO stop-on-full mode, set FIFO depth to 2K bytes (see AN-000364)
-	err |= ssi_reg_write_byte(SENSOR_INTERFACE_DEV_IMU, ICM45686_FIFO_CONFIG3, 0x0F); // begin FIFO stream, hires, a+g
+	err |= ssi_reg_write_byte(SENSOR_INTERFACE_DEV_IMU, ICM45686_FIFO_CONFIG3, 0x0F);			 // begin FIFO stream, hires, a+g
 	if (err)
 		LOG_ERR("Communication error");
 	return (err < 0 ? err : 0);
@@ -74,27 +74,32 @@ int icm45_init(float clock_rate, float accel_time, float gyro_time, float *accel
 void icm45_shutdown(void)
 {
 	last_accel_odr = 0xff; // reset last odr
-	last_gyro_odr = 0xff; // reset last odr
+	last_gyro_odr = 0xff;  // reset last odr
 	int err = ssi_reg_write_byte(SENSOR_INTERFACE_DEV_IMU, ICM45686_REG_MISC2, 0x02);
-//	uint8_t ireg_buf[3];
-//	ireg_buf[1] = ICM45686_IPREG_BAR_REG_60;
-//	ireg_buf[2] = 0x6D & ~0x05; // set internal pull down resistors for AP pins (pin 10, 7)
-//	err |= ssi_burst_write(SENSOR_INTERFACE_DEV_IMU, ICM45686_IREG_ADDR_15_8, ireg_buf, 3); // write buffer
-//	ireg_buf[1] = ICM45686_IPREG_BAR_REG_61;
-//	ireg_buf[2] = 0xBB & ~0x10; // set internal pull down resistors for AP pins (pin 11)
-//	err |= ssi_burst_write(SENSOR_INTERFACE_DEV_IMU, ICM45686_IREG_ADDR_15_8, ireg_buf, 3); // write buffer
+	//	uint8_t ireg_buf[3];
+	//	ireg_buf[1] = ICM45686_IPREG_BAR_REG_60;
+	//	ireg_buf[2] = 0x6D & ~0x05; // set internal pull down resistors for AP pins (pin 10, 7)
+	//	err |= ssi_burst_write(SENSOR_INTERFACE_DEV_IMU, ICM45686_IREG_ADDR_15_8, ireg_buf, 3); // write buffer
+	//	ireg_buf[1] = ICM45686_IPREG_BAR_REG_61;
+	//	ireg_buf[2] = 0xBB & ~0x10; // set internal pull down resistors for AP pins (pin 11)
+	//	err |= ssi_burst_write(SENSOR_INTERFACE_DEV_IMU, ICM45686_IREG_ADDR_15_8, ireg_buf, 3); // write buffer
 	// Wait to finish reset
 	uint8_t rst_state;
-	while(true) {
+	while (true)
+	{
 		err |= ssi_reg_read_byte(SENSOR_INTERFACE_DEV_IMU, ICM45686_INT1_STATUS0, &rst_state);
-		if (err) {
+		if (err)
+		{
 			LOG_ERR("Communication error when reading reset state");
 			break;
 		}
-		if((rst_state & 0x80) != 0x80) {
+		if ((rst_state & 0x80) != 0x80)
+		{
 			k_usleep(10);
 			LOG_DBG("IMU reset is pending (0x%02x), waiting...", rst_state);
-		} else {
+		}
+		else
+		{
 			break;
 		}
 	}
@@ -104,7 +109,7 @@ void icm45_shutdown(void)
 
 void icm45_update_fs(float accel_range, float gyro_range, float *accel_actual_range, float *gyro_actual_range)
 {
-	*accel_actual_range = 32; // always 32g in hires
+	*accel_actual_range = 32;  // always 32g in hires
 	*gyro_actual_range = 4000; // always 4000dps in hires
 }
 
@@ -171,15 +176,15 @@ int icm45_update_odr(float accel_time, float gyro_time, float *accel_actual_time
 	int err = 0;
 	// only if the power mode has changed
 	if (last_accel_odr == 0xff || last_gyro_odr == 0xff || (last_accel_odr == 0 ? 0 : 1) != (ACCEL_ODR == 0 ? 0 : 1) || (last_gyro_odr == 0 ? 0 : 1) != (GYRO_ODR == 0 ? 0 : 1))
-	{ // TODO: can't tell difference between gyro off and gyro standby
+	{																										  // TODO: can't tell difference between gyro off and gyro standby
 		err |= ssi_reg_write_byte(SENSOR_INTERFACE_DEV_IMU, ICM45686_PWR_MGMT0, GYRO_MODE << 2 | ACCEL_MODE); // set accel and gyro modes
-		k_busy_wait(250); // wait >200us // TODO: is this needed?
+		k_busy_wait(250);																					  // wait >200us // TODO: is this needed?
 	}
 	last_accel_odr = ACCEL_ODR;
 	last_gyro_odr = GYRO_ODR;
 
 	err |= ssi_reg_write_byte(SENSOR_INTERFACE_DEV_IMU, ICM45686_ACCEL_CONFIG0, ACCEL_UI_FS_SEL << 4 | ACCEL_ODR); // set accel ODR and FS
-	err |= ssi_reg_write_byte(SENSOR_INTERFACE_DEV_IMU, ICM45686_GYRO_CONFIG0, GYRO_UI_FS_SEL << 4 | GYRO_ODR); // set gyro ODR and FS
+	err |= ssi_reg_write_byte(SENSOR_INTERFACE_DEV_IMU, ICM45686_GYRO_CONFIG0, GYRO_UI_FS_SEL << 4 | GYRO_ODR);	   // set gyro ODR and FS
 	if (err)
 		LOG_ERR("Communication error");
 
@@ -211,7 +216,7 @@ uint16_t icm45_fifo_read(uint8_t *data, uint16_t len) // TODO: check if working
 		uint8_t rawCount[2];
 		err |= ssi_burst_read(SENSOR_INTERFACE_DEV_IMU, ICM45686_FIFO_COUNT_0, &rawCount[0], 2);
 		packets = (uint16_t)(rawCount[0] << 8 | rawCount[1]); // Turn the 16 bits into a unsigned 16-bit value
-		if (!packets) // nothing to do
+		if (!packets)										  // nothing to do
 			break;
 		float extra_read_packets = packets * fifo_multiplier;
 		packets += extra_read_packets;
@@ -239,7 +244,7 @@ int icm45_fifo_process(uint16_t index, uint8_t *data, float a[3], float g[3])
 {
 	index *= PACKET_SIZE;
 	if (data[index] != 0x78) // ACCEL_EN, GYRO_EN, HIRES_EN, TMST_FIELD_EN
-		return 1; // Skip invalid header
+		return 1;			 // Skip invalid header
 	// Empty packet is 7F filled
 	// combine into 20 bit values in 32 bit int
 	float a_raw[3] = {0};
@@ -326,27 +331,27 @@ uint8_t icm45_setup_WOM(void) // TODO: check if working
 {
 	uint8_t interrupts;
 	uint8_t ireg_buf[5];
-	int err = ssi_reg_read_byte(SENSOR_INTERFACE_DEV_IMU, ICM45686_INT1_STATUS0, &interrupts); // clear reset done int flag // TODO: is this needed
-	err |= ssi_reg_write_byte(SENSOR_INTERFACE_DEV_IMU, ICM45686_INT1_CONFIG0, 0x00); // disable default interrupt (RESET_DONE)
+	int err = ssi_reg_read_byte(SENSOR_INTERFACE_DEV_IMU, ICM45686_INT1_STATUS0, &interrupts);								// clear reset done int flag // TODO: is this needed
+	err |= ssi_reg_write_byte(SENSOR_INTERFACE_DEV_IMU, ICM45686_INT1_CONFIG0, 0x00);										// disable default interrupt (RESET_DONE)
 	err |= ssi_reg_write_byte(SENSOR_INTERFACE_DEV_IMU, ICM45686_ACCEL_CONFIG0, ACCEL_UI_FS_SEL_8G << 4 | ACCEL_ODR_200Hz); // set accel ODR and FS
-	err |= ssi_reg_write_byte(SENSOR_INTERFACE_DEV_IMU, ICM45686_PWR_MGMT0, ACCEL_MODE_LP); // set accel and gyro modes
-	ireg_buf[0] = ICM45686_IPREG_SYS2; // address is a word, icm is big endian
+	err |= ssi_reg_write_byte(SENSOR_INTERFACE_DEV_IMU, ICM45686_PWR_MGMT0, ACCEL_MODE_LP);									// set accel and gyro modes
+	ireg_buf[0] = ICM45686_IPREG_SYS2;																						// address is a word, icm is big endian
 	ireg_buf[1] = ICM45686_IPREG_SYS2_REG_129;
-	ireg_buf[2] = 0x00; // set ACCEL_LP_AVG_SEL to 1x
+	ireg_buf[2] = 0x00;																		// set ACCEL_LP_AVG_SEL to 1x
 	err |= ssi_burst_write(SENSOR_INTERFACE_DEV_IMU, ICM45686_IREG_ADDR_15_8, ireg_buf, 3); // write buffer
 	// should already be defaulted to AULP
-//	ireg_buf[0] = ICM45686_IPREG_TOP1;
-//	ireg_buf[1] = ICM45686_SMC_CONTROL_0;
-//	ireg_buf[2] = 0x60; // set ACCEL_LP_CLK_SEL to AULP
-//	err |= ssi_burst_write(SENSOR_INTERFACE_DEV_IMU, ICM45686_IREG_ADDR_15_8, ireg_buf, 3); // write buffer
+	//	ireg_buf[0] = ICM45686_IPREG_TOP1;
+	//	ireg_buf[1] = ICM45686_SMC_CONTROL_0;
+	//	ireg_buf[2] = 0x60; // set ACCEL_LP_CLK_SEL to AULP
+	//	err |= ssi_burst_write(SENSOR_INTERFACE_DEV_IMU, ICM45686_IREG_ADDR_15_8, ireg_buf, 3); // write buffer
 	ireg_buf[0] = ICM45686_IPREG_TOP1;
 	ireg_buf[1] = ICM45686_ACCEL_WOM_X_THR;
-	ireg_buf[2] = 0x08; // set wake thresholds // 8 x 3.9 mg is ~31.25 mg
-	ireg_buf[3] = 0x08; // set wake thresholds
-	ireg_buf[4] = 0x08; // set wake thresholds
+	ireg_buf[2] = 0x08;																		// set wake thresholds // 8 x 3.9 mg is ~31.25 mg
+	ireg_buf[3] = 0x08;																		// set wake thresholds
+	ireg_buf[4] = 0x08;																		// set wake thresholds
 	err |= ssi_burst_write(SENSOR_INTERFACE_DEV_IMU, ICM45686_IREG_ADDR_15_8, ireg_buf, 5); // write buffer
-	err |= ssi_reg_write_byte(SENSOR_INTERFACE_DEV_IMU, ICM45686_TMST_WOM_CONFIG, 0x14); // enable WOM, enable WOM interrupt
-	err |= ssi_reg_write_byte(SENSOR_INTERFACE_DEV_IMU, ICM45686_INT1_CONFIG1, 0x0E); // route WOM interrupt
+	err |= ssi_reg_write_byte(SENSOR_INTERFACE_DEV_IMU, ICM45686_TMST_WOM_CONFIG, 0x14);	// enable WOM, enable WOM interrupt
+	err |= ssi_reg_write_byte(SENSOR_INTERFACE_DEV_IMU, ICM45686_INT1_CONFIG1, 0x0E);		// route WOM interrupt
 	if (err)
 		LOG_ERR("Communication error");
 	return NRF_GPIO_PIN_PULLUP << 4 | NRF_GPIO_PIN_SENSE_LOW; // active low
@@ -381,5 +386,4 @@ const sensor_imu_t sensor_imu_icm45686 = {
 	*icm45_setup_WOM,
 
 	*imu_none_ext_setup,
-	*icm45_ext_passthrough
-};
+	*icm45_ext_passthrough};
