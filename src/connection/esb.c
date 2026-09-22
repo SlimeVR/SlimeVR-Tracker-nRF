@@ -419,7 +419,7 @@ void esb_write_current() {
 
 void esb_write(uint8_t *data, uint8_t packet_sequnce)
 {
-	if (!esb_initialized || esb_get_tracker_state() != CONNECTED)
+	if (!esb_initialized || (esb_get_tracker_state() != CONNECTED))
 		return;
 	tx_payload.pipe = 1; // using base address 1
 #if defined(NRF54L15_XXAA) // TODO: esb halts with ack and tx fail
@@ -503,6 +503,7 @@ static void esb_thread(void)
 #if SWEEP_TEST
 	sweep_test_run();
 #endif
+	uint32_t dongle_search_started = 0;
 
 	while (1)
 	{
@@ -528,11 +529,19 @@ static void esb_thread(void)
 				}
 				break;
 			case FIND_DONGLE:
+				if(dongle_search_started == 0) {
+					dongle_search_started = k_uptime_get_32();
+				}
 				if(!find_dongle()) {
 					LOG_WRN("Couldn't find our dongle");
-					esb_set_tracker_state(CONNECTION_ERROR);
-					sys_request_system_off(false);
-					return;
+					if(use_shutdown && k_uptime_get_32() - dongle_search_started > CONFIG_3_SETTINGS_READ(CONFIG_3_CONNECTION_TIMEOUT_DELAY)) {
+						LOG_WRN("Can't find dongle in %dm", CONFIG_3_SETTINGS_READ(CONFIG_3_CONNECTION_TIMEOUT_DELAY) / 60000);
+						esb_set_tracker_state(CONNECTION_ERROR);
+						sys_request_system_off(false);
+						return;
+					}
+				} else {
+					dongle_search_started = 0;
 				}
 				break;
 			case DONGLE_CONNECT:
