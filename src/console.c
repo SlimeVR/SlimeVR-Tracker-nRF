@@ -502,6 +502,7 @@ static void print_help(void)
 	printk("mag                          Clear magnetometer calibration\n");
 #endif
 	printk("\nset <address> <id>         Manually set receiver\n");
+	printk("\nping <address>             Ping specified address\n");
 	printk("pair                         Enter pairing mode\n");
 	printk("clear                        Clear pairing data\n");
 #if DFU_EXISTS
@@ -546,6 +547,7 @@ static void console_thread(void)
 	const char command_mag[] = "mag";
 #endif
 	const char command_set[] = "set";
+	const char command_ping[] = "ping";
 	const char command_pair[] = "pair";
 	const char command_clear[] = "clear";
 #if DFU_EXISTS
@@ -645,6 +647,18 @@ static void console_thread(void)
 				pairing_set_pair(addr, tracker_id);
 			else
 				printk("Invalid address\n");
+		}
+		else if (strcmp(argv[0], command_ping) == 0)
+		{
+			if (argc != 3)
+			{
+				printk("Invalid number of arguments\n");
+				continue;
+			}
+			uint64_t addr = parse_u64(argv[1], 16);
+			uint64_t channel = parse_u64(argv[2], 10);
+			printk("Sending PING to %012llx on channel %d\n", addr, (int) channel);
+			esb_ping(addr, channel);
 		}
 		else if (strcmp(argv[0], command_pair) == 0)
 		{

@@ -72,6 +72,8 @@ static enum esb_tracker_state_t esb_tracker_state = NOT_PAIRED;
 static uint32_t esb_tracker_state_last_change = 0;
 static const uint8_t ESB_ALLOWED_CHANNEL_BUNDLES[] = {ESB_CHANNELS};
 static uint8_t currentChannelBundle = 0;
+static struct ping_request_t ping_request;
+static bool esb_skip_tdma = false;
 
 uint32_t tx_errors = 0;
 int64_t last_tx_success = 0;
@@ -220,6 +222,21 @@ void event_handler(struct esb_evt const *event)
 						// if(ABS(diff) != 0) 
 						// 	LOG_WRN("Our: %d, packet: %d, dongle's: %d, diff: %d, roundtrip: %d (was slot %d), clock 0x%08x", time, packet_time, received_time, diff, roundtrip_time, tdma_get_slot(packet_time), nrf_clock_lf_src_get(NRF_CLOCK));
 						break;
+					case ESB_PACKET_CONTROL_PONG:
+						if(rx_payload.length < 14) {
+							LOG_WRN("Short PONG packet received: %d byes", rx_payload.length);
+							return;
+						}
+						if(ping_request.target != 0) {
+							uint64_t sorce_hwid = *((uint64_t *) &rx_payload.data[2]) & 0xFFFFFFFFFFFF;
+							uint64_t target_hwid = *((uint64_t *) &rx_payload.data[8]) & 0xFFFFFFFFFFFF;
+							uint64_t *addr = (uint64_t *)NRF_FICR->DEVICEADDR;
+							if(ping_request.target == target_hwid && sorce_hwid == ((*addr) & 0xFFFFFFFFFFFF)) {
+								LOG_INF("PONG packet received from %012llX, RSSI %d, time %d ticks", sorce_hwid, rx_payload.rssi, (int) (k_uptime_ticks() - ping_request.time));
+								ping_request.target = 0;
+							}
+						}
+						return;
 				default:
 					LOG_WRN("Unknown control packet %d received", rx_payload.data[2]);
 				}
@@ -403,7 +420,7 @@ int esb_get_frequency(void) {
 void esb_write_current() {
 	clocks_start();
 	// Wait for our window to broadcast
-	while(!tdma_is_our_window())
+	while(!esb_skip_tdma && !tdma_is_our_window())
 		k_sleep(K_TICKS(1)); // Spin wait?
 	esb_flush_tx(); // this will clear all transmissions even if they did not complete
 	esb_write_payload(&tx_payload); // Add transmission to queue
@@ -431,6 +448,34 @@ void esb_write(uint8_t *data, uint8_t packet_sequnce)
 	esb_write_current();
 	last_packet_sequence = packet_sequnce;
 	packets_sent++;
+}
+
+void esb_ping(uint64_t receiver_addr, uint8_t channel) {
+	ping_request.target = receiver_addr;
+	ping_request.time = k_uptime_ticks();
+	ping_request.channel = channel;
+	ping_request.return_sate = esb_get_tracker_state();
+	esb_set_tracker_state(SEND_PING);
+}
+
+void esb_send_ping() {
+	uint8_t ch = esb_get_channel();
+
+	esb_set_channel(ping_request.channel);
+	esb_initialize(true, false);
+
+	uint64_t *addr = (uint64_t *)NRF_FICR->DEVICEADDR;
+	tx_payload.data[1] = ESB_PACKET_CONTROL_PING;
+	memcpy(&tx_payload.data[2], addr, 6);
+	memcpy(&tx_payload.data[8], &ping_request.target, 6);
+	tx_payload.pipe = 0; // Send ping on broadcast address
+
+	esb_write_current();
+	k_msleep(100);
+
+	esb_set_channel(ch);
+	esb_deinitialize();
+	esb_set_tracker_state(ping_request.return_sate);
 }
 
 bool esb_ready(void)
@@ -561,6 +606,9 @@ static void esb_thread(void)
 				// Fall-trhough
 			case CONNECTED:
 				clocks_allow_stopping(true);
+			break;
+			case SEND_PING:
+				esb_send_ping();
 			break;
 			default: // Other states are handled in a different place
 				break;
