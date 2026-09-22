@@ -139,7 +139,7 @@ void clock_switch(nrf_clock_lfclk_t source) {
     nrf_clock_task_trigger(NRF_CLOCK, NRF_CLOCK_TASK_LFCLKSTART);
 
 	waited_us = 0;
-    while (nrf_clock_is_running(NRF_CLOCK, NRF_CLOCK_DOMAIN_LFCLK, NULL) && (waited_us < 5000)) {
+    while (!nrf_clock_is_running(NRF_CLOCK, NRF_CLOCK_DOMAIN_LFCLK, NULL) && (waited_us < 5000)) {
         k_busy_wait(100);
         waited_us += 100;
     }
