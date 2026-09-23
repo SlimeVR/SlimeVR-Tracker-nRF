@@ -150,13 +150,16 @@ void pairing_dongle_response(const struct esb_payload *payload) {
     }
 }
 
-
 int compare_dongles(const void* a, const void* b) {
     const struct pairing_discovery_t* a_d = (const struct pairing_discovery_t*) a;
     const struct pairing_discovery_t* b_d = (const struct pairing_discovery_t*) b;
-    // TODO Add foce pair to sorting
-    // TODO Double-check sorting...
-    return (a_d->rssi < b_d->rssi) - (a_d->rssi > b_d->rssi);
+    int flag_comp = (a_d->flags & ESB_DONGLE_FLAG_ACCEPTS_NEW_TRACKERS) - (b_d->flags & ESB_DONGLE_FLAG_ACCEPTS_NEW_TRACKERS);
+    if(flag_comp != 0)
+        return flag_comp;
+    flag_comp = (a_d->flags & ESB_DONGLE_FLAG_FORCE_PAIRING) - (b_d->flags & ESB_DONGLE_FLAG_FORCE_PAIRING);
+    if(flag_comp != 0)
+        return flag_comp;   
+    return (a_d->rssi > b_d->rssi) - (a_d->rssi < b_d->rssi);
 }
 
 bool pairing_pick_dongle_and_pair(void) {
@@ -170,6 +173,12 @@ bool pairing_pick_dongle_and_pair(void) {
     }
     if(members != 0) {
         qsort(discovered_dongles, members, sizeof(struct pairing_discovery_t), compare_dongles);
+    }
+    for(int i = 0; i < members; ++i) {
+        struct pairing_discovery_t* dg = &discovered_dongles[i];
+        if(dg->dongle_hwid != 0) {
+            LOG_INF("Found dongle %d: %012llX, signal %d, flags %x", i, dg->dongle_hwid, dg->rssi, dg->flags);
+        }
     }
     for(int i = 0; i < members; ++i) {
         struct pairing_discovery_t* dg = &discovered_dongles[i];
