@@ -47,6 +47,7 @@ LOG_MODULE_REGISTER(esb_event, LOG_LEVEL_INF);
 
 static void esb_thread(void);
 K_THREAD_DEFINE(esb_thread_id, 1024, esb_thread, NULL, NULL, NULL, ESB_THREAD_PRIORITY, 0, 0);
+K_THREAD_DEFINE(esb_thread_id, 1024, esb_thread, NULL, NULL, NULL, ESB_THREAD_PRIORITY, 0, 0);
 
 static struct esb_payload rx_payload;
 static struct esb_payload tx_payload = ESB_EMPTY_PAYLOAD(0, ESB_PACKET_MAX_SIZE);
@@ -247,24 +248,6 @@ void event_handler(struct esb_evt const *event)
 					// if(ABS(diff) != 0)
 					// 	LOG_WRN("Our: %d, packet: %d, dongle's: %d, diff: %d, roundtrip: %d (was slot %d), clock 0x%08x", time, packet_time, received_time, diff, roundtrip_time, tdma_get_slot(packet_time), nrf_clock_lf_src_get(NRF_CLOCK));
 					break;
-				case ESB_PACKET_CONTROL_PONG:
-					if (rx_payload.length < 14)
-					{
-						LOG_WRN("Short PONG packet received: %d byes", rx_payload.length);
-						return;
-					}
-					if (ping_request.target != 0)
-					{
-						uint64_t sorce_hwid = *((uint64_t *)&rx_payload.data[2]) & 0xFFFFFFFFFFFF;
-						uint64_t target_hwid = *((uint64_t *)&rx_payload.data[8]) & 0xFFFFFFFFFFFF;
-						uint64_t *addr = (uint64_t *)NRF_FICR->DEVICEADDR;
-						if (ping_request.target == target_hwid && sorce_hwid == ((*addr) & 0xFFFFFFFFFFFF))
-						{
-							LOG_INF("PONG packet received from %012llX, RSSI %d, time %d ticks", sorce_hwid, rx_payload.rssi, (int)(k_uptime_ticks() - ping_request.time));
-							ping_request.target = 0;
-						}
-					}
-					return;
 				default:
 					LOG_WRN("Unknown control packet %d received", rx_payload.data[2]);
 				}
@@ -460,7 +443,7 @@ void esb_write_current()
 {
 	clocks_start();
 	// Wait for our window to broadcast
-	while (!esb_skip_tdma && !tdma_is_our_window())
+	while (!tdma_is_our_window())
 		k_sleep(K_TICKS(1));		// Spin wait?
 	esb_flush_tx();					// this will clear all transmissions even if they did not complete
 	esb_write_payload(&tx_payload); // Add transmission to queue
@@ -625,24 +608,12 @@ static void esb_thread(void)
 			}
 			break;
 		case FIND_DONGLE:
-			if (dongle_search_started == 0)
-			{
-				dongle_search_started = k_uptime_get_32();
-			}
 			if (!find_dongle())
 			{
 				LOG_WRN("Couldn't find our dongle");
-				if (use_shutdown && k_uptime_get_32() - dongle_search_started > CONFIG_3_SETTINGS_READ(CONFIG_3_CONNECTION_TIMEOUT_DELAY))
-				{
-					LOG_WRN("Can't find dongle in %dm", CONFIG_3_SETTINGS_READ(CONFIG_3_CONNECTION_TIMEOUT_DELAY) / 60000);
-					esb_set_tracker_state(CONNECTION_ERROR);
-					sys_request_system_off(false);
-					return;
-				}
-			}
-			else
-			{
-				dongle_search_started = 0;
+				esb_set_tracker_state(CONNECTION_ERROR);
+				sys_request_system_off(false);
+				return;
 			}
 			break;
 		case DONGLE_CONNECT:
@@ -663,22 +634,20 @@ static void esb_thread(void)
 		case CONNECTED:
 			clocks_allow_stopping(true);
 			break;
-		case SEND_PING:
-			esb_send_ping();
-			break;
 		default: // Other states are handled in a different place
 			break;
 		}
 		pairing_save_retained();
 
 		if (esb_get_tracker_state() == CONNECTED && tx_errors >= TX_ERROR_THRESHOLD)
-		{
-			esb_set_tracker_state(FIND_DONGLE); // Try to find dongle again
-		}
-		else if (tx_errors < TX_ERROR_THRESHOLD && get_status(SYS_STATUS_CONNECTION_ERROR) && k_uptime_get() - last_tx_fail > 3000) // TODO: there is possibly some race condition causing tx_error to potentially be above zero more often than not, so the check is more lenient; tx_error under threshold and last errors above threshold was not recent
-		{
-			set_status(SYS_STATUS_CONNECTION_ERROR, false);
-		}
+			if (esb_get_tracker_state() == CONNECTED && tx_errors >= TX_ERROR_THRESHOLD)
+			{
+				esb_set_tracker_state(FIND_DONGLE); // Try to find dongle again
+			}
+			else if (tx_errors < TX_ERROR_THRESHOLD && get_status(SYS_STATUS_CONNECTION_ERROR) && k_uptime_get() - last_tx_fail > 3000) // TODO: there is possibly some race condition causing tx_error to potentially be above zero more often than not, so the check is more lenient; tx_error under threshold and last errors above threshold was not recent
+			{
+				set_status(SYS_STATUS_CONNECTION_ERROR, false);
+			}
 		k_msleep(100);
 	}
 }
