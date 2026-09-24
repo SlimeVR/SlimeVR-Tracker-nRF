@@ -566,7 +566,7 @@ static void esb_thread(void)
 				}
 				if(!pairing_find_dongles_to_pair()) {
 					LOG_WRN("Pairing timeout");
-					if(use_shutdown && (!use_hid || !get_status(SYS_STATUS_USB_CONNECTED)) && k_uptime_get_32() - dongle_search_started > CONFIG_3_SETTINGS_READ(CONFIG_3_CONNECTION_TIMEOUT_DELAY)) {
+					if(use_shutdown && (!use_hid || !get_status(SYS_STATUS_USB_CONNECTED)) && !get_status(SYS_STATUS_SERIAL_ACTIVE) && k_uptime_get_32() - dongle_search_started > CONFIG_3_SETTINGS_READ(CONFIG_3_CONNECTION_TIMEOUT_DELAY)) {
 						esb_set_tracker_state(PAIRING_ERROR);
 						sys_request_system_off(false);
 						return;
@@ -578,9 +578,7 @@ static void esb_thread(void)
 			case PAIRING_PICK_DONGLE:
 				if(!pairing_pick_dongle_and_pair()) {
 					LOG_WRN("No dongles approved pairing");
-					esb_set_tracker_state(PAIRING_ERROR);
-					sys_request_system_off(false);
-					return;
+					esb_set_tracker_state(PAIRING_FIND_DONGLES);
 				}
 				break;
 			case FIND_DONGLE:
@@ -589,7 +587,7 @@ static void esb_thread(void)
 				}
 				if(!find_dongle()) {
 					LOG_WRN("Couldn't find our dongle");
-					if(use_shutdown && (!use_hid || !get_status(SYS_STATUS_USB_CONNECTED)) && k_uptime_get_32() - dongle_search_started > CONFIG_3_SETTINGS_READ(CONFIG_3_CONNECTION_TIMEOUT_DELAY)) {
+					if(use_shutdown && (!use_hid || !get_status(SYS_STATUS_USB_CONNECTED)) && !get_status(SYS_STATUS_SERIAL_ACTIVE) && k_uptime_get_32() - dongle_search_started > CONFIG_3_SETTINGS_READ(CONFIG_3_CONNECTION_TIMEOUT_DELAY)) {
 						LOG_WRN("Can't find dongle in %dm", CONFIG_3_SETTINGS_READ(CONFIG_3_CONNECTION_TIMEOUT_DELAY) / 60000);
 						esb_set_tracker_state(CONNECTION_ERROR);
 						sys_request_system_off(false);
