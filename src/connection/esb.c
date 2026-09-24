@@ -550,6 +550,8 @@ static void esb_thread(void)
 #endif
 	uint32_t dongle_search_started = 0;
 
+	// TODO : Don't shut down unconnected/unpaired when communicating via usb
+
 	while (1)
 	{
 		switch(esb_tracker_state) {
@@ -558,11 +560,18 @@ static void esb_thread(void)
 				// Fall-trhough
 			case NOT_PAIRED:
 			case PAIRING_FIND_DONGLES:
+				if(dongle_search_started == 0) {
+					dongle_search_started = k_uptime_get_32();
+				}
 				if(!pairing_find_dongles_to_pair()) {
 					LOG_WRN("Pairing timeout");
-					esb_set_tracker_state(PAIRING_ERROR);
-					sys_request_system_off(false);
-					return;
+					if(use_shutdown && k_uptime_get_32() - dongle_search_started > CONFIG_3_SETTINGS_READ(CONFIG_3_CONNECTION_TIMEOUT_DELAY)) {
+						esb_set_tracker_state(PAIRING_ERROR);
+						sys_request_system_off(false);
+						return;
+					}
+				} else {
+					dongle_search_started = 0;
 				}
 			break;
 			case PAIRING_PICK_DONGLE:
