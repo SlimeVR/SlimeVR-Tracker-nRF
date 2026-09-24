@@ -34,6 +34,8 @@
 
 #include "sensor.h"
 
+#include "shift.h"
+
 #define SPI_OP SPI_MODE_CPOL | SPI_MODE_CPHA | SPI_WORD_SET(8)
 
 #if DT_NODE_HAS_STATUS(DT_NODELABEL(imu_spi), okay)
@@ -116,6 +118,8 @@ static int sensor_mag_id = -1;
 static const sensor_imu_t *sensor_imu = &sensor_imu_none;
 static const sensor_mag_t *sensor_mag = &sensor_mag_none;
 
+static uint8_t current_sensor;
+
 // #define DEBUG true
 
 #if DEBUG
@@ -128,9 +132,9 @@ static int sensor_scan(void);
 static int sensor_init(void);
 static void sensor_loop(void);
 static struct k_thread sensor_thread_id;
-static K_THREAD_STACK_DEFINE(sensor_thread_id_stack, 1024);
+static K_THREAD_STACK_DEFINE(sensor_thread_id_stack, 2048);
 
-K_THREAD_DEFINE(sensor_init_thread_id, 512, sensor_request_scan, true, NULL, NULL, SENSOR_REQUEST_SCAN_THREAD_PRIORITY, 0, 0);
+K_THREAD_DEFINE(sensor_init_thread_id, 1024, sensor_request_scan, true, NULL, NULL, SENSOR_REQUEST_SCAN_THREAD_PRIORITY, 0, 0);
 // crashing on nrf54l at 256
 
 /* init thread handles starting scanner on the main thread, and then switches to the loop, before returning
@@ -146,8 +150,24 @@ K_THREAD_DEFINE(sensor_init_thread_id, 512, sensor_request_scan, true, NULL, NUL
 static const struct gpio_dt_spec int0 = GPIO_DT_SPEC_GET(ZEPHYR_USER_NODE, int0_gpios);
 #endif
 
-#if DT_NODE_HAS_PROP(ZEPHYR_USER, multiple_imus)
-#define HAS_MULTIPLE_IMUS true
+// Multiple imus connected, assume shift register is connected.
+#if DT_NODE_HAS_PROP(ZEPHYR_USER_NODE, multiple_imus)
+#define HAS_MULTIPLE_IMUS false
+static const struct gpio_dt_spec shift_reg0_dsb = GPIO_DT_SPEC_GET(ZEPHYR_USER_NODE, reg0_dsb_gpios);
+static const struct gpio_dt_spec shift_reg0_cp = GPIO_DT_SPEC_GET(ZEPHYR_USER_NODE, reg0_cp_gpios);
+
+static const struct gpio_dt_spec shift_reg1_dsb = GPIO_DT_SPEC_GET(ZEPHYR_USER_NODE, reg1_dsb_gpios);
+static const struct gpio_dt_spec shift_reg1_cp = GPIO_DT_SPEC_GET(ZEPHYR_USER_NODE, reg1_cp_gpios);
+
+static const sensor_shift_register_t shift_reg0 = {
+	.dsb = shift_reg0_dsb,
+	.cp = shift_reg0_cp};
+static const sensor_shift_register_t shift_reg1 = {
+	.dsb = shift_reg1_dsb,
+	.cp = shift_reg1_cp};
+
+static sensor_shift_register_t shift_registers[SENSOR_SHIFT_REGISTER_COUNT] = {shift_reg0, shift_reg1};
+
 #endif
 
 const char *sensor_get_sensor_imu_name(void)
@@ -192,6 +212,7 @@ int sensor_get_sensor_temperature(float *ptr)
 
 void sensor_scan_thread(void)
 {
+
 	int err;
 	sys_interface_resume(); // make sure interfaces are enabled
 	err = sensor_scan();	// IMUs discovery
@@ -224,10 +245,12 @@ int sensor_scan(void)
 	// for SPI scan, set frequency of 10MHz, it will be set later by the driver initialization if needed
 	// sensor_imu_spi_dev.config.frequency = MHZ(10);
 	LOG_INF("Scanning SPI bus for IMU");
+
 	imu_id = sensor_scan_imu_spi(&sensor_imu_spi_dev, &sensor_imu_dev_reg);
+#endif
 	if (imu_id >= 0)
 		sensor_interface_register_sensor_imu_spi(&sensor_imu_spi_dev);
-#endif
+
 #if SENSOR_IMU_EXISTS
 	if (imu_id < 0)
 	{
@@ -664,6 +687,7 @@ static void sensor_update_sensor_state(void)
 
 int sensor_init(void)
 {
+
 	int err;
 	LOG_INF("Sensor init, shutdown first");
 	// TODO : Do not reset sensor if we just WOM'ed
@@ -803,7 +827,9 @@ void sensor_loop(void)
 {
 	if (!sensor_sensor_init)
 		return;
+
 	main_running = true;
+
 	sys_interface_resume();	 // make sure interfaces are enabled
 	int err = sensor_init(); // Initialize IMUs and Fusion // TODO: run as thread before loop
 	// TODO: handle imu init error, maybe restart device?
@@ -814,6 +840,7 @@ void sensor_loop(void)
 		main_ok = true;
 	while (1)
 	{
+
 		int64_t time_begin = k_uptime_get();
 		if (main_ok)
 		{

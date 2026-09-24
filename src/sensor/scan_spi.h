@@ -24,7 +24,10 @@
 #define SLIMENRF_SENSOR_SCAN_SPI
 
 #include <zephyr/drivers/spi.h>
+#include "shift.h"
 
 int sensor_scan_spi(struct spi_dt_spec *bus, uint8_t *spi_dev_reg, int dev_addr_count, const uint8_t dev_reg[], const uint8_t dev_id[], const int dev_ids[]);
+
+int sensor_scan_spi_shifter(struct spi_dt_spec *bus, uint8_t *spi_dev_reg, int dev_addr_count, const uint8_t dev_reg[], const uint8_t dev_id[], const int dev_ids[], sensor_shift_register_t *sensor_shift_registers);
 
 #endif

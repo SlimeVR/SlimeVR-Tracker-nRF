@@ -7,6 +7,7 @@
 		group1 {
 			psels = <NRF_PSEL(SPIM_SCK, 2, 1)>,
 				<NRF_PSEL(SPIM_MOSI, 2, 2)>;
+			nordic,drive-mode = <NRF_DRIVE_E0E1>;
 		};
 
 		group2 {
@@ -78,8 +79,18 @@
 		};
 	};
 
+	csgpio: csgpio {
+		compatible = "svr,lv164-gpio";
+		label = "CSGPIO_0";
+		gpio-controller;
+		#gpio-cells = <2>;
+		dsb-gpios = <&gpio1 9 (GPIO_PULL_DOWN | GPIO_ACTIVE_HIGH)>;
+		cp-gpios = <&gpio1 8 (GPIO_PULL_DOWN | GPIO_ACTIVE_HIGH)>;
+		num-outputs = <8>;
+	};
+
 	zephyr,user {
-		int0-gpios = <&gpio0 2 0>;
+		//int0-gpios = <&gpio0 2 0>;
 		reg0-dsb-gpios = <&gpio1 9 (GPIO_PULL_DOWN | GPIO_ACTIVE_HIGH)>;
 		reg0-cp-gpios = <&gpio1 8 (GPIO_PULL_DOWN | GPIO_ACTIVE_HIGH)>;
 		reg1-dsb-gpios = <&gpio1 12 (GPIO_PULL_DOWN | GPIO_ACTIVE_HIGH)>;
@@ -194,12 +205,85 @@
 	pinctrl-1 = <&spi00_sleep>;
 	pinctrl-names = "default", "sleep";
 
-	imu_spi: imu_spi@0 {
+	cs-gpios = <&csgpio 0 GPIO_ACTIVE_LOW>,
+		   <&csgpio 1 GPIO_ACTIVE_LOW>,
+		   <&csgpio 2 GPIO_ACTIVE_LOW>,
+		   <&csgpio 3 GPIO_ACTIVE_LOW>,
+		   <&csgpio 4 GPIO_ACTIVE_LOW>,
+		   <&csgpio 5 GPIO_ACTIVE_LOW>,
+		   <&csgpio 6 GPIO_ACTIVE_LOW>,
+		   <&csgpio 7 GPIO_ACTIVE_LOW>;
+
+	imu_spi: imu_spi@3 {
 		status = "okay";
 		compatible = "vnd,spi-device";
 		label = "imu-spi";
+		reg = <3>;
+		spi-max-frequency = <DT_FREQ_M(16)>;
+	};
+
+	imu_spi_0: imu_spi_0@0 {
+		status = "okay";
+		compatible = "vnd,spi-device";
+		label = "imu-spi-0";
 		reg = <0>;
-		spi-max-frequency = <DT_FREQ_M(2)>;
+		spi-max-frequency = <DT_FREQ_M(16)>;
+	};
+
+	imu_spi_1: imu_spi_1@1 {
+		status = "okay";
+		compatible = "vnd,spi-device";
+		label = "imu-spi-1";
+		reg = <1>;
+		spi-max-frequency = <DT_FREQ_M(16)>;
+	};
+
+	imu_spi_2: imu_spi_2@2 {
+		status = "okay";
+		compatible = "vnd,spi-device";
+		label = "imu-spi-2";
+		reg = <2>;
+		spi-max-frequency = <DT_FREQ_M(16)>;
+	};
+
+	imu_spi_3: imu_spi_3@3 {
+		status = "okay";
+		compatible = "vnd,spi-device";
+		label = "imu-spi-3";
+		reg = <3>;
+		spi-max-frequency = <DT_FREQ_M(16)>;
+	};
+
+	imu_spi_4: imu_spi_4@4 {
+		status = "okay";
+		compatible = "vnd,spi-device";
+		label = "imu-spi-4";
+		reg = <4>;
+		spi-max-frequency = <DT_FREQ_M(16)>;
+	};
+
+	imu_spi_5: imu_spi_5@5 {
+		status = "okay";
+		compatible = "vnd,spi-device";
+		label = "imu-spi-5";
+		reg = <5>;
+		spi-max-frequency = <DT_FREQ_M(16)>;
+	};
+
+	imu_spi_6: imu_spi_6@6 {
+		status = "okay";
+		compatible = "vnd,spi-device";
+		label = "imu-spi-6";
+		reg = <6>;
+		spi-max-frequency = <DT_FREQ_M(16)>;
+	};
+
+	imu_spi_7: imu_spi_7@7 {
+		status = "okay";
+		compatible = "vnd,spi-device";
+		label = "imu-spi-7";
+		reg = <7>;
+		spi-max-frequency = <DT_FREQ_M(16)>;
 	};
 };
 #include <nordic/nrf54l15_partition.dtsi>

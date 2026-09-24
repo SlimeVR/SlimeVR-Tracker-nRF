@@ -11,7 +11,7 @@
 LOG_MODULE_REGISTER(led, LOG_LEVEL_INF);
 
 static void led_thread(void);
-K_THREAD_DEFINE(led_thread_id, 512, led_thread, NULL, NULL, NULL, LED_THREAD_PRIORITY, 0, 0);
+K_THREAD_DEFINE(led_thread_id, 1024, led_thread, NULL, NULL, NULL, LED_THREAD_PRIORITY, 0, 0);
 
 #define ZEPHYR_USER_NODE DT_PATH(zephyr_user)
 
@@ -79,7 +79,7 @@ static enum sys_led_pattern current_led_pattern;
 static int current_priority;
 
 #if LED_EXISTS || LED_STRIP_EXISTS
-static enum sys_led_pattern led_patterns[SYS_LED_PATTERN_DEPTH] = {[0 ... (SYS_LED_PATTERN_DEPTH - 1)] = SYS_LED_PATTERN_OFF};
+static enum sys_led_pattern led_patterns[SYS_LED_PATTERN_DEPTH] = {[0 ...(SYS_LED_PATTERN_DEPTH - 1)] = SYS_LED_PATTERN_OFF};
 static int led_pattern_state;
 
 static int led_pin_init(void)
@@ -199,35 +199,35 @@ static void led_resume(void)
 
 #ifdef LED_RGB_COLOR
 static const int led_pwm_period[5][3] = {
-	{-1, -1, -1}, // Default
-	{0, 10000, 0}, // Success
-	{10000, 0, 0}, // Error
+	{-1, -1, -1},	 // Default
+	{0, 10000, 0},	 // Success
+	{10000, 0, 0},	 // Error
 	{8000, 2000, 0}, // Charging
-	{0, 0, 10000}, // Pairing
+	{0, 0, 10000},	 // Pairing
 };
 #elif defined(LED_TRI_COLOR)
 static const int led_pwm_period[5][3] = {
-	{0, 0, 10000}, // Default
-	{0, 10000, 0}, // Success
-	{10000, 0, 0}, // Error
+	{0, 0, 10000},	 // Default
+	{0, 10000, 0},	 // Success
+	{10000, 0, 0},	 // Error
 	{6000, 4000, 0}, // Charging
-	{0, 0, 10000}, // Pairing
+	{0, 0, 10000},	 // Pairing
 };
 #elif defined(LED_RG_COLOR)
 static const int led_pwm_period[5][2] = {
-	{-1, -1}, // Default
-	{0, 10000}, // Success
-	{10000, 0}, // Error
+	{-1, -1},	  // Default
+	{0, 10000},	  // Success
+	{10000, 0},	  // Error
 	{8000, 2000}, // Charging
 	{4000, 6000}, // Pairing
 };
 #elif defined(LED_DUAL_COLOR)
 static const int led_pwm_period[5][2] = {
-	{0, 10000}, // Default
-	{0, 10000}, // Success
-	{10000, 0}, // Error
+	{0, 10000},	  // Default
+	{0, 10000},	  // Success
+	{10000, 0},	  // Error
 	{6000, 4000}, // Charging
-	{0, 10000}, // Pairing
+	{0, 10000},	  // Pairing
 };
 #else
 static const int led_pwm_period[5][1] = {
@@ -427,8 +427,8 @@ static void led_thread(void)
 			break;
 		case SYS_LED_PATTERN_PULSE_PERSIST:
 			led_pattern_state = (led_pattern_state + 1) % 1000;
-//			float led_value = sinf(led_pattern_state * (M_PI / 1000));
-//			led_pin_set(SYS_LED_COLOR_CHARGING, 10000, led_value * 10000);
+			//			float led_value = sinf(led_pattern_state * (M_PI / 1000));
+			//			led_pin_set(SYS_LED_COLOR_CHARGING, 10000, led_value * 10000);
 			int led_value = led_pattern_state > 500 ? 1000 - led_pattern_state : led_pattern_state;
 			if (led_value < 200)
 				led_value = (led_value) * 30;

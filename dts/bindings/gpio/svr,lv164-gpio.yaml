@@ -1,0 +1,28 @@
+compatible: "svr,lv164-gpio"
+
+description: "Driver to make reading from multiple imus easier"
+
+include: [gpio-controller.yaml, base.yaml]
+
+properties:
+  dsb-gpios:
+    type: phandle-array
+    required: true
+    description: Serial data input pin (DS) of the shift register.
+
+  cp-gpios:
+    type: phandle-array
+    required: true
+    description: Shift clock pin (CP) of the shift register.
+
+  num-outputs:
+    type: int
+    required: true
+    description: Number of output bits (8 for a single 74LV164, 16 if two are daisy-chained, etc).
+
+  "#gpio-cells":
+    const: 2
+
+gpio-cells:
+  - pin
+  - flags

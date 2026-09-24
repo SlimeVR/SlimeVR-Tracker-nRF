@@ -34,7 +34,7 @@ int icm45_init(float clock_rate, float accel_time, float gyro_time, float *accel
 {
 	// setup interface for SPI
 	// TODO: Fix SPI speed for good on nrf54l15
-	if (!sensor_interface_spi_configure(SENSOR_INTERFACE_DEV_IMU, MHZ(2), 0))
+	if (!sensor_interface_spi_configure(SENSOR_INTERFACE_DEV_IMU, MHZ(16), 0))
 		fifo_multiplier_factor = FIFO_MULT_SPI; // SPI mode
 	else
 		fifo_multiplier_factor = FIFO_MULT; // I2C mode
@@ -96,7 +96,7 @@ void icm45_shutdown(void)
 		}
 		if ((rst_state & 0x80) != 0x80)
 		{
-			k_usleep(10);
+			k_usleep(30);
 			LOG_DBG("IMU reset is pending (0x%02x), waiting...", rst_state);
 		}
 		else

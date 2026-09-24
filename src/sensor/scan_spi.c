@@ -26,75 +26,8 @@
 
 LOG_MODULE_REGISTER(sensor_scan_spi, LOG_LEVEL_DBG);
 
-#define ZEPHYR_USER_NODE DT_PATH(zephyr_user)
-
-static const struct gpio_dt_spec reg0_dsb = GPIO_DT_SPEC_GET(ZEPHYR_USER_NODE, reg0_dsb_gpios);
-static const struct gpio_dt_spec reg0_cp = GPIO_DT_SPEC_GET(ZEPHYR_USER_NODE, reg0_cp_gpios);
-
-static const struct gpio_dt_spec reg1_dsb = GPIO_DT_SPEC_GET(ZEPHYR_USER_NODE, reg1_dsb_gpios);
-static const struct gpio_dt_spec reg1_cp = GPIO_DT_SPEC_GET(ZEPHYR_USER_NODE, reg1_cp_gpios);
-
-void shift_pattern(const struct gpio_dt_spec *dsb, const struct gpio_dt_spec *cp, uint8_t pattern)
-{
-	LOG_INF("Shifting pattern %d", pattern);
-
-	for (int i = 7; i >= 0; i--)
-	{
-		uint8_t bit = (pattern >> i) & 0x01;
-
-		gpio_pin_set_dt(dsb, bit);
-		// k_busy_wait(10);
-
-		gpio_pin_set_dt(cp, 1);
-		// k_busy_wait(10);
-		gpio_pin_set_dt(cp, 0);
-		// k_busy_wait(10);
-	}
-	gpio_pin_set_dt(dsb, 0);
-	k_busy_wait(10);
-}
-
-int init_shift_reg(void)
-{
-	if (!gpio_is_ready_dt(&reg0_dsb) || !gpio_is_ready_dt(&reg0_cp) ||
-		!gpio_is_ready_dt(&reg1_dsb) || !gpio_is_ready_dt(&reg1_cp))
-	{
-		LOG_ERR("Shift register GPIO pins not ready");
-		return -1;
-	}
-
-	gpio_pin_configure_dt(&reg0_dsb, GPIO_OUTPUT_ACTIVE);
-	gpio_pin_configure_dt(&reg0_cp, GPIO_OUTPUT_INACTIVE);
-	gpio_pin_configure_dt(&reg1_dsb, GPIO_OUTPUT_ACTIVE);
-	gpio_pin_configure_dt(&reg1_cp, GPIO_OUTPUT_INACTIVE);
-
-	LOG_INF("Settings shift reg0 all high");
-	shift_pattern(&reg0_dsb, &reg0_cp, 0xFF);
-	LOG_INF("Settings shift reg1 all high");
-	shift_pattern(&reg1_dsb, &reg1_cp, 0xFF);
-
-	k_busy_wait(75);
-
-	/*
-	gpio_pin_configure_dt(&imu_int, GPIO_OUTPUT_INACTIVE);
-
-	k_busy_wait(75);
-
-	gpio_pin_set_dt(&imu_int, 1);
-	k_busy_wait(75);
-	gpio_pin_set_dt(&imu_int, 0);
-	k_busy_wait(75);
-*/
-	return 0;
-}
-
 int sensor_scan_spi(struct spi_dt_spec *bus, uint8_t *spi_dev_reg, int dev_addr_count, const uint8_t dev_reg[], const uint8_t dev_id[], const int dev_ids[])
 {
-	init_shift_reg();
-	//  shift_cs(&reg0_dsb, &reg0_cp);
-
-	// for (int k = 0; k < 7; k++)
-	//{
 	uint8_t buf[3] = {0};
 	uint8_t tx_data[3] = {0};
 	struct spi_buf tx_buf = {.buf = tx_data, .len = 3};
@@ -124,9 +57,9 @@ int sensor_scan_spi(struct spi_dt_spec *bus, uint8_t *spi_dev_reg, int dev_addr_
 				tx_data[0] = reg | 0x80; // set read bit
 				LOG_DBG("Scanning register: 0x%02X", reg);
 				// TODO: BMM150 workaround?
-				shift_pattern(&reg0_dsb, &reg0_cp, 0xF7);
+				LOG_INF("Start transceive");
 				int err = spi_transceive_dt(bus, &tx, &rx);
-				shift_pattern(&reg0_dsb, &reg0_cp, 0xFF);
+				LOG_INF("end transceive");
 				LOG_DBG("err: %d", err);
 				id = buf[1] ? buf[1] : buf[2]; // ID may be in first byte, or skip one byte (such as BMI270)
 				LOG_DBG("Read value: 0x%02X, 0x%02X, 0x%02X (0x%02X)", buf[0], buf[1], buf[2], id);
@@ -158,7 +91,6 @@ int sensor_scan_spi(struct spi_dt_spec *bus, uint8_t *spi_dev_reg, int dev_addr_
 			found_id += id_count;
 		}
 	}
-	//}
 
 	if (*spi_dev_reg != 0xFF) // preferred register failed, try again with full scan
 	{
