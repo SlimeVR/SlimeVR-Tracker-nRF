@@ -529,6 +529,7 @@ void connect_to_dongle() {
 
 static void esb_thread(void)
 {
+	k_msleep(5000);
 	clocks_start();
 	clock_init_external();
 
@@ -565,7 +566,7 @@ static void esb_thread(void)
 				}
 				if(!pairing_find_dongles_to_pair()) {
 					LOG_WRN("Pairing timeout");
-					if(use_shutdown && k_uptime_get_32() - dongle_search_started > CONFIG_3_SETTINGS_READ(CONFIG_3_CONNECTION_TIMEOUT_DELAY)) {
+					if(use_shutdown && (!use_hid || !get_status(SYS_STATUS_USB_CONNECTED)) && k_uptime_get_32() - dongle_search_started > CONFIG_3_SETTINGS_READ(CONFIG_3_CONNECTION_TIMEOUT_DELAY)) {
 						esb_set_tracker_state(PAIRING_ERROR);
 						sys_request_system_off(false);
 						return;
@@ -588,7 +589,7 @@ static void esb_thread(void)
 				}
 				if(!find_dongle()) {
 					LOG_WRN("Couldn't find our dongle");
-					if(use_shutdown && k_uptime_get_32() - dongle_search_started > CONFIG_3_SETTINGS_READ(CONFIG_3_CONNECTION_TIMEOUT_DELAY)) {
+					if(use_shutdown && (!use_hid || !get_status(SYS_STATUS_USB_CONNECTED)) && k_uptime_get_32() - dongle_search_started > CONFIG_3_SETTINGS_READ(CONFIG_3_CONNECTION_TIMEOUT_DELAY)) {
 						LOG_WRN("Can't find dongle in %dm", CONFIG_3_SETTINGS_READ(CONFIG_3_CONNECTION_TIMEOUT_DELAY) / 60000);
 						esb_set_tracker_state(CONNECTION_ERROR);
 						sys_request_system_off(false);
@@ -606,15 +607,23 @@ static void esb_thread(void)
 				// only raise error while not potentially communicating by usb
 				if (!get_status(SYS_STATUS_CONNECTION_ERROR) && (!use_hid || !get_status(SYS_STATUS_USB_CONNECTED)))
 					set_status(SYS_STATUS_CONNECTION_ERROR, true);
-				if (use_shutdown && k_uptime_get() - last_tx_success > CONFIG_3_SETTINGS_READ(CONFIG_3_CONNECTION_TIMEOUT_DELAY)) // shutdown if receiver is not detected // TODO: is shutdown necessary if usb is connected at the time?
-				{
-					LOG_WRN("No response from receiver in %dm", CONFIG_3_SETTINGS_READ(CONFIG_3_CONNECTION_TIMEOUT_DELAY) / 60000);
-					sys_request_system_off(false);
-					break;
-				}
-				// Fall-trhough
+				// TODO This state is weird and it's not handled gracefully now
+				// TODO Decide what we want to do in this state and how we want to
+				// communicate with the user
+				clocks_allow_stopping(true);
+				break;
 			case CONNECTED:
 				clocks_allow_stopping(true);
+				if(tx_errors >= TX_ERROR_THRESHOLD) {
+					// TODO : Raise connection error instead?
+					esb_set_tracker_state(FIND_DONGLE);
+					if (!get_status(SYS_STATUS_CONNECTION_ERROR) && (!use_hid || !get_status(SYS_STATUS_USB_CONNECTED)))
+						set_status(SYS_STATUS_CONNECTION_ERROR, true);
+				}
+				else if (tx_errors < TX_ERROR_THRESHOLD && get_status(SYS_STATUS_CONNECTION_ERROR) && k_uptime_get() - last_tx_fail > 3000) // TODO: there is possibly some race condition causing tx_error to potentially be above zero more often than not, so the check is more lenient; tx_error under threshold and last errors above threshold was not recent
+				{
+					set_status(SYS_STATUS_CONNECTION_ERROR, false);
+				}
 			break;
 			case SEND_PING:
 				esb_send_ping();
@@ -623,15 +632,7 @@ static void esb_thread(void)
 				break;
 		}
 		pairing_save_retained();
-
-		if(esb_get_tracker_state() == CONNECTED && tx_errors >= TX_ERROR_THRESHOLD)
-		{
-			esb_set_tracker_state(FIND_DONGLE); // Try to find dongle again
-		}
-		else if (tx_errors < TX_ERROR_THRESHOLD && get_status(SYS_STATUS_CONNECTION_ERROR) && k_uptime_get() - last_tx_fail > 3000) // TODO: there is possibly some race condition causing tx_error to potentially be above zero more often than not, so the check is more lenient; tx_error under threshold and last errors above threshold was not recent
-		{
-			set_status(SYS_STATUS_CONNECTION_ERROR, false);
-		}
+		
 		k_msleep(100);
 	}
 }

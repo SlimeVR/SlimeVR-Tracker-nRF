@@ -172,6 +172,7 @@ static void print_connection(void)
 	printk("Device address: %012llX\n", *(uint64_t *)NRF_FICR->DEVICEADDR & 0xFFFFFFFFFFFF);
 	printk(paired ? "Receiver address: %012llX\n" : "Receiver address: None\n", (*(uint64_t *)&retained->paired_addr[0] >> 16) & 0xFFFFFFFFFFFF);
 	printk("Channel frequency: %d\n", esb_get_frequency());
+	printk("Device status: %d, ESB state: %d\n", get_status(SYS_STATUS_ALL), esb_get_tracker_state());
 }
 
 static void print_battery(void)
