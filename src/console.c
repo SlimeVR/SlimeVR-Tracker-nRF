@@ -490,6 +490,7 @@ static void print_help(void)
 	printk("\ninfo                         Get device information\n");
 	printk("uptime                       Get device uptime\n");
 	printk("reboot                       Soft reset the device\n");
+	printk("shutdown                     Power off the device\n");
 	printk("battery                      Get battery information\n");
 	printk("\nscan                         Restart sensor scan\n");
 	printk("calibrate                    Calibrate sensor ZRO\n");
@@ -535,6 +536,7 @@ static void console_thread(void)
 	const char command_info[] = "info";
 	const char command_uptime[] = "uptime";
 	const char command_reboot[] = "reboot";
+	const char command_shutdown[] = "shutdown";
 	const char command_battery[] = "battery";
 	const char command_scan[] = "scan";
 	const char command_calibrate[] = "calibrate";
@@ -605,6 +607,10 @@ static void console_thread(void)
 		else if (strcmp(argv[0], command_reboot) == 0)
 		{
 			sys_request_system_reboot(false);
+		}
+		else if (strcmp(argv[0], command_shutdown) == 0)
+		{
+			sys_request_system_off(false);
 		}
 		else if (strcmp(argv[0], command_battery) == 0)
 		{
