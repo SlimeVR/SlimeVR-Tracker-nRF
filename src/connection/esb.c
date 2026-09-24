@@ -529,7 +529,7 @@ void connect_to_dongle() {
 
 static void esb_thread(void)
 {
-	k_msleep(5000);
+	//k_msleep(5000);
 	clocks_start();
 	clock_init_external();
 
@@ -632,7 +632,7 @@ static void esb_thread(void)
 				break;
 		}
 		pairing_save_retained();
-		
+
 		k_msleep(100);
 	}
 }
