@@ -138,8 +138,8 @@ bool esb_wait_state_change(enum esb_tracker_state_t from_state, uint32_t timeout
 
 #define ESB_RIMARY_ADVERTISEMENT_CHANNEL 22
 #define ESB_SECONDARY_ADVERTISEMENT_CHANNEL 4
-#define ESB_CHANNELS_AMOUNT 36
-#define ESB_CHANNELS 52, 72, 74, 76, 78, 82, 50, 24, 48, 70, 68, 46, 44, 20, 54, 56, 28, 30, 6, 8, 10, 12, 14, 16, 18, 32, 34, 36, 38, 40, 42, 58, 60, 62, 64, 66
+#define ESB_CHANNELS_AMOUNT 37
+#define ESB_CHANNELS 78, 76, 80, 82, 74, 72, 52, 50, 24, 48, 70, 68, 46, 44, 20, 54, 56, 28, 30, 6, 8, 10, 12, 14, 16, 18, 32, 34, 36, 38, 40, 42, 58, 60, 62, 64, 66
 
 #define ESB_SEARCH_TIMEOUT 30000
 #define ESB_SEARCH_DONGLES_PAIRING 2000
