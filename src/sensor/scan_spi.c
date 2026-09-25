@@ -24,7 +24,7 @@
 #include <zephyr/types.h>
 #include <zephyr/drivers/spi.h>
 
-LOG_MODULE_REGISTER(sensor_scan_spi, LOG_LEVEL_DBG);
+LOG_MODULE_REGISTER(sensor_scan_spi, LOG_LEVEL_INF);
 
 int sensor_scan_spi(struct spi_dt_spec *bus, uint8_t *spi_dev_reg, int dev_addr_count, const uint8_t dev_reg[], const uint8_t dev_id[], const int dev_ids[])
 {
@@ -57,9 +57,7 @@ int sensor_scan_spi(struct spi_dt_spec *bus, uint8_t *spi_dev_reg, int dev_addr_
 				tx_data[0] = reg | 0x80; // set read bit
 				LOG_DBG("Scanning register: 0x%02X", reg);
 				// TODO: BMM150 workaround?
-				LOG_INF("Start transceive");
 				int err = spi_transceive_dt(bus, &tx, &rx);
-				LOG_INF("end transceive");
 				LOG_DBG("err: %d", err);
 				id = buf[1] ? buf[1] : buf[2]; // ID may be in first byte, or skip one byte (such as BMI270)
 				LOG_DBG("Read value: 0x%02X, 0x%02X, 0x%02X (0x%02X)", buf[0], buf[1], buf[2], id);

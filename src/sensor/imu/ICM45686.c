@@ -28,7 +28,7 @@ static float clock_scale = 1; // ODR is scaled by clock_rate/clock_reference
 static float fifo_multiplier_factor = FIFO_MULT;
 static float fifo_multiplier = 0;
 
-LOG_MODULE_REGISTER(ICM45686, LOG_LEVEL_DBG);
+LOG_MODULE_REGISTER(ICM45686, LOG_LEVEL_INF);
 
 int icm45_init(float clock_rate, float accel_time, float gyro_time, float *accel_actual_time, float *gyro_actual_time)
 {

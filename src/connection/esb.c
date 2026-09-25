@@ -43,10 +43,9 @@
 #define TX_ERROR_CLEAR_RATE 10
 #define FREQUENCY_HOPPING false
 
-LOG_MODULE_REGISTER(esb_event, LOG_LEVEL_INF);
+LOG_MODULE_REGISTER(esb_event, LOG_LEVEL_DBG);
 
 static void esb_thread(void);
-K_THREAD_DEFINE(esb_thread_id, 1024, esb_thread, NULL, NULL, NULL, ESB_THREAD_PRIORITY, 0, 0);
 K_THREAD_DEFINE(esb_thread_id, 1024, esb_thread, NULL, NULL, NULL, ESB_THREAD_PRIORITY, 0, 0);
 
 static struct esb_payload rx_payload;
@@ -74,7 +73,6 @@ static uint32_t esb_tracker_state_last_change = 0;
 static const uint8_t ESB_ALLOWED_CHANNEL_BUNDLES[] = {ESB_CHANNELS};
 static uint8_t currentChannelBundle = 0;
 static struct ping_request_t ping_request;
-static bool esb_skip_tdma = false;
 
 uint32_t tx_errors = 0;
 int64_t last_tx_success = 0;
@@ -114,7 +112,7 @@ void event_handler(struct esb_evt const *event)
 	switch (event->evt_id)
 	{
 	case ESB_EVENT_TX_SUCCESS:
-		last_tx_success = k_uptime_get();
+		last_tx_success = k_uptime_ticks();
 		if (tx_errors > TX_ERROR_CLEAR_RATE)
 			tx_errors -= TX_ERROR_CLEAR_RATE;
 		else
@@ -122,7 +120,7 @@ void event_handler(struct esb_evt const *event)
 		LOG_DBG("TX SUCCESS");
 		break;
 	case ESB_EVENT_TX_FAILED:
-		last_tx_fail = k_uptime_get();
+		last_tx_fail = k_uptime_ticks();
 		if (tx_errors < TX_ERROR_MAX)
 			tx_errors++;
 		packets_failed++;
@@ -253,12 +251,12 @@ void event_handler(struct esb_evt const *event)
 				}
 			}
 			// if(last_received_packet != 0) {
-			// 	uint64_t diff = k_uptime_get() - last_received_packet;
+			// 	uint64_t diff = k_uptime_ticks() - last_received_packet;
 			// 	if(diff > 35) {
 			// 		LOG_WRN("Packet gap of %dms", diff);
 			// 	}
 			// }
-			last_received_packet = k_uptime_get();
+			last_received_packet = k_uptime_ticks();
 			connection_motion_ack(packet_number);
 		}
 		break;
@@ -268,15 +266,15 @@ void event_handler(struct esb_evt const *event)
 void esb_set_tracker_state(enum esb_tracker_state_t state)
 {
 	enum esb_tracker_state_t old_state = esb_tracker_state;
-	esb_tracker_state_last_change = k_uptime_get_32();
+	esb_tracker_state_last_change = k_uptime_ticks();
 	esb_tracker_state = state;
 	LOG_INF("ESB state change: %d -> %d", old_state, state);
 }
 
 bool esb_wait_state_change(enum esb_tracker_state_t from_state, uint32_t timeout_ms)
 {
-	uint64_t start = k_uptime_get();
-	while (esb_tracker_state == from_state && start + timeout_ms > k_uptime_get())
+	uint64_t start = k_uptime_ticks();
+	while (esb_tracker_state == from_state && start + timeout_ms > k_uptime_ticks())
 	{
 		k_msleep(1);
 	}
@@ -335,7 +333,7 @@ int esb_initialize(bool tx, bool advertize)
 		config.tx_mode = ESB_TXMODE_MANUAL;
 		config.payload_length = CONFIG_ESB_MAX_PAYLOAD_LENGTH;
 		config.selective_auto_ack = true;
-		// config.use_fast_ramp_up = false;
+		config.use_fast_ramp_up = false;
 	}
 	else
 	{
@@ -350,7 +348,7 @@ int esb_initialize(bool tx, bool advertize)
 		// config.tx_mode = ESB_TXMODE_AUTO;
 		config.payload_length = CONFIG_ESB_MAX_PAYLOAD_LENGTH;
 		config.selective_auto_ack = true;
-		// config.use_fast_ramp_up = false;
+		config.use_fast_ramp_up = false;
 	}
 
 	err = esb_init(&config);
@@ -461,12 +459,8 @@ void esb_write(uint8_t *data, uint8_t packet_sequnce)
 {
 	if (!esb_initialized || (esb_get_tracker_state() != CONNECTED))
 		return;
-	tx_payload.pipe = 1;   // using base address 1
-#if defined(NRF54L15_XXAA) // TODO: esb halts with ack and tx fail
-	tx_payload.noack = true;
-#else
+	tx_payload.pipe = 1; // using base address 1
 	tx_payload.noack = false;
-#endif
 	memcpy(tx_payload.data, data, tx_payload.length);
 	esb_write_current();
 	last_packet_sequence = packet_sequnce;
@@ -516,8 +510,8 @@ bool find_dongle()
 	clocks_start();
 	esb_initialize(false, true);
 	esb_start_rx();
-	uint64_t start = k_uptime_get();
-	while (!dongle_found && start + ESB_SEARCH_TIMEOUT > k_uptime_get())
+	uint64_t start = k_uptime_ticks();
+	while (!dongle_found && start + ESB_SEARCH_TIMEOUT > k_uptime_ticks())
 	{
 		k_msleep(20);
 		if (esb_get_tracker_state() != FIND_DONGLE)
@@ -530,6 +524,7 @@ void populate_connect_payload()
 {
 	uint64_t device_addr = *((uint64_t *)NRF_FICR->DEVICEADDR) & 0xFFFFFFFFFFFF;
 	tx_payload.pipe = 1;
+
 	tx_payload.noack = false;
 	tx_payload.data[0] = 0;
 	tx_payload.data[1] = ESB_PACKET_DONGLE_CONNECT;
@@ -546,8 +541,8 @@ void connect_to_dongle()
 	clocks_allow_stopping(false);
 	clocks_start();
 	esb_initialize(true, false);
-	uint64_t start = k_uptime_get();
-	while (esb_get_tracker_state() == DONGLE_CONNECT && start + 1000 > k_uptime_get())
+	uint64_t start = k_uptime_ticks();
+	while (esb_get_tracker_state() == DONGLE_CONNECT && start + 1000 > k_uptime_ticks())
 	{
 		populate_connect_payload();
 		esb_write_current();
@@ -624,7 +619,7 @@ static void esb_thread(void)
 			// only raise error while not potentially communicating by usb
 			if (!get_status(SYS_STATUS_CONNECTION_ERROR) && (!use_hid || !get_status(SYS_STATUS_USB_CONNECTED)))
 				set_status(SYS_STATUS_CONNECTION_ERROR, true);
-			if (use_shutdown && k_uptime_get() - last_tx_success > CONFIG_3_SETTINGS_READ(CONFIG_3_CONNECTION_TIMEOUT_DELAY)) // shutdown if receiver is not detected // TODO: is shutdown necessary if usb is connected at the time?
+			if (use_shutdown && k_uptime_ticks() - last_tx_success > CONFIG_3_SETTINGS_READ(CONFIG_3_CONNECTION_TIMEOUT_DELAY)) // shutdown if receiver is not detected // TODO: is shutdown necessary if usb is connected at the time?
 			{
 				LOG_WRN("No response from receiver in %dm", CONFIG_3_SETTINGS_READ(CONFIG_3_CONNECTION_TIMEOUT_DELAY) / 60000);
 				sys_request_system_off(false);
@@ -644,7 +639,7 @@ static void esb_thread(void)
 			{
 				esb_set_tracker_state(FIND_DONGLE); // Try to find dongle again
 			}
-			else if (tx_errors < TX_ERROR_THRESHOLD && get_status(SYS_STATUS_CONNECTION_ERROR) && k_uptime_get() - last_tx_fail > 3000) // TODO: there is possibly some race condition causing tx_error to potentially be above zero more often than not, so the check is more lenient; tx_error under threshold and last errors above threshold was not recent
+			else if (tx_errors < TX_ERROR_THRESHOLD && get_status(SYS_STATUS_CONNECTION_ERROR) && k_uptime_ticks() - last_tx_fail > 3000) // TODO: there is possibly some race condition causing tx_error to potentially be above zero more often than not, so the check is more lenient; tx_error under threshold and last errors above threshold was not recent
 			{
 				set_status(SYS_STATUS_CONNECTION_ERROR, false);
 			}

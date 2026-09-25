@@ -36,8 +36,14 @@
 #define TDMA_WINDOWS_PER_TRACKER ((TDMA_SLOTS_COUNT - TDMA_DONGLE_SLOTS) / TDMA_MAX_TRACKERS)
 #define TDMA_WRONG_WINDOW 255
 
+#if defined(CONFIG_SOC_SERIES_NRF54LX)
+#if CONFIG_SYS_CLOCK_TICKS_PER_SEC != TDMA_TIMER_SIZE
+#error "CONFIG_SYS_CLOCK_TICKS_PER_SEC is not equal TDMA_TIMER_SIZE"
+#endif
+#else
 #if TDMA_TIMER_SIZE != CONFIG_SYS_CLOCK_HW_CYCLES_PER_SEC
-	#assert "CONFIG_SYS_CLOCK_HW_CYCLES_PER_SEC is not equal TDMA_TIMER_SIZE"
+#error "CONFIG_SYS_CLOCK_HW_CYCLES_PER_SEC is not equal TDMA_TIMER_SIZE"
+#endif
 #endif
 
 uint32_t tdma_get_time();
@@ -53,16 +59,19 @@ bool tdma_is_our_window();
 void tdma_tx_started();
 k_timeout_t tdma_get_time_till_our_window();
 
-inline static uint16_t tdma_get_row(uint32_t slot) {
-	if(slot < TDMA_DONGLE_SLOTS)
+inline static uint16_t tdma_get_row(uint32_t slot)
+{
+	if (slot < TDMA_DONGLE_SLOTS)
 		return 0;
 	return (slot - TDMA_DONGLE_SLOTS) / TDMA_MAX_TRACKERS;
 }
 
-inline static uint32_t tdma_get_slot_time(uint32_t slot) {
+inline static uint32_t tdma_get_slot_time(uint32_t slot)
+{
 	return slot << TDMA_SLOT_SHIFT;
 }
 
-inline static uint32_t tdma_get_slot_from_window(uint16_t row, uint8_t window) {
+inline static uint32_t tdma_get_slot_from_window(uint16_t row, uint8_t window)
+{
 	return ((row * TDMA_MAX_TRACKERS) + TDMA_DONGLE_SLOTS) + window;
 }

@@ -69,7 +69,7 @@ static bool device_charged = false;
 static bool chg_temp_warn = false;
 static int64_t last_valid_temp = -1;
 
-LOG_MODULE_REGISTER(power, LOG_LEVEL_INF);
+LOG_MODULE_REGISTER(power, LOG_LEVEL_DBG);
 
 static void sys_WOM(bool force);
 static void sys_system_off(bool silent);

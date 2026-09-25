@@ -90,7 +90,7 @@
 	};
 
 	zephyr,user {
-		//int0-gpios = <&gpio0 2 0>;
+		int0-gpios = <&gpio0 2 0>;
 		reg0-dsb-gpios = <&gpio1 9 (GPIO_PULL_DOWN | GPIO_ACTIVE_HIGH)>;
 		reg0-cp-gpios = <&gpio1 8 (GPIO_PULL_DOWN | GPIO_ACTIVE_HIGH)>;
 		reg1-dsb-gpios = <&gpio1 12 (GPIO_PULL_DOWN | GPIO_ACTIVE_HIGH)>;
@@ -122,6 +122,12 @@
 		zephyr,bt-mon-uart = &uart20;
 		zephyr,bt-c2h-uart = &uart20;
 	};
+
+
+};
+
+&radio {
+	status = "okay";
 };
 
 &grtc {
@@ -161,6 +167,22 @@
 	};
 };
 
+&hfxo {
+	status = "okay";
+	clock-frequency = <DT_FREQ_M(32)>;
+	load-capacitors = "internal";
+	load-capacitance-femtofarad = <15000>;
+};
+
+&regulators {
+	status = "okay";
+};
+
+&vregmain {
+	status = "okay";
+	regulator-initial-mode = <NRF5X_REG_MODE_DCDC>;
+};
+
 &uicr {
 	nfct-pins-as-gpios;
 };
@@ -189,12 +211,20 @@
 	status = "okay";
 };
 
+&radio {
+	status = "okay";
+};
+
 &uart20 {
 	status = "okay";
 	pinctrl-0 = <&uart20_default>;
 	pinctrl-1 = <&uart20_sleep>;
 	pinctrl-names = "default", "sleep";
 	current-speed = <115200>;
+};
+
+&uart21 {
+	status = "disabled";
 };
 
 &spi00 {

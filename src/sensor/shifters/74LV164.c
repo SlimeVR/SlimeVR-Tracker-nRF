@@ -41,7 +41,7 @@ static void lv164_shift_out(const struct device *dev)
         gpio_pin_set_dt(&cfg->cp, 0);
         // k_busy_wait(10);
     }
-    k_busy_wait(10);
+    k_busy_wait(20);
 }
 
 int lv164_init(const struct device *dev)

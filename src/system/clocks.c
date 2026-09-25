@@ -34,11 +34,13 @@ bool allow_clocks_stopping = false;
 #if defined(CONFIG_CLOCK_CONTROL_NRF)
 static struct onoff_manager *clk_mgr;
 
-bool clocks_get_status(void) {
+bool clocks_get_status(void)
+{
 	return clocks_status;
 }
 
-void clocks_allow_stopping(bool allow) {
+void clocks_allow_stopping(bool allow)
+{
 	allow_clocks_stopping = allow;
 }
 
@@ -84,7 +86,8 @@ int clocks_start(void)
 			LOG_ERR("Clock could not be started: %d", res);
 			return res;
 		}
-		if (err && ++fetch_attempts > 10) {
+		if (err && ++fetch_attempts > 10)
+		{
 			LOG_WRN_ONCE("Unable to fetch Clock request result: %d", err);
 			return err;
 		}
@@ -100,7 +103,8 @@ int clocks_start(void)
 	return 0;
 }
 
-bool get_clocks_status() {
+bool get_clocks_status()
+{
 	return clocks_status;
 }
 
@@ -108,7 +112,7 @@ void clocks_stop(void)
 {
 #if !SWEEP_TEST
 	if (!clocks_status || !allow_clocks_stopping)
-	 	return;
+		return;
 	clocks_status = false;
 
 	onoff_release(clk_mgr);
@@ -122,27 +126,30 @@ BUILD_ASSERT(false, "No Clock Control driver");
 #endif
 
 // Safely switch LF clock source
-void clock_switch(nrf_clock_lfclk_t source) {
+void clock_switch(nrf_clock_lfclk_t source)
+{
 	unsigned int key = irq_lock();
 
-    nrf_clock_task_trigger(NRF_CLOCK, NRF_CLOCK_TASK_LFCLKSTOP);
+	nrf_clock_task_trigger(NRF_CLOCK, NRF_CLOCK_TASK_LFCLKSTOP);
 
 	uint32_t waited_us = 0;
-    while (nrf_clock_is_running(NRF_CLOCK, NRF_CLOCK_DOMAIN_LFCLK, NULL) && (waited_us < 5000)) {
-        k_busy_wait(100);
-        waited_us += 100;
-    }
+	while (nrf_clock_is_running(NRF_CLOCK, NRF_CLOCK_DOMAIN_LFCLK, NULL) && (waited_us < 5000))
+	{
+		k_busy_wait(100);
+		waited_us += 100;
+	}
 
 	nrf_clock_event_clear(NRF_CLOCK, NRF_CLOCK_EVENT_LFCLKSTARTED);
 
-    nrf_clock_lf_src_set(NRF_CLOCK, source);
-    nrf_clock_task_trigger(NRF_CLOCK, NRF_CLOCK_TASK_LFCLKSTART);
+	nrf_clock_lf_src_set(NRF_CLOCK, source);
+	nrf_clock_task_trigger(NRF_CLOCK, NRF_CLOCK_TASK_LFCLKSTART);
 
 	waited_us = 0;
-    while (!nrf_clock_is_running(NRF_CLOCK, NRF_CLOCK_DOMAIN_LFCLK, NULL) && (waited_us < 5000)) {
-        k_busy_wait(100);
-        waited_us += 100;
-    }
+	while (!nrf_clock_is_running(NRF_CLOCK, NRF_CLOCK_DOMAIN_LFCLK, NULL) && (waited_us < 5000))
+	{
+		k_busy_wait(100);
+		waited_us += 100;
+	}
 
 	nrf_clock_event_clear(NRF_CLOCK, NRF_CLOCK_EVENT_LFCLKSTARTED);
 
@@ -150,22 +157,23 @@ void clock_switch(nrf_clock_lfclk_t source) {
 }
 
 // Switch to RC clock before shut down to avoid any problems with the bootloader
-void clock_pre_shutdown() {
+void clock_pre_shutdown()
+{
 	clock_switch(NRF_CLOCK_LFCLK_RC);
 }
 
 // Switch to external oscillator for LF clock for good TDMA precision
-void clock_init_external() {
-	#if defined(NRF_CLOCK_USE_EXTERNAL_LFCLK_SOURCES) || defined(__NRFX_DOXYGEN__)
-		#if CONFIG_CLOCK_SOURCE_LFCLK_FULL_SWING
-			clock_switch(NRF_CLOCK_LFCLK_XTAL_FULL_SWING);
-		#elif CONFIG_CLOCK_SOURCE_LFCLK_LOW_SWING
-			clock_switch(NRF_CLOCK_LFCLK_XTAL_LOW_SWING);
-		#elif CONFIG_CLOCK_SOURCE_LFCLK_XTAL
-			clock_switch(NRF_CLOCK_LFCLK_XTAL);
-		#elif CONFIG_CLOCK_SOURCE_LFCLK_SYNTH
-			clock_switch(NRF_CLOCK_LFCLK_SYNTH);
-		#endif
-	#endif
+void clock_init_external()
+{
+#if defined(NRF_CLOCK_USE_EXTERNAL_LFCLK_SOURCES) || defined(__NRFX_DOXYGEN__)
+#if CONFIG_CLOCK_SOURCE_LFCLK_FULL_SWING
+	clock_switch(NRF_CLOCK_LFCLK_XTAL_FULL_SWING);
+#elif CONFIG_CLOCK_SOURCE_LFCLK_LOW_SWING
+	clock_switch(NRF_CLOCK_LFCLK_XTAL_LOW_SWING);
+#elif CONFIG_CLOCK_SOURCE_LFCLK_XTAL
+	clock_switch(NRF_CLOCK_LFCLK_XTAL);
+#elif CONFIG_CLOCK_SOURCE_LFCLK_SYNTH
+	clock_switch(NRF_CLOCK_LFCLK_SYNTH);
+#endif
+#endif
 }
-

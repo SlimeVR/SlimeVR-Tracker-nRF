@@ -2,8 +2,8 @@
 
 #include <zephyr/logging/log.h>
 
-#define DEBUG true
-#define DEBUG_RATE true
+// #define DEBUG true
+// #define DEBUG_RATE true
 
 #if DEBUG || DEBUG_RATE
 LOG_MODULE_REGISTER(sensor_interface, LOG_LEVEL_DBG);
@@ -320,8 +320,6 @@ int ssi_burst_write(enum sensor_interface_dev dev, uint8_t start_addr, const uin
 		LOG_HEXDUMP_DBG(&start_addr, 1, "ssi_burst_write: start_addr");
 		LOG_HEXDUMP_DBG(buf, num_bytes, "ssi_burst_write: buf");
 		LOG_INF("Current SPI speed: %d", sensor_interface_dev_spi[dev]->config.frequency);
-		LOG_INF("Waiting 5 seconds before transceive");
-		k_msleep(5000);
 		int err = spi_transceive_dt(sensor_interface_dev_spi[dev], &tx, NULL);
 		LOG_DBG("ssi_burst_write: err=%d", err);
 		k_msleep(500);

@@ -125,7 +125,7 @@ static uint8_t current_sensor;
 #if DEBUG
 LOG_MODULE_REGISTER(sensor, LOG_LEVEL_DBG);
 #else
-LOG_MODULE_REGISTER(sensor, LOG_LEVEL_INF);
+LOG_MODULE_REGISTER(sensor, LOG_LEVEL_ERR);
 #endif
 
 static int sensor_scan(void);
