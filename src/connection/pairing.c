@@ -111,7 +111,7 @@ void pairing_dongle_found(const struct esb_payload *payload)
                 dg->rssi = payload->rssi;
                 dg->flags = payload->data[9];
                 dg->response = 255;
-                dg->response_time = k_uptime_ticks();
+                dg->response_time = k_uptime_get_32();
                 LOG_INF("New dongle for pairing: %012llX, ch %d, rssi %d, flags %d", dongle_hwid, channel, payload->rssi, payload->data[9]);
                 break;
             }

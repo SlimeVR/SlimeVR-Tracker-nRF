@@ -89,7 +89,7 @@ void connection_update_sensor_data(float *q, float *a, int64_t data_time)
 	send_precise_quat = q_epsilon(q, sensor_q, 0.005);
 	memcpy(sensor_q, q, sizeof(sensor_q));
 	memcpy(sensor_a, a, sizeof(sensor_a));
-	quat_update_time = k_uptime_ticks();
+	quat_update_time = k_uptime_get();
 	if (sleep)
 		k_wakeup(connection_thread_id);
 }
@@ -100,7 +100,7 @@ static int64_t last_mag_time = 0;
 void connection_update_sensor_mag(float *m)
 {
 	memcpy(sensor_m, m, sizeof(sensor_m));
-	mag_update_time = k_uptime_ticks();
+	mag_update_time = k_uptime_get();
 	if (sleep)
 		k_wakeup(connection_thread_id);
 }
@@ -163,7 +163,7 @@ static int64_t button_update_time = 0;
 void connection_update_button(int button)
 {
 	tracker_button = button;
-	button_update_time = k_uptime_ticks();
+	button_update_time = k_uptime_get();
 }
 
 static bool shutdown = false;
@@ -182,7 +182,7 @@ void data_buffer_write(uint8_t *data, size_t size)
 	}
 	memcpy(data_buffer + data_buffer_position, data, size);
 	data_buffer_position += size;
-	last_data_time = k_uptime_ticks(); // TODO: use ticks
+	last_data_time = k_uptime_get(); // TODO: use ticks
 	if (sleep)
 		k_wakeup(connection_thread_id);
 	hid_write_packet_n(data); // TODO:
@@ -439,35 +439,35 @@ void connection_thread(void)
 			esb_write(data_copy, packet_sequence - 1);
 		}
 		// Didn't send status in 2 seconds, prioritize it
-		else if (k_uptime_ticks() - last_status_time > 2000)
+		else if (k_uptime_get() - last_status_time > 2000)
 		{
-			last_status_time = k_uptime_ticks();
+			last_status_time = k_uptime_get();
 			connection_write_packet_3();
 			continue;
 		}
 		// mag is higher priority (skip accel, quat is full precision)
-		else if (mag_update_time && k_uptime_ticks() - last_mag_time > 200)
+		else if (mag_update_time && k_uptime_get() - last_mag_time > 200)
 		{
 			mag_update_time = 0; // data has been sent
-			last_mag_time = k_uptime_ticks();
+			last_mag_time = k_uptime_get();
 			connection_write_packet_4();
 			continue;
 		}
 		// if time for info and precise quat not needed
-		else if (quat_update_time && !send_precise_quat && k_uptime_ticks() - last_info_time > 100)
+		else if (quat_update_time && !send_precise_quat && k_uptime_get() - last_info_time > 100)
 		{
 			quat_update_time = 0;
-			last_quat_time = k_uptime_ticks();
-			last_info_time = k_uptime_ticks();
+			last_quat_time = k_uptime_get();
+			last_info_time = k_uptime_get();
 			connection_write_packet_2();
 			continue;
 		}
 		// if time for info2 and precise quat not needed
-		else if (quat_update_time && !send_precise_quat && k_uptime_ticks() - last_info2_time > 100)
+		else if (quat_update_time && !send_precise_quat && k_uptime_get() - last_info2_time > 100)
 		{
 			quat_update_time = 0;
-			last_quat_time = k_uptime_ticks();
-			last_info2_time = k_uptime_ticks();
+			last_quat_time = k_uptime_get();
+			last_info2_time = k_uptime_get();
 			connection_write_packet_7();
 			continue;
 		}
@@ -475,38 +475,38 @@ void connection_thread(void)
 		else if (quat_update_time)
 		{
 			quat_update_time = 0;
-			last_quat_time = k_uptime_ticks();
+			last_quat_time = k_uptime_get();
 			connection_write_packet_1();
 			continue;
 		}
-		else if (k_uptime_ticks() - last_status_time > 1000)
+		else if (k_uptime_get() - last_status_time > 1000)
 		{
-			last_status_time = k_uptime_ticks();
+			last_status_time = k_uptime_get();
 			connection_write_packet_3();
 			continue;
 		}
-		else if (k_uptime_ticks() - last_info_time > 500)
+		else if (k_uptime_get() - last_info_time > 500)
 		{
-			last_info_time = k_uptime_ticks();
+			last_info_time = k_uptime_get();
 			connection_write_packet_0();
 			continue;
 		}
-		else if (k_uptime_ticks() - last_info2_time > 100)
+		else if (k_uptime_get() - last_info2_time > 100)
 		{
-			last_info2_time = k_uptime_ticks();
+			last_info2_time = k_uptime_get();
 			connection_write_packet_6();
 			continue;
 		}
-		else if (k_uptime_ticks() - last_status2_time > 1000)
+		else if (k_uptime_get() - last_status2_time > 1000)
 		{
-			last_status2_time = k_uptime_ticks();
+			last_status2_time = k_uptime_get();
 			connection_write_packet_5();
 			continue;
 		}
-		else if (!motion_acked || ALWAYS_SEND) // Didn't ack last motion packet, will send rotation again
+		else if(!motion_acked || ALWAYS_SEND) // Didn't ack last motion packet, will send rotation again
 		{
 			quat_update_time = 0;
-			last_quat_time = k_uptime_ticks();
+			last_quat_time = k_uptime_get();
 			connection_write_packet_1();
 			continue;
 		}

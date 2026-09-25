@@ -25,6 +25,13 @@
 #include <zephyr/drivers/clock_control/nrf_clock_control.h>
 #include <hal/nrf_clock.h>
 #include <zephyr/logging/log.h>
+#include <nrf_erratas.h>
+#if NRF54L_ERRATA_20_PRESENT
+#include <hal/nrf_power.h>
+#endif /* NRF54L_ERRATA_20_PRESENT */
+#if defined(NRF54LM20A_ENGA_XXAA)
+#include <hal/nrf_clock.h>
+#endif /* defined(NRF54LM20A_ENGA_XXAA) */
 
 LOG_MODULE_REGISTER(clocks, LOG_LEVEL_INF);
 
@@ -92,11 +99,11 @@ int clocks_start(void)
 			return err;
 		}
 	} while (err);
-
-#if defined(NRF54L15_XXAA)
-	/* MLTPAN-20 */
-	nrf_clock_task_trigger(NRF_CLOCK, NRF_CLOCK_TASK_PLLSTART);
-#endif /* defined(NRF54L15_XXAA) */
+#if NRF54L_ERRATA_20_PRESENT
+	if (nrf54l_errata_20()) {
+		nrf_power_task_trigger(NRF_POWER, NRF_POWER_TASK_CONSTLAT);
+	}
+#endif /* NRF54L_ERRATA_20_PRESENT */
 
 	LOG_DBG("HF clock started");
 	clocks_status = true;
