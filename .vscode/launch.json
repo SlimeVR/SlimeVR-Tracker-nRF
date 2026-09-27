@@ -1,0 +1,12 @@
+{
+	"version": "0.2.0",
+	"configurations": [
+		{
+			"type": "nrf-debug",
+			"request": "launch",
+			"name": "Launch SlimeVR-Tracker-nRF/build_glove/SlimeVR-Tracker-nRF",
+			"config": "${workspaceFolder}/build_glove/SlimeVR-Tracker-nRF",
+			"inferiors": []
+		}
+	]
+}
