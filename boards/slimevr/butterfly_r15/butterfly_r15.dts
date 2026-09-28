@@ -1,0 +1,180 @@
+// Copyright (c) 2024 Nordic Semiconductor ASA
+// SPDX-License-Identifier: Apache-2.0
+
+/dts-v1/;
+#include <nordic/nrf52833_qdaa.dtsi>
+
+//move to dtsi?
+&pinctrl {
+	spi0_default: spi0_default {
+		group1 {
+			psels = <NRF_PSEL(SPIM_SCK, 0, 20)>,
+					<NRF_PSEL(SPIM_MOSI, 0, 17)>,
+					<NRF_PSEL(SPIM_MISO, 0, 15)>;
+		};
+	};
+
+	spi0_sleep: spi0_sleep {
+		group1 {
+			psels = <NRF_PSEL(SPIM_SCK, 0, 20)>,
+					<NRF_PSEL(SPIM_MOSI, 0, 17)>,
+					<NRF_PSEL(SPIM_MISO, 0, 15)>;
+			low-power-enable;
+		};
+	};
+
+	pwm0_default: pwm0_default {
+		group1 {
+			psels = <NRF_PSEL(PWM_OUT0, 0, 4)>,
+					<NRF_PSEL(PWM_OUT1, 0, 5)>,
+					<NRF_PSEL(PWM_OUT2, 1, 9)>;
+			nordic,drive-mode = <NRF_DRIVE_D0S1>;
+			nordic,invert;
+		};
+	};
+
+	pwm0_sleep: pwm0_sleep {
+		group1 {
+			psels = <NRF_PSEL(PWM_OUT0, 0, 4)>,
+					<NRF_PSEL(PWM_OUT1, 0, 5)>,
+					<NRF_PSEL(PWM_OUT2, 1, 9)>;
+			low-power-enable;
+		};
+	};
+};
+//end
+
+/ {
+	model = "butterfly_r15";
+	compatible = "butterfly_r15";
+
+	chosen {
+		zephyr,sram = &sram0;
+		zephyr,flash = &flash0;
+		zephyr,console = &cdc_acm_uart0;
+		zephyr,shell-uart = &cdc_acm_uart0;
+	};
+
+	pwmleds {
+		compatible = "pwm-leds";
+		pwm_led0: pwm_led_0 {
+			pwms = <&pwm0 0 PWM_MSEC(1) PWM_POLARITY_INVERTED>;
+		};
+		pwm_led1: pwm_led_1 {
+			pwms = <&pwm0 1 PWM_MSEC(1) PWM_POLARITY_INVERTED>;
+		};
+		pwm_led2: pwm_led_2 {
+			pwms = <&pwm0 2 PWM_MSEC(1) PWM_POLARITY_INVERTED>;
+		};
+	};
+
+    leds {
+        compatible = "gpio-leds";
+        led0: led_0 {
+            gpios = <&gpio0 4 (GPIO_OPEN_DRAIN | GPIO_ACTIVE_LOW)>;
+        };
+        led1: led_1 {
+            gpios = <&gpio0 5 (GPIO_OPEN_DRAIN | GPIO_ACTIVE_LOW)>;
+        };
+        led2: led_2 {
+            gpios = <&gpio1 9 (GPIO_OPEN_DRAIN | GPIO_ACTIVE_LOW)>;
+        };
+    };
+
+	buttons {
+		compatible = "gpio-keys";
+		button0: button_0 {
+			gpios = <&gpio0 11 (GPIO_PULL_UP | GPIO_ACTIVE_LOW)>;
+			label = "Push button switch 0";
+		};
+	};
+
+	aliases {
+		sw0 = &button0;
+		pwm-led0 = &pwm_led0;
+		pwm-led1 = &pwm_led1;
+		pwm-led2 = &pwm_led2;
+		led0 = &led0;
+		led1 = &led1;
+		led2 = &led2;
+	};
+
+	battery-divider {
+		compatible = "voltage-divider";
+		status = "okay";
+		io-channels = <&adc 0>;
+		output-ohms = <536000>;
+		full-ohms = <(887000+536000)>;
+		power-gpios = <&gpio0 3 (GPIO_OPEN_DRAIN | GPIO_ACTIVE_LOW)>;
+	};
+
+	zephyr,user {
+		int0-gpios = <&gpio0 9 0>;
+		chg-gpios = <&gpio0 31 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>;
+		stby-gpios = <&gpio0 30 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>;
+		clk-gpios = <&gpio0 28 (GPIO_OPEN_DRAIN)>;
+		test-gpios = <&gpio0 29 0>;
+	};
+};
+
+&reg1 {
+	regulator-initial-mode = <NRF5X_REG_MODE_DCDC>;
+};
+
+&adc {
+	status = "okay";
+};
+
+&gpiote {
+	status = "okay";
+};
+
+&gpio0 {
+	status = "okay";
+};
+
+&gpio1 {
+	status = "okay";
+};
+
+&spi0 {
+	status = "okay";
+	compatible = "nordic,nrf-spim";
+	cs-gpios = <&gpio0 10 GPIO_ACTIVE_LOW>;
+
+	pinctrl-0 = <&spi0_default>;
+	pinctrl-1 = <&spi0_sleep>;
+	pinctrl-names = "default", "sleep";
+
+	clock-frequency = < DT_FREQ_M(10) >;
+
+	imu_spi: imu_spi@0 {
+		status = "okay";
+		compatible = "vnd,spi-device";
+		label = "imu-spi";
+		reg = <0>;
+
+		spi-max-frequency = <DT_FREQ_M(24)>;
+
+		// MAG on aux I2C yet not supported #77
+	};
+};
+
+&pwm0 {
+	status = "okay";
+	pinctrl-0 = <&pwm0_default>;
+	pinctrl-1 = <&pwm0_sleep>;
+	pinctrl-names = "default", "sleep";
+};
+
+zephyr_udc0: &usbd {
+	compatible = "nordic,nrf-usbd";
+	status = "okay";
+	cdc_acm_uart0: cdc_acm_uart0 {
+		compatible = "zephyr,cdc-acm-uart";
+	};
+};
+
+&nfct {
+	status = "disabled";
+};
