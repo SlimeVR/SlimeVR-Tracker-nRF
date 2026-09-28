@@ -12,7 +12,7 @@ LOG_MODULE_REGISTER(pairing, LOG_LEVEL_INF);
 
 static struct pairing_discovery_t* discovered_dongles = NULL;
 static struct pairing_discovery_t current_pairing_dongle;
-static struct esb_payload tx_payload_pair = ESB_EMPTY_PAYLOAD(0, 15);
+static struct esb_payload tx_payload_pair = ESB_EMPTY_PAYLOAD(0, 16);
 static uint8_t paired_addr[8] = {0}; // Paired address bytes: <0> Is Paired | <1> Tracker Id | <2-8> Dongle Address
 static bool pairing_needs_saving = false;
 
@@ -25,6 +25,7 @@ void prepare_pair_payload() {
 	tx_payload_pair.data[2] = 0;
 	memcpy(&tx_payload_pair.data[3], &device_addr, 6);
 	memcpy(&tx_payload_pair.data[9], &device_addr, 6);
+    tx_payload_pair.data[15] = ESB_DEVICE_TYPE_NORMAL;
 }
 
 void pairing_restore(void) {

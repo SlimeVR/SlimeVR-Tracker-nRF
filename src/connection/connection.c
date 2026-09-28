@@ -313,7 +313,8 @@ void connection_write_packet_3() // status
 	// data[9] - packets received (by the tracker)
 	// data[10] - packets failed (by the tracker)
 	// data[11] - average rssi (received by the tracker)
-	// data[11] - repeat packets (filled by dongle)
+	// data[12] - repeat packets (filled by dongle)
+	// data[13] - largest gap (filled by dongle)
 	data[15] = 0; // rssi (supplied by receiver)
 	data_buffer_write(data, sizeof(data));
 }
