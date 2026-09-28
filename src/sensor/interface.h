@@ -42,7 +42,7 @@ enum sensor_interface_spec
 
 typedef struct sensor_ext_ssi {
 	int (*ext_write)(const uint8_t addr, const uint8_t *buf, uint32_t num_bytes);
-	int (*ext_write_read)(const uint8_t addr, const void *write_buf, size_t num_write, void *read_buf, size_t num_read);
+	int (*ext_write_read)(const uint8_t addr, const uint8_t *write_buf, size_t num_write, uint8_t *read_buf, size_t num_read);
 	uint8_t ext_burst;
 } sensor_ext_ssi_t;
 
@@ -65,5 +65,32 @@ int ssi_reg_update_byte(enum sensor_interface_dev dev, uint8_t reg_addr, uint8_t
 
 int ssi_reg_read_interval(enum sensor_interface_dev dev, uint8_t start_addr, uint8_t *buf, uint32_t num_bytes, uint32_t interval);
 int ssi_burst_read_interval(enum sensor_interface_dev dev, uint8_t start_addr, uint8_t *buf, uint32_t num_bytes, uint32_t interval);
+
+
+#if DT_NODE_HAS_STATUS(DT_NODELABEL(imu_spi), okay)
+#define SENSOR_IMU_SPI_EXISTS true
+#endif
+
+#if DT_NODE_HAS_STATUS(DT_NODELABEL(imu), okay)
+#define SENSOR_IMU_EXISTS true
+#endif
+
+#if DT_NODE_HAS_STATUS(DT_NODELABEL(mag_spi), okay)
+#define SENSOR_MAG_SPI_EXISTS true
+#endif
+
+#if DT_NODE_HAS_STATUS(DT_NODELABEL(mag), okay)
+#define SENSOR_DIRECT_MAG_EXISTS true
+#endif
+
+#if SENSOR_IMU_SPI_EXISTS // might exist
+#define SENSOR_MAG_EXT_EXISTS true
+#endif
+
+#if !SENSOR_MAG_SPI_EXISTS && !SENSOR_DIRECT_MAG_EXISTS && !SENSOR_MAG_EXT_EXISTS
+#define SENSOR_MAG_EXISTS false
+#else
+#define SENSOR_MAG_EXISTS true
+#endif
 
 #endif

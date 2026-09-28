@@ -102,8 +102,8 @@ void lsm_shutdown(void);
 void lsm_update_fs(float accel_range, float gyro_range, float *accel_actual_range, float *gyro_actual_range);
 int lsm_update_odr(float accel_time, float gyro_time, float *accel_actual_time, float *gyro_actual_time);
 
-uint16_t lsm_fifo_read(uint8_t *data, uint16_t len);
-int lsm_fifo_process(uint16_t index, uint8_t *data, float a[3], float g[3]);
+uint16_t lsm_data_read(uint8_t *data, uint16_t len);
+sensor_data_attrs_t lsm_data_process(uint16_t index, uint8_t *data, float a[3], float g[3], float m[3]);
 void lsm_accel_read(float a[3]);
 void lsm_gyro_read(float g[3]);
 int lsm_temp_read(float *data);
@@ -111,11 +111,10 @@ int lsm_temp_read(float *data);
 uint8_t lsm_setup_DRDY(uint16_t threshold);
 uint8_t lsm_setup_WOM(void);
 
-int lsm_ext_setup(void);
-int lsm_ext_passthrough(bool passthrough);
+int lsm_ext_setup(sensor_ext_mode_t, const sensor_mag_t *mag, uint8_t mag_addr);
 
 int lsm_ext_write(const uint8_t addr, const uint8_t *buf, uint32_t num_bytes);
-int lsm_ext_write_read(const uint8_t addr, const void *write_buf, size_t num_write, void *read_buf, size_t num_read);
+int lsm_ext_write_read(const uint8_t addr, const uint8_t *write_buf, size_t num_write, uint8_t *read_buf, size_t num_read);
 
 extern const sensor_imu_t sensor_imu_lsm6dsv;
 extern const sensor_ext_ssi_t sensor_ext_lsm6dsv;

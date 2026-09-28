@@ -9,6 +9,7 @@
 static const float sensitivity = 0.075; // uT/LSB
 
 static uint8_t last_odr = 0xff;
+static float last_real_time = 0.0f;
 static int64_t oneshot_trigger_time = 0;
 
 LOG_MODULE_REGISTER(IST8308, LOG_LEVEL_DBG);
@@ -29,6 +30,11 @@ void ist8308_shutdown(void)
 //	int err = ssi_reg_write_byte(SENSOR_INTERFACE_DEV_MAG, IST8306_ACTR, 0x02); // suspend
 	if (err)
 		LOG_ERR("Communication error");
+}
+
+float ist8308_get_odr(void)
+{
+	return last_real_time;
 }
 
 int ist8308_update_odr(float time, float *actual_time)
@@ -112,6 +118,7 @@ int ist8308_update_odr(float time, float *actual_time)
 		LOG_ERR("Communication error");
 
 	*actual_time = time;
+	last_real_time = time;
 	return err;
 }
 
@@ -157,11 +164,12 @@ const sensor_mag_t sensor_mag_ist8308 = {
 	*ist8308_shutdown,
 
 	*ist8308_update_odr,
+	*ist8308_get_odr,
 
 	*ist8308_mag_oneshot,
 	*ist8308_mag_read,
 	*mag_none_temp_read,
 
 	*ist8308_mag_process,
-	6, 6
+	6, 6, 0, IST8306_DATAXL
 };

@@ -185,7 +185,7 @@ static inline int ssi_read(enum sensor_interface_dev dev, uint8_t *buf, uint32_t
 	}
 }
 
-static inline int ssi_write_read(enum sensor_interface_dev dev, const void *write_buf, size_t num_write, void *read_buf, size_t num_read)
+static inline int ssi_write_read(enum sensor_interface_dev dev, const uint8_t *write_buf, size_t num_write, uint8_t *read_buf, size_t num_read)
 {
 	// TODO: is separate read/write better for spi?
 	switch (sensor_interface_dev_spec[dev])

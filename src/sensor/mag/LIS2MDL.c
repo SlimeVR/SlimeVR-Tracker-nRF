@@ -8,6 +8,7 @@
 static const float sensitivity = 1.5 / 1000; // ~1.5 mgauss/LSB -> 0.0015 G/LSB
 
 static uint8_t last_odr = 0xff;
+static float last_real_time = 0.0f;
 
 LOG_MODULE_REGISTER(LIS2MDL, LOG_LEVEL_DBG);
 
@@ -25,6 +26,11 @@ void lis2_shutdown(void)
 	int err = ssi_reg_write_byte(SENSOR_INTERFACE_DEV_MAG, LIS2MDL_CFG_REG_A, 0x20);
 	if (err)
 		LOG_ERR("Communication error");
+}
+
+float lis2_get_odr(void)
+{
+	return last_real_time;
 }
 
 int lis2_update_odr(float time, float *actual_time)
@@ -92,6 +98,7 @@ int lis2_update_odr(float time, float *actual_time)
 		LOG_ERR("Communication error");
 
 	*actual_time = time;
+	last_real_time = time;
 	return err;
 }
 
@@ -145,11 +152,12 @@ const sensor_mag_t sensor_mag_lis2mdl = {
 	*lis2_shutdown,
 
 	*lis2_update_odr,
+	*lis2_get_odr,
 
 	*lis2_mag_oneshot,
 	*lis2_mag_read,
 	*lis2_temp_read,
 
 	*lis2_mag_process,
-	6, 6
+	6, 6, 0, LIS2MDL_OUTX_L_REG
 };

@@ -116,8 +116,8 @@ void icm_shutdown(void);
 void icm_update_fs(float accel_range, float gyro_range, float *accel_actual_range, float *gyro_actual_range);
 int icm_update_odr(float accel_time, float gyro_time, float *accel_actual_time, float *gyro_actual_time);
 
-uint16_t icm_fifo_read(uint8_t *data, uint16_t len);
-int icm_fifo_process(uint16_t index, uint8_t *data, float a[3], float g[3]);
+uint16_t icm_data_read(uint8_t *data, uint16_t len);
+sensor_data_attrs_t icm_data_process(uint16_t index, uint8_t *data, float a[3], float g[3], float m[3]);
 void icm_accel_read(float a[3]);
 void icm_gyro_read(float g[3]);
 int icm_temp_read(float *data);

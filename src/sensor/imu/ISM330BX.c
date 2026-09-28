@@ -8,7 +8,7 @@
 
 LOG_MODULE_REGISTER(ISM330BX, LOG_LEVEL_DBG);
 
-int ism_fifo_process(uint16_t index, uint8_t *data, float a[3], float g[3])
+sensor_data_attrs_t ism_data_process(uint16_t index, uint8_t *data, float a[3], float g[3], float m[3])
 {
 	index *= PACKET_SIZE;
 	switch (data[index] >> 3)
@@ -19,18 +19,18 @@ int ism_fifo_process(uint16_t index, uint8_t *data, float a[3], float g[3])
 			a[2 - i] = (int16_t)((((uint16_t)data[index + 2 + (i * 2)]) << 8) | data[index + 1 + (i * 2)]);
 			a[2 - i] *= accel_sensitivity;
 		}
-		return 0;
+		return DATA_VALID_ACCEL;
 	case 0x01: // Gyroscope NC (Gyroscope uncompressed data)
 		for (int i = 0; i < 3; i++) // x, y, z
 		{
 			g[i] = (int16_t)((((uint16_t)data[index + 2 + (i * 2)]) << 8) | data[index + 1 + (i * 2)]);
 			g[i] *= gyro_sensitivity;
 		}
-		return 0;
+		return DATA_VALID_GYRO;
 	default:
 	}
 	// TODO: need to skip invalid data
-	return 1;
+	return DATA_INVALID;
 }
 
 void ism_accel_read(float a[3])
@@ -53,8 +53,8 @@ const sensor_imu_t sensor_imu_ism330bx = {
 	*lsm_update_fs,
 	*lsm_update_odr,
 
-	*lsm_fifo_read,
-	*ism_fifo_process,
+	*lsm_data_read,
+	*ism_data_process,
 	*ism_accel_read,
 	*lsm_gyro_read,
 	*lsm_temp_read,
@@ -62,6 +62,5 @@ const sensor_imu_t sensor_imu_ism330bx = {
 	*lsm_setup_DRDY,
 	*lsm_setup_WOM,
 
-	*lsm_ext_setup,
-	*lsm_ext_passthrough
+	*lsm_ext_setup
 };

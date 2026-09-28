@@ -235,13 +235,13 @@ void sensor_calibration_clear_mag(float m_inv[][3], bool write)
 
 void sensor_request_calibration(void)
 {
-	if (sensor_calibration_request(1))
+	if (sensor_calibration_request(1) == 0)
 		k_thread_resume(calibration_thread_id);
 }
 
 void sensor_request_calibration_6_side(void)
 {
-	if (sensor_calibration_request(2))
+	if (sensor_calibration_request(2) == 0)
 		k_thread_resume(calibration_thread_id);
 }
 

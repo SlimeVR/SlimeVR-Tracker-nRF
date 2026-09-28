@@ -7,6 +7,7 @@
 static const float sensitivity = 10; // nT/LSB
 
 static uint8_t last_odr = 0xff;
+static float last_real_time = 0.0f;
 //static uint8_t last_rawTemp = 0xff;
 static int64_t oneshot_trigger_time = 0;
 
@@ -25,6 +26,11 @@ void ak_shutdown(void)
 	int err = ssi_reg_write_byte(SENSOR_INTERFACE_DEV_MAG, AK09940_CNTL4, 0x01);
 	if (err)
 		LOG_ERR("Communication error");
+}
+
+float ak_get_odr(void)
+{
+	return last_real_time;
 }
 
 int ak_update_odr(float time, float *actual_time)
@@ -91,6 +97,7 @@ int ak_update_odr(float time, float *actual_time)
 		LOG_ERR("Communication error");
 
 	*actual_time = time;
+	last_real_time = time;
 	return err;
 }
 
@@ -152,11 +159,12 @@ const sensor_mag_t sensor_mag_ak09940 = {
 	*ak_shutdown,
 
 	*ak_update_odr,
+	*ak_get_odr,
 
 	*ak_mag_oneshot,
 	*ak_mag_read,
 	*ak_temp_read,
 
 	*ak_mag_process,
-	9, 9
+	9, 9, 0, AK09940_HXL
 };
