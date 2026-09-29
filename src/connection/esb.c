@@ -74,6 +74,7 @@ static const uint8_t ESB_ALLOWED_CHANNEL_BUNDLES[] = {ESB_CHANNELS};
 static uint8_t currentChannelBundle = 0;
 static struct ping_request_t ping_request;
 static bool esb_skip_tdma = false;
+static uint32_t dongle_search_started = 0;
 
 uint32_t tx_errors = 0;
 int64_t last_tx_success = 0;
@@ -528,14 +529,24 @@ void connect_to_dongle() {
 		esb_set_tracker_state(FIND_DONGLE);
 }
 
+bool should_raise_errors() {
+	return CONFIG_0_SETTINGS_READ(CONFIG_0_CONNECTION_OVER_HID) == 0 || get_status(SYS_STATUS_USB_CONNECTED) == 0;
+}
+
+void shutdown_unconnected() {
+	if(dongle_search_started == 0)
+		return;
+	bool use_shutdown = CONFIG_0_SETTINGS_READ(CONFIG_0_USER_SHUTDOWN);
+	if(use_shutdown && should_raise_errors() && !get_status(SYS_STATUS_SERIAL_ACTIVE) && k_uptime_get_32() - dongle_search_started > CONFIG_3_SETTINGS_READ(CONFIG_3_CONNECTION_TIMEOUT_DELAY)) {
+		sys_request_system_off(false);
+	}
+}
+
 static void esb_thread(void)
 {
 	//k_msleep(5000);
 	clocks_start();
 	clock_init_external();
-
-	bool use_hid = CONFIG_0_SETTINGS_READ(CONFIG_0_CONNECTION_OVER_HID);
-	bool use_shutdown = CONFIG_0_SETTINGS_READ(CONFIG_0_USER_SHUTDOWN);
 
 	pairing_restore();
 	esb_channel = retained->last_dongle_channel; // TODO Channel bundles?
@@ -550,9 +561,6 @@ static void esb_thread(void)
 #if SWEEP_TEST
 	sweep_test_run();
 #endif
-	uint32_t dongle_search_started = 0;
-
-	// TODO : Don't shut down unconnected/unpaired when communicating via usb
 
 	while (1)
 	{
@@ -567,11 +575,7 @@ static void esb_thread(void)
 				}
 				if(!pairing_find_dongles_to_pair()) {
 					LOG_WRN("Pairing timeout");
-					if(use_shutdown && (!use_hid || !get_status(SYS_STATUS_USB_CONNECTED)) && !get_status(SYS_STATUS_SERIAL_ACTIVE) && k_uptime_get_32() - dongle_search_started > CONFIG_3_SETTINGS_READ(CONFIG_3_CONNECTION_TIMEOUT_DELAY)) {
-						esb_set_tracker_state(PAIRING_ERROR);
-						sys_request_system_off(false);
-						return;
-					}
+					esb_set_tracker_state(PAIRING_ERROR);
 				} else {
 					dongle_search_started = 0;
 				}
@@ -588,12 +592,7 @@ static void esb_thread(void)
 				}
 				if(!find_dongle()) {
 					LOG_WRN("Couldn't find our dongle");
-					if(use_shutdown && (!use_hid || !get_status(SYS_STATUS_USB_CONNECTED)) && !get_status(SYS_STATUS_SERIAL_ACTIVE) && k_uptime_get_32() - dongle_search_started > CONFIG_3_SETTINGS_READ(CONFIG_3_CONNECTION_TIMEOUT_DELAY)) {
-						LOG_WRN("Can't find dongle in %dm", CONFIG_3_SETTINGS_READ(CONFIG_3_CONNECTION_TIMEOUT_DELAY) / 60000);
-						esb_set_tracker_state(CONNECTION_ERROR);
-						sys_request_system_off(false);
-						return;
-					}
+					esb_set_tracker_state(CONNECTION_ERROR);
 				} else {
 					dongle_search_started = 0;
 				}
@@ -602,31 +601,32 @@ static void esb_thread(void)
 				connect_to_dongle();
 				break;
 			case PAIRING_ERROR:
-			case CONNECTION_ERROR:
-				// only raise error while not potentially communicating by usb
-				if (!get_status(SYS_STATUS_CONNECTION_ERROR) && (!use_hid || !get_status(SYS_STATUS_USB_CONNECTED)))
+				if (!get_status(SYS_STATUS_CONNECTION_ERROR) && should_raise_errors())
 					set_status(SYS_STATUS_CONNECTION_ERROR, true);
-				// TODO This state is weird and it's not handled gracefully now
-				// TODO Decide what we want to do in this state and how we want to
-				// communicate with the user
+				shutdown_unconnected();
+				esb_set_tracker_state(PAIRING_FIND_DONGLES);
+			break;
+			case CONNECTION_ERROR:
+				if (!get_status(SYS_STATUS_CONNECTION_ERROR) && should_raise_errors())
+					set_status(SYS_STATUS_CONNECTION_ERROR, true);
 				clocks_allow_stopping(true);
+				shutdown_unconnected();
+				esb_set_tracker_state(FIND_DONGLE);
 				break;
 			case CONNECTED:
 				clocks_allow_stopping(true);
-				if(tx_errors >= TX_ERROR_THRESHOLD) {
-					// TODO : Raise connection error instead?
-					esb_set_tracker_state(FIND_DONGLE);
-					if (!get_status(SYS_STATUS_CONNECTION_ERROR) && (!use_hid || !get_status(SYS_STATUS_USB_CONNECTED)))
-						set_status(SYS_STATUS_CONNECTION_ERROR, true);
+				if(tx_errors >= TX_ERROR_THRESHOLD)
+				{
+					esb_set_tracker_state(CONNECTION_ERROR);
 				}
-				else if (tx_errors < TX_ERROR_THRESHOLD && get_status(SYS_STATUS_CONNECTION_ERROR) && k_uptime_get() - last_tx_fail > 3000) // TODO: there is possibly some race condition causing tx_error to potentially be above zero more often than not, so the check is more lenient; tx_error under threshold and last errors above threshold was not recent
+				else if (tx_errors < TX_ERROR_THRESHOLD && get_status(SYS_STATUS_CONNECTION_ERROR))
 				{
 					set_status(SYS_STATUS_CONNECTION_ERROR, false);
 				}
 				if(!connection_process()) {
 					clocks_stop();
 				}
-				k_msleep(1); // Sleep less in connected to send packets faster
+				k_msleep(1); // Sleep less in CONNECTED state to send packets faster
 				continue;
 			break;
 			case SEND_PING:
@@ -637,6 +637,6 @@ static void esb_thread(void)
 		}
 		pairing_save_retained();
 
-		k_msleep(100);
+		k_msleep(10);
 	}
 }
