@@ -29,6 +29,7 @@
 #define PROTOCOL_VERSION 2
 
 #define ESB_PACKET_MAX_SIZE 17
+#define ESB_PACKET_MAX_DATA_SIZE 16
 #define ESB_PACKET_DATA_LEGACY_SIZE 16
 
 #define ESB_PACKET_BROADCAST 255
@@ -83,7 +84,7 @@ void esb_set_receiver_addr(uint64_t receiver_addr);
 int esb_get_frequency(void);
 void esb_ping(uint64_t receiver_addr, uint8_t channel);
 
-void esb_write(uint8_t *data, uint8_t packet_sequnce); // TODO: give packets some names
+void esb_write(uint8_t *data, uint8_t packet_sequnce, uint8_t data_length);
 
 bool esb_ready(void);
 

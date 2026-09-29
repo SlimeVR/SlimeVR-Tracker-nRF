@@ -434,7 +434,7 @@ void esb_write_current() {
 	esb_start_tx();
 }
 
-void esb_write(uint8_t *data, uint8_t packet_sequnce)
+void esb_write(uint8_t *data, uint8_t packet_sequnce, uint8_t data_length)
 {
 	if (!esb_initialized || (esb_get_tracker_state() != CONNECTED))
 		return;
@@ -444,7 +444,8 @@ void esb_write(uint8_t *data, uint8_t packet_sequnce)
 #else
 	tx_payload.noack = false;
 #endif
-	memcpy(tx_payload.data, data, tx_payload.length);
+	tx_payload.length = data_length;
+	memcpy(tx_payload.data, data, data_length);
 	esb_write_current();
 	last_packet_sequence = packet_sequnce;
 	packets_sent++;
@@ -622,6 +623,11 @@ static void esb_thread(void)
 				{
 					set_status(SYS_STATUS_CONNECTION_ERROR, false);
 				}
+				if(!connection_process()) {
+					clocks_stop();
+				}
+				k_msleep(1); // Sleep less in connected to send packets faster
+				continue;
 			break;
 			case SEND_PING:
 				esb_send_ping();

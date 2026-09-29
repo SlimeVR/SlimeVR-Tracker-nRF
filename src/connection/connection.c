@@ -39,7 +39,8 @@ static uint8_t tracker_id, batt, batt_v, sensor_temp, imu_id, mag_id, tracker_st
 static uint8_t tracker_svr_status = SVR_STATUS_OK;
 static float sensor_q[4], sensor_a[3], sensor_m[3];
 
-static uint8_t data_buffer[ESB_PACKET_MAX_SIZE - 1] = {0};
+static uint8_t raw_data_buffer[ESB_PACKET_MAX_SIZE] = {0};
+static uint8_t *data_buffer = &raw_data_buffer[1];
 static uint8_t data_buffer_position = 0;
 static int64_t last_data_time = 0;
 static uint8_t packet_sequence = 0;
@@ -47,9 +48,6 @@ static bool allow_packet_bundling = false; // Can only be used with new server
 static bool motion_acked = false;
 
 LOG_MODULE_REGISTER(connection, LOG_LEVEL_INF);
-
-static void connection_thread(void);
-K_THREAD_DEFINE(connection_thread_id, 512, connection_thread, NULL, NULL, NULL, CONNECTION_THREAD_PRIORITY, K_FP_REGS, 0);
 
 void connection_clocks_request_stop(void)
 {
@@ -90,8 +88,6 @@ void connection_update_sensor_data(float *q, float *a, int64_t data_time)
 	memcpy(sensor_q, q, sizeof(sensor_q));
 	memcpy(sensor_a, a, sizeof(sensor_a));
 	quat_update_time = k_uptime_get();
-	if (sleep)
-		k_wakeup(connection_thread_id);
 }
 
 static int64_t mag_update_time = 0;
@@ -101,8 +97,6 @@ void connection_update_sensor_mag(float *m)
 {
 	memcpy(sensor_m, m, sizeof(sensor_m));
 	mag_update_time = k_uptime_get();
-	if (sleep)
-		k_wakeup(connection_thread_id);
 }
 
 void connection_update_sensor_temp(float temp)
@@ -174,15 +168,13 @@ void connection_set_shutdown(void)
 }
 
 void data_buffer_write(uint8_t* data, size_t size) {
-	if(data_buffer_position + size > sizeof(data_buffer)) {
-		LOG_ERR("ESB data buffer overflow. Writing %d, have space for %d", size, sizeof(data_buffer) - data_buffer_position);
+	if(data_buffer_position + size > ESB_PACKET_MAX_DATA_SIZE) {
+		LOG_ERR("ESB data buffer overflow. Writing %d, have space for %d", size, ESB_PACKET_MAX_DATA_SIZE - data_buffer_position);
 		return;
 	}
 	memcpy(data_buffer + data_buffer_position, data, size);
 	data_buffer_position += size;
 	last_data_time = k_uptime_get(); // TODO: use ticks
-	if (sleep)
-		k_wakeup(connection_thread_id);
 	hid_write_packet_n(data); // TODO:
 }
 
@@ -191,7 +183,7 @@ void data_buffer_reset() {
 }
 
 bool can_send_packet(size_t size) {
-	if(data_buffer_position + size > sizeof(data_buffer)) {
+	if(data_buffer_position + size > ESB_PACKET_MAX_DATA_SIZE) {
 		return false;
 	}
 	if(data_buffer_position != 0 && !allow_packet_bundling) {
@@ -419,97 +411,78 @@ static int64_t last_info2_time = 0;
 static int64_t last_status_time = 0;
 static int64_t last_status2_time = 0;
 
-void connection_thread(void)
+bool connection_process(void)
 {
-	uint8_t data_copy[ESB_PACKET_MAX_SIZE];
-	while (1)
+	// Didn't send status in 2 seconds, prioritize it
+	if (k_uptime_get() - last_status_time > 2000)
 	{
-		if (last_data_time != 0) // have valid data
-		{
-			last_data_time = 0;
-			data_copy[0] = packet_sequence++;
-			memcpy(data_copy + 1, data_buffer, sizeof(data_buffer));
-			data_buffer_reset();
-			esb_write(data_copy, packet_sequence - 1);
-		}
-		// Didn't send status in 2 seconds, prioritize it
-		else if (k_uptime_get() - last_status_time > 2000)
-		{
-			last_status_time = k_uptime_get();
-			connection_write_packet_3();
-			continue;
-		}
-		// mag is higher priority (skip accel, quat is full precision)
-		else if (mag_update_time && k_uptime_get() - last_mag_time > 200)
-		{
-			mag_update_time = 0; // data has been sent
-			last_mag_time = k_uptime_get();
-			connection_write_packet_4();
-			continue;
-		}
-		// if time for info and precise quat not needed
-		else if (quat_update_time && !send_precise_quat && k_uptime_get() - last_info_time > 100)
-		{
-			quat_update_time = 0;
-			last_quat_time = k_uptime_get();
-			last_info_time = k_uptime_get();
-			connection_write_packet_2();
-			continue;
-		}
-		// if time for info2 and precise quat not needed
-		else if (quat_update_time && !send_precise_quat && k_uptime_get() - last_info2_time > 100)
-		{
-			quat_update_time = 0;
-			last_quat_time = k_uptime_get();
-			last_info2_time = k_uptime_get();
-			connection_write_packet_7();
-			continue;
-		}
-		// send quat otherwise
-		else if (quat_update_time)
-		{
-			quat_update_time = 0;
-			last_quat_time = k_uptime_get();
-			connection_write_packet_1();
-			continue;
-		}
-		else if (k_uptime_get() - last_status_time > 1000)
-		{
-			last_status_time = k_uptime_get();
-			connection_write_packet_3();
-			continue;
-		}
-		else if (k_uptime_get() - last_info_time > 500)
-		{
-			last_info_time = k_uptime_get();
-			connection_write_packet_0();
-			continue;
-		}
-		else if (k_uptime_get() - last_info2_time > 100)
-		{
-			last_info2_time = k_uptime_get();
-			connection_write_packet_6();
-			continue;
-		}
-		else if (k_uptime_get() - last_status2_time > 1000)
-		{
-			last_status2_time = k_uptime_get();
-			connection_write_packet_5();
-			continue;
-		}
-		else if(!motion_acked || ALWAYS_SEND) // Didn't ack last motion packet, will send rotation again
-		{
-			quat_update_time = 0;
-			last_quat_time = k_uptime_get();
-			connection_write_packet_1();
-			continue;
-		}
-		else
-		{
-			connection_clocks_request_stop();
-		}
-		sleep = true;
-		k_msleep(1); // will be woken up if sending immediately
-		sleep = false;
+		last_status_time = k_uptime_get();
+		connection_write_packet_3();
 	}
+	// mag is higher priority (skip accel, quat is full precision)
+	else if (mag_update_time && k_uptime_get() - last_mag_time > 200)
+	{
+		mag_update_time = 0; // data has been sent
+		last_mag_time = k_uptime_get();
+		connection_write_packet_4();
+	}
+	// if time for info and precise quat not needed
+	else if (quat_update_time && !send_precise_quat && k_uptime_get() - last_info_time > 100)
+	{
+		quat_update_time = 0;
+		last_quat_time = k_uptime_get();
+		last_info_time = k_uptime_get();
+		connection_write_packet_2();
+	}
+	// if time for info2 and precise quat not needed
+	else if (quat_update_time && !send_precise_quat && k_uptime_get() - last_info2_time > 100)
+	{
+		quat_update_time = 0;
+		last_quat_time = k_uptime_get();
+		last_info2_time = k_uptime_get();
+		connection_write_packet_7();
+	}
+	// send quat otherwise
+	else if (quat_update_time)
+	{
+		quat_update_time = 0;
+		last_quat_time = k_uptime_get();
+		connection_write_packet_1();
+	}
+	else if (k_uptime_get() - last_status_time > 1000)
+	{
+		last_status_time = k_uptime_get();
+		connection_write_packet_3();
+	}
+	else if (k_uptime_get() - last_info_time > 500)
+	{
+		last_info_time = k_uptime_get();
+		connection_write_packet_0();
+	}
+	else if (k_uptime_get() - last_info2_time > 100)
+	{
+		last_info2_time = k_uptime_get();
+		connection_write_packet_6();
+	}
+	else if (k_uptime_get() - last_status2_time > 1000)
+	{
+		last_status2_time = k_uptime_get();
+		connection_write_packet_5();
+	}
+	else if(!motion_acked || ALWAYS_SEND) // Didn't ack last motion packet, will send rotation again
+	{
+		quat_update_time = 0;
+		last_quat_time = k_uptime_get();
+		connection_write_packet_1();
+	}
+	
+	if (data_buffer_position != 0) // have valid data
+	{
+		last_data_time = 0;
+		raw_data_buffer[0] = packet_sequence++;
+		esb_write(raw_data_buffer, packet_sequence - 1, data_buffer_position + 1);
+		data_buffer_reset();
+		return true;
+	}
+	return false;
 }

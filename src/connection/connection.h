@@ -46,6 +46,8 @@ void connection_write_packet_3(void);
 void connection_write_packet_4(void);
 void connection_write_packet_5(void);
 
+bool connection_process(void);
+
 void connection_motion_ack(uint8_t packet_sequence);
 
 #endif
