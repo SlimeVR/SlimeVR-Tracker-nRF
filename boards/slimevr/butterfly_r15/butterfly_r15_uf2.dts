@@ -45,8 +45,8 @@
 //end
 
 / {
-	model = "butterfly_r15";
-	compatible = "butterfly_r15";
+	model = "butterfly_r15_uf2";
+	compatible = "butterfly_r15_uf2";
 
 	chosen {
 		zephyr,sram = &sram0;

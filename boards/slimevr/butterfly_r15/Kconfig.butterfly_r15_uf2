@@ -1,5 +1,5 @@
 # Copyright (c) 2024 Nordic Semiconductor ASA
 # SPDX-License-Identifier: Apache-2.0
 
-config BOARD_BUTTERFLY_R15
+config BOARD_BUTTERFLY_R15_UF2
 	select SOC_NRF52833_QIAA
