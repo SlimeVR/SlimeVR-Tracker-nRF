@@ -21,6 +21,7 @@
 	THE SOFTWARE.
 */
 #include "globals.h"
+#include "connection.h"
 #include "util.h"
 #include "esb.h"
 #include "build_defines.h"
@@ -401,6 +402,27 @@ void connection_write_packet_7() // button and sleep time
 void connection_motion_ack(uint8_t packet_sequence) {
 	motion_acked = true;
 	// TODO Check if this sequence is from motion
+}
+
+void connection_led_control(uint8_t * data, uint8_t length) {
+	if(length < sizeof(packet_led_control_t)) {
+		LOG_WRN("LED control packet is too short: %d", length);
+		return;
+	}
+	packet_led_control_t * packet = (packet_led_control_t *) data;
+}
+
+void connection_packet_received(uint8_t * data, uint8_t length) {
+	if(tracker_id != data[2]) {
+		LOG_WRN("Received packet for wrong tracker id: %d != %d", data[2], tracker_id);
+		return;
+	}
+	// TODO Check sequence for packet loss statistics
+	switch(data[3]) {
+		case ESB_PACKET_LED_CONTROL:
+			connection_led_control(data, length);
+		break;
+	}
 }
 
 // TODO: use timing from IMU to get actual delay in tracking

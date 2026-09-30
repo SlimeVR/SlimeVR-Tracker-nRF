@@ -507,6 +507,7 @@ static void print_help(void)
 	printk("\ndfu                          Enter DFU bootloader\n");
 #endif
 	printk("\nmeow                         Meow!\n");
+	printk("\nled <r> <g> <b> <bright> <timeout>  LED Override\n");
 
 #if SENSOR_MAG_EXISTS
 	printk("\nreset_data (zro|acc|mag|bat|all)\n");
@@ -553,6 +554,7 @@ static void console_thread(void)
 	const char command_dfu[] = "dfu";
 #endif
 	const char command_meow[] = "meow";
+	const char command_led[] = "led";
 
 	// data
 	const char command_reset_data[] = "reset_data";
@@ -581,7 +583,7 @@ static void console_thread(void)
 #else
 		char *line = rtt_console_getline();
 #endif
-		char* argv[5] = {NULL}; // command and 4 args
+		char* argv[7] = {NULL}; // command and 4 args
 		size_t argc = parse_args(line, argv, ARRAY_SIZE(argv));
 		if(argc == 0)
 			continue;
@@ -686,6 +688,20 @@ static void console_thread(void)
 		else if (strcmp(argv[0], command_meow) == 0)
 		{
 			print_meow();
+		}
+		else if (strcmp(argv[0], command_led) == 0)
+		{
+			if (argc != 6)
+			{
+				printk("Invalid number of arguments\n");
+				continue;
+			}
+			uint64_t r = parse_u64(argv[1], 16);
+			uint64_t g = parse_u64(argv[2], 16);
+			uint64_t b = parse_u64(argv[3], 16);
+			uint64_t br = parse_u64(argv[4], 16);
+			uint64_t timeout = parse_u64(argv[5], 16);
+			led_override(U_PATTERN_ON, r, g, b, br, timeout);
 		}
 		else if (strcmp(argv[0], command_reset_data) == 0)
 		{

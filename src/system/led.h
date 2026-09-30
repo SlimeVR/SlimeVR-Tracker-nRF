@@ -77,6 +77,12 @@ enum sys_led_color {
 	SYS_LED_COLOR_PAIRING,
 };
 
+enum __attribute__((packed)) user_led_pattern {
+	U_PATTERN_OFF = 0,
+	U_PATTERN_ON = 1
+};
+
 void set_led(enum sys_led_pattern led_pattern, int priority);
+void led_override(enum user_led_pattern pattern, uint8_t r, uint8_t g, uint8_t b, uint8_t brightness, uint32_t timeout);
 
 #endif

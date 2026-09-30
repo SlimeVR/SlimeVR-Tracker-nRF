@@ -137,7 +137,7 @@ void event_handler(struct esb_evt const *event)
 				LOG_ERR("Error while reading rx packet: %d", err);
 				return;
 			}
-			if(rx_payload.length < 2) {
+			if(rx_payload.length < 3) {
 				LOG_ERR("Too short packet received");
 				return;
 			}
@@ -146,24 +146,20 @@ void event_handler(struct esb_evt const *event)
 			{
 				return;
 			}
-
-			if(rx_payload.length < 2) {
-				LOG_WRN("Too short packet received");
-				return;
-			}
 			
-			uint8_t packet_number = rx_payload.data[0];
-			if(packet_number != 0 && packet_number != last_packet_sequence) {
-				LOG_WRN("Packet number missmatch %d != %d", packet_number, last_packet_sequence);
-				break;
-			}
+			const uint8_t packet_number = rx_payload.data[0];
+			
 			packets_received++;
 			packets_rssi += (uint8_t) rx_payload.rssi;
+			const uint8_t packet_id = rx_payload.data[1];
 			
 			//LOG_INF("Packet %016llX", *(uint64_t *)tx_payload_pair.data);
-			if(rx_payload.data[1] > ESB_PACKET_DONGLE_PACKETS) {
+			if(packet_id > ESB_PACKET_DONGLE_PACKETS) {
+				if(packet_number != 0 && packet_number != last_packet_sequence) {
+					LOG_WRN("Dongle response packet number missmatch %d != %d", packet_number, last_packet_sequence);
+				}
 				// Control packet received
-				switch(rx_payload.data[1]) {
+				switch(packet_id) {
 					case ESB_PACKET_CONTROL_DONGLE_STATUS:
 						if(rx_payload.length < 16) {
 							LOG_ERR("Too short packet received");
@@ -241,6 +237,8 @@ void event_handler(struct esb_evt const *event)
 				default:
 					LOG_WRN("Unknown control packet %d received", rx_payload.data[2]);
 				}
+			} else if(rx_payload.pipe == 1 && packet_id > 7) {
+				connection_packet_received(rx_payload.data, rx_payload.length);
 			}
 			// if(last_received_packet != 0) {
 			// 	uint64_t diff = k_uptime_get() - last_received_packet;
