@@ -375,7 +375,7 @@ void led_override(enum user_led_pattern pattern, uint8_t r, uint8_t g, uint8_t b
 			k_thread_resume(led_thread_id);
 			k_wakeup(led_thread_id);
 		}
-	} else if(pattern = U_PATTERN_ON) {
+	} else if(pattern == U_PATTERN_ON) {
 		override_r = r;
 		override_g = g;
 		override_b = b;
