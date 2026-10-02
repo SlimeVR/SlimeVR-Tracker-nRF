@@ -20,11 +20,11 @@ void prepare_pair_payload()
 {
     uint64_t device_addr = *((uint64_t *)NRF_FICR->DEVICEADDR) & 0xFFFFFFFFFFFF;
     tx_payload_pair.pipe = 1;
-#if defined(NRF54L15_XXAA) // TODO: esb halts with ack and tx fail
-    tx_payload_pair.noack = true;
-#else
+    // #if defined(NRF54L15_XXAA) // TODO: esb halts with ack and tx fail
+    //     tx_payload_pair.noack = true;
+    // #else
     tx_payload_pair.noack = false;
-#endif
+    // #endif
     tx_payload_pair.data[0] = 0;
     tx_payload_pair.data[1] = ESB_PACKET_CONTROL_PAIR_REQEST;
     tx_payload_pair.data[2] = 0;
@@ -229,13 +229,11 @@ bool pairing_pick_dongle_and_pair(void)
             esb_set_channel(current_pairing_dongle.channel);
             esb_set_receiver_addr(current_pairing_dongle.dongle_hwid);
             esb_initialize(true, false);
-            uint32_t start = k_uptime_ticks();
-            while (start + 2000 > k_uptime_ticks() && esb_get_tracker_state() == PAIRING_PICK_DONGLE)
+            uint32_t start = k_uptime_get();
+            while (start + 2000 > k_uptime_get() && esb_get_tracker_state() == PAIRING_PICK_DONGLE)
             {
                 // TODO If we use channel hopping, we need to do something with timings here
                 // We should sync our timer to the received packets
-                esb_flush_rx();
-                esb_flush_tx();
                 LOG_INF("Trying to pair");
                 esb_write_payload(&tx_payload_pair);
                 int err = esb_start_tx();

@@ -122,8 +122,6 @@
 		zephyr,bt-mon-uart = &uart20;
 		zephyr,bt-c2h-uart = &uart20;
 	};
-
-
 };
 
 &radio {
@@ -167,21 +165,21 @@
 	};
 };
 
-&hfxo {
-	status = "okay";
-	clock-frequency = <DT_FREQ_M(32)>;
-	load-capacitors = "internal";
-	load-capacitance-femtofarad = <15000>;
-};
+// &hfxo {
+// 	status = "okay";
+// 	clock-frequency = <DT_FREQ_M(32)>;
+// 	load-capacitors = "internal";
+// 	load-capacitance-femtofarad = <15000>;
+// };
 
-&regulators {
-	status = "okay";
-};
+// &regulators {
+// 	status = "okay";
+// };
 
-&vregmain {
-	status = "okay";
-	regulator-initial-mode = <NRF5X_REG_MODE_DCDC>;
-};
+// &vregmain {
+// 	status = "okay";
+// 	regulator-initial-mode = <NRF5X_REG_MODE_DCDC>;
+// };
 
 &uicr {
 	nfct-pins-as-gpios;

@@ -69,7 +69,7 @@ static bool device_charged = false;
 static bool chg_temp_warn = false;
 static int64_t last_valid_temp = -1;
 
-LOG_MODULE_REGISTER(power, LOG_LEVEL_DBG);
+LOG_MODULE_REGISTER(power, LOG_LEVEL_INF);
 
 static void sys_WOM(bool force);
 static void sys_system_off(bool silent);
@@ -78,11 +78,11 @@ static void sys_system_reboot(void);
 static int sys_power_state_request(int id);
 
 static void disable_DFU_thread(void);
-// K_THREAD_DEFINE(disable_DFU_thread_id, 128, disable_DFU_thread, NULL, NULL, NULL, DISABLE_DFU_THREAD_PRIORITY, 0, 100); // disable DFU if the system is running correctly
+K_THREAD_DEFINE(disable_DFU_thread_id, 256, disable_DFU_thread, NULL, NULL, NULL, DISABLE_DFU_THREAD_PRIORITY, 0, 100); // disable DFU if the system is running correctly
 
 static void power_thread(void);
 // TODO: Fix power thread
-// K_THREAD_DEFINE(power_thread_id, 1024, power_thread, NULL, NULL, NULL, POWER_THREAD_PRIORITY, 0, 0);
+K_THREAD_DEFINE(power_thread_id, 1024, power_thread, NULL, NULL, NULL, POWER_THREAD_PRIORITY, 0, 0);
 
 #define ZEPHYR_USER_NODE DT_PATH(zephyr_user)
 

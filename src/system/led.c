@@ -3,6 +3,7 @@
 #include <math.h>
 #include <zephyr/drivers/gpio.h>
 #include <zephyr/drivers/pwm.h>
+#include <zephyr/drivers/i2c.h>
 #include <zephyr/kernel.h>
 #include <zephyr/pm/device.h>
 
@@ -73,6 +74,11 @@ static const struct pwm_dt_spec pwm_led1 = PWM_DT_SPEC_GET(DT_ALIAS(pwm_led1));
 #if DT_NODE_EXISTS(DT_ALIAS(pwm_led2))
 #define PWM_LED2_EXISTS true
 static const struct pwm_dt_spec pwm_led2 = PWM_DT_SPEC_GET(DT_ALIAS(pwm_led2));
+#endif
+
+#if DT_NODE_EXISTS(DT_ALIAS(led_controller))
+#define LED_CONTROLLER_EXISTS true
+static const struct i2c_dt_spec led_controller = I2C_DT_SPEC_GET(DT_ALIAS(led_controller));
 #endif
 
 static enum sys_led_pattern current_led_pattern;

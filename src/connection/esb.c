@@ -26,9 +26,6 @@
 #include "nettests.h"
 
 #include <zephyr/drivers/clock_control/nrf_clock_control.h>
-#if defined(NRF54L15_XXAA)
-#include <hal/nrf_clock.h>
-#endif /* defined(NRF54L15_XXAA) */
 #include <zephyr/sys/crc.h>
 
 #include "esb.h"
@@ -43,10 +40,10 @@
 #define TX_ERROR_CLEAR_RATE 10
 #define FREQUENCY_HOPPING false
 
-LOG_MODULE_REGISTER(esb_event, LOG_LEVEL_DBG);
+LOG_MODULE_REGISTER(esb_event, LOG_LEVEL_INF);
 
 static void esb_thread(void);
-K_THREAD_DEFINE(esb_thread_id, 1024, esb_thread, NULL, NULL, NULL, ESB_THREAD_PRIORITY, 0, 0);
+K_THREAD_DEFINE(esb_thread_id, 2048, esb_thread, NULL, NULL, NULL, ESB_THREAD_PRIORITY, 0, 0);
 
 static struct esb_payload rx_payload;
 static struct esb_payload tx_payload = ESB_EMPTY_PAYLOAD(0, ESB_PACKET_MAX_SIZE);
@@ -392,6 +389,7 @@ void esb_deinitialize(void)
 	{
 		esb_initialized = false;
 		k_msleep(1); // wait for pending transmissions
+		esb_stop_rx();
 		esb_disable();
 	}
 }

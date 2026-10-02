@@ -99,11 +99,22 @@ int clocks_start(void)
 			return err;
 		}
 	} while (err);
+
 #if NRF54L_ERRATA_20_PRESENT
-	if (nrf54l_errata_20()) {
+	if (nrf54l_errata_20())
+	{
 		nrf_power_task_trigger(NRF_POWER, NRF_POWER_TASK_CONSTLAT);
 	}
 #endif /* NRF54L_ERRATA_20_PRESENT */
+
+#if defined(NRF54LM20A_ENGA_XXAA)
+	/* MLTPAN-39 */
+	nrf_clock_task_trigger(NRF_CLOCK, NRF_CLOCK_TASK_PLLSTART);
+#endif
+	// #if defined(NRF54L15_XXAA)
+	// 	/* MLTPAN-20 */
+	// 	nrf_clock_task_trigger(NRF_CLOCK, NRF_CLOCK_TASK_PLLSTART);
+	// #endif /* defined(NRF54L15_XXAA) */
 
 	LOG_DBG("HF clock started");
 	clocks_status = true;

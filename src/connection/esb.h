@@ -61,8 +61,7 @@
 	{                                     \
 		.pipe = _pipe,                    \
 		.length = _length,                \
-		.data = { 0 }                     \
-	}
+		.data = {0}}
 
 void event_handler(struct esb_evt const *event);
 int esb_initialize(bool tx, bool advertize);
@@ -82,7 +81,8 @@ void esb_write(uint8_t *data, uint8_t packet_sequnce); // TODO: give packets som
 
 bool esb_ready(void);
 
-struct pairing_discovery_t {
+struct pairing_discovery_t
+{
 	uint64_t dongle_hwid;
 	uint8_t channel;
 	int8_t rssi;
@@ -94,7 +94,8 @@ struct pairing_discovery_t {
 	uint32_t response_time;
 };
 
-enum esb_tracker_state_t {
+enum esb_tracker_state_t
+{
 	NOT_PAIRED,
 	PAIRING_FIND_DONGLES,
 	PAIRING_PICK_DONGLE,
@@ -109,7 +110,8 @@ enum esb_tracker_state_t {
 	SEND_PING
 };
 
-struct ping_request_t {
+struct ping_request_t
+{
 	uint64_t target;
 	uint64_t time;
 	uint8_t channel;
