@@ -23,6 +23,7 @@
 #include "globals.h"
 #include "system/system.h"
 #include "connection.h"
+#include "nettests.h"
 
 #include <zephyr/drivers/clock_control/nrf_clock_control.h>
 #if defined(NRF54L15_XXAA)
@@ -31,230 +32,273 @@
 #include <zephyr/sys/crc.h>
 
 #include "esb.h"
+#include "tdma.h"
+#include "util.h"
+#include "system/clocks.h"
+#include "pairing.h"
 
-uint8_t last_reset = 0;
-//const nrfx_timer_t m_timer = NRFX_TIMER_INSTANCE(1);
-bool esb_state = false;
-bool timer_state = false;
-bool send_data = false;
-uint16_t led_clock = 0;
-uint32_t led_clock_offset = 0;
-
-uint32_t tx_errors = 0;
-int64_t last_tx_success = 0;
-int64_t last_tx_fail = 0;
-
-static struct esb_payload rx_payload;
-static struct esb_payload tx_payload = ESB_CREATE_PAYLOAD(0,
-														  0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
-static struct esb_payload tx_payload_pair = ESB_CREATE_PAYLOAD(0,
-														  0, 0, 0, 0, 0, 0, 0, 0);
-
-static uint8_t paired_addr[8] = {0};
-
-static bool esb_initialized = false;
-static bool esb_paired = false;
-
-#define TX_ERROR_THRESHOLD 30
+#define ALLOW_RETRANSMIT true
+#define TX_ERROR_THRESHOLD 100
 #define TX_ERROR_MAX 100
 #define TX_ERROR_CLEAR_RATE 10
+#define FREQUENCY_HOPPING false
 
 LOG_MODULE_REGISTER(esb_event, LOG_LEVEL_INF);
 
 static void esb_thread(void);
 K_THREAD_DEFINE(esb_thread_id, 512, esb_thread, NULL, NULL, NULL, ESB_THREAD_PRIORITY, 0, 0);
 
-uint64_t pairing_packets = 0;
+static struct esb_payload rx_payload;
+static struct esb_payload tx_payload = ESB_EMPTY_PAYLOAD(0, ESB_PACKET_MAX_SIZE);
 
-//|type    |description
-//|TX  CRC8|pairing
-//|RX  CRC8|pairing
+/*
+base_addr_p0: Base address for pipe 0, in big endian.
+base_addr_p1: Base address for pipe 1-7, in big endian (not used, set to dongle's address)
+pipe_prefixes: Address prefix for pipe 0 to 7.
+This was randomly generated
+*/
+static const uint8_t discovery_base_addr_0[4] = {0x62, 0x39, 0x8A, 0xF2};
+static const uint8_t discovery_base_addr_1[4] = {0x28, 0xFF, 0x50, 0xB8}; // Not used
+static const uint8_t discovery_addr_prefix[8] = {0xFE, 0xFF, 0x29, 0x27, 0x09, 0x02, 0xB2, 0xD6};
 
-//|b0      |b1      |b2      |b3      |b4      |b5      |b6      |b7      |b8      |b9      |b10     |b11     |b12     |b13     |b14     |b15     |
-//|type    |id      |packet data                                                                                                                  |
-//|TX  CRC8|ack     |device_addr                                          |
-//|RX  CRC8|ack     |recv_addr                                            |
+static uint8_t base_addr_0[4], base_addr_1[4], addr_prefix[8] = {0};
 
+static bool esb_initialized = false;
+static bool esb_tx = false;
+static bool esb_advertize = false;
+static uint8_t esb_channel = ESB_RIMARY_ADVERTISEMENT_CHANNEL;
+static bool dongle_found = false;
+static enum esb_tracker_state_t esb_tracker_state = NOT_PAIRED;
+static uint32_t esb_tracker_state_last_change = 0;
+static const uint8_t ESB_ALLOWED_CHANNEL_BUNDLES[] = {ESB_CHANNELS};
+static uint8_t currentChannelBundle = 0;
+static struct ping_request_t ping_request;
+static bool esb_skip_tdma = false;
+static uint32_t dongle_search_started = 0;
+
+uint32_t tx_errors = 0;
+int64_t last_tx_success = 0;
+int64_t last_tx_fail = 0;
+uint8_t last_packet_sequence = 0;
+uint8_t packets_sent;
+uint8_t packets_received;
+uint8_t packets_failed;
+uint32_t packets_rssi;
+uint64_t last_received_packet = 0;
+
+void found_dongle(uint64_t dongle_hwid, uint8_t channel, int32_t received_time) {
+	esb_set_channel(channel);
+	dongle_found = true;
+	int32_t time = tdma_get_time();
+	int32_t diff = (received_time - time);
+	LOG_INF("Our time: %d, rcvd time: %d", time, received_time);
+	tdma_update_timer_offset(diff);
+	for(int i = 0; i < sizeof(ESB_ALLOWED_CHANNEL_BUNDLES); ++i) {
+		if(ESB_ALLOWED_CHANNEL_BUNDLES[i] == channel) {
+			currentChannelBundle = i;
+			break;
+		}
+	}
+	retained->last_dongle_channel = esb_get_channel();
+	retained_update();
+	LOG_INF("Dongle successfully found!");
+	esb_set_tracker_state(DONGLE_CONNECT);
+}
+
+// TODO Split into multiple functions
 void event_handler(struct esb_evt const *event)
 {
 	switch (event->evt_id)
 	{
 	case ESB_EVENT_TX_SUCCESS:
-		if (!paired_addr[0]) // zero, not paired
-			pairing_packets++; // keep track of pairing state
-		if (tx_errors >= TX_ERROR_THRESHOLD && tx_errors < TX_ERROR_THRESHOLD + TX_ERROR_CLEAR_RATE && last_tx_fail == 0)
-		{
-			last_tx_success = 0; // reset last_tx_success on threshold reached
-			last_tx_fail = k_uptime_get();
-		}
+		last_tx_success = k_uptime_get();
 		if (tx_errors > TX_ERROR_CLEAR_RATE)
 			tx_errors -= TX_ERROR_CLEAR_RATE;
 		else
 			tx_errors = 0;
 		LOG_DBG("TX SUCCESS");
-		if (esb_paired)
-			clocks_stop();
 		break;
 	case ESB_EVENT_TX_FAILED:
+		last_tx_fail = k_uptime_get();
 		if (tx_errors < TX_ERROR_MAX)
 			tx_errors++;
-		if (tx_errors == TX_ERROR_THRESHOLD && last_tx_success == 0) // consecutive failure to transmit
-		{
-			last_tx_fail = 0; // reset last_tx_fail on threshold reached
-			last_tx_success = k_uptime_get();
-		}
-		LOG_DBG("TX FAILED");
-		if (esb_paired)
-			clocks_stop();
+		packets_failed++;
+		LOG_DBG("TX FAILED, last packet %d", last_packet_sequence);
 		break;
 	case ESB_EVENT_RX_RECEIVED:
-		// TODO: have to read rx until -ENODATA (or -EACCES/-EINVAL)
-		if (!esb_read_rx_payload(&rx_payload)) // zero, rx success
+		LOG_DBG("RX");
+		int err = 0;
+		while (!err) // zero, rx success
 		{
-			LOG_DBG("rx len: %d, pipe: %d", rx_payload.length, rx_payload.pipe);
-			if (!paired_addr[0]) // zero, not paired
-			{
-				LOG_DBG("tx: %16llX rx: %16llX", *(uint64_t *)tx_payload_pair.data, *(uint64_t *)rx_payload.data);
-				if (rx_payload.length == 8 && tx_payload_pair.data[1] == 1) // ack to second packet in pairing burst
-					memcpy(paired_addr, rx_payload.data, sizeof(paired_addr));
+			err = esb_read_rx_payload(&rx_payload);
+			if (err == -ENODATA) {
+				return;
+			} else if (err) {
+				LOG_ERR("Error while reading rx packet: %d", err);
+				return;
 			}
-			else
+			if(rx_payload.length < 3) {
+				LOG_ERR("Too short packet received");
+				return;
+			}
+
+			if (rx_payload.pipe == 0 && rx_payload.length == 8) // Legacy pairing, ignore
 			{
-				if (rx_payload.length == 4)
-				{
-					// TODO: Device should never receive packets if it is already paired, why is this packet received?
-					// This may be part of acknowledge
-//					if (!nrfx_timer_init_check(&m_timer))
-					{
-						LOG_WRN("Timer not initialized");
-						break;
-					}
-					if (timer_state == false)
-					{
-//						nrfx_timer_resume(&m_timer);
-						timer_state = true;
-					}
-//					nrfx_timer_clear(&m_timer);
-					last_reset = 0;
-					led_clock = (rx_payload.data[0] << 8) + rx_payload.data[1]; // sync led flashes :)
-					led_clock_offset = 0;
-					LOG_DBG("RX, timer reset");
+				return;
+			}
+			
+			const uint8_t packet_number = rx_payload.data[0];
+			
+			packets_received++;
+			packets_rssi += (uint8_t) rx_payload.rssi;
+			const uint8_t packet_id = rx_payload.data[1];
+			
+			//LOG_INF("Packet %016llX", *(uint64_t *)tx_payload_pair.data);
+			if(packet_id > ESB_PACKET_DONGLE_PACKETS) {
+				if(packet_number != 0 && packet_number != last_packet_sequence) {
+					LOG_WRN("Dongle response packet number missmatch %d != %d", packet_number, last_packet_sequence);
 				}
+				// Control packet received
+				switch(packet_id) {
+					case ESB_PACKET_CONTROL_DONGLE_STATUS:
+						if(rx_payload.length < 16) {
+							LOG_ERR("Too short packet received");
+							return;
+						}
+						uint64_t dongle_hwid = *((uint64_t *) &rx_payload.data[2]) & 0xFFFFFFFFFFFF;
+						uint8_t channel = rx_payload.data[8];
+        				LOG_INF("Found dongle %012llX on channel %d, rssi %d", dongle_hwid, channel, rx_payload.rssi);
+						if(esb_get_tracker_state() == FIND_DONGLE) {
+							// Looking for dongle when paired
+							if(!dongle_found && pairing_get_paired_dongle() == dongle_hwid) {
+								found_dongle(dongle_hwid, channel, *((uint32_t *) &rx_payload.data[10]));
+							}
+						} else {
+							pairing_dongle_found(&rx_payload);
+						}
+					break;
+					case ESB_PACKET_CONTROL_PAIR_RESPONSE:
+						pairing_dongle_response(&rx_payload);
+					break;
+					case ESB_PACKET_DONGLE_CONNECT_REPLY:
+						if(esb_get_tracker_state() == DONGLE_CONNECT) {
+							uint8_t tracker_id = rx_payload.data[2];
+							LOG_INF("Connect reply from dongle: %d", tracker_id);
+							//uint64_t tracker_hwid = *((uint64_t *) &rx_payload.data[3]) & 0xFFFFFFFFFFFF;
+							if(tracker_id < ESB_STATUS_ERROR) {
+								connection_set_id(tracker_id);
+								esb_set_tracker_state(CONNECTED);
+							} else {
+								if(tracker_id == ESB_STATUS_NOT_PAIRED) {
+									esb_set_tracker_state(NOT_PAIRED);
+								} else if(tracker_id == ESB_STATUS_NO_SLOTS) {
+									// Shouldn't happen really...
+									esb_set_tracker_state(NOT_PAIRED);
+								} else {
+									esb_set_tracker_state(CONNECTION_ERROR);
+								}
+							}
+						}
+						break;
+					case ESB_PACKET_DONGLE_RECONNECT:
+						esb_set_tracker_state(DONGLE_CONNECT);
+						break;
+					case ESB_PACKET_CONTROL_WINDOW_INFO: // Window Info (5)
+						int32_t time = tdma_get_time();
+						int32_t packet_time = tdma_get_packet_time();
+						uint8_t window = rx_payload.data[2];
+						tdma_set_our_window(window);
+						retained->tdma_window = window;
+						int32_t received_time = *((uint32_t *) &rx_payload.data[3]);
+						
+						// See NTP algorithm
+						int32_t diff = ((received_time - packet_time) + (received_time - time)) / 2;
+						// int32_t roundtrip_time = time - packet_time;
+
+						tdma_update_timer_offset(diff);
+						// if(ABS(diff) != 0) 
+						// 	LOG_WRN("Our: %d, packet: %d, dongle's: %d, diff: %d, roundtrip: %d (was slot %d), clock 0x%08x", time, packet_time, received_time, diff, roundtrip_time, tdma_get_slot(packet_time), nrf_clock_lf_src_get(NRF_CLOCK));
+						break;
+					case ESB_PACKET_CONTROL_PONG:
+						if(rx_payload.length < 14) {
+							LOG_WRN("Short PONG packet received: %d byes", rx_payload.length);
+							return;
+						}
+						if(ping_request.target != 0) {
+							uint64_t sorce_hwid = *((uint64_t *) &rx_payload.data[2]) & 0xFFFFFFFFFFFF;
+							uint64_t target_hwid = *((uint64_t *) &rx_payload.data[8]) & 0xFFFFFFFFFFFF;
+							uint64_t *addr = (uint64_t *)NRF_FICR->DEVICEADDR;
+							if(ping_request.target == target_hwid && sorce_hwid == ((*addr) & 0xFFFFFFFFFFFF)) {
+								LOG_INF("PONG packet received from %012llX, RSSI %d, time %d ticks", sorce_hwid, rx_payload.rssi, (int) (k_uptime_ticks() - ping_request.time));
+								ping_request.target = 0;
+							}
+						}
+						return;
+				default:
+					LOG_WRN("Unknown control packet %d received", rx_payload.data[2]);
+				}
+			} else if(rx_payload.pipe == 1 && packet_id > 7) {
+				connection_packet_received(rx_payload.data, rx_payload.length);
 			}
+			// if(last_received_packet != 0) {
+			// 	uint64_t diff = k_uptime_get() - last_received_packet;
+			// 	if(diff > 35) {
+			// 		LOG_WRN("Packet gap of %dms", diff);
+			// 	}
+			// }
+			last_received_packet = k_uptime_get();
+			connection_motion_ack(packet_number);
 		}
 		break;
 	}
 }
 
-bool clock_status = false;
+void esb_set_tracker_state(enum esb_tracker_state_t state) {
+	enum esb_tracker_state_t old_state = esb_tracker_state;
+	esb_tracker_state_last_change = k_uptime_get_32();
+	esb_tracker_state = state;
+	LOG_INF("ESB state change: %d -> %d", old_state, state);
+}
 
-#if defined(CONFIG_CLOCK_CONTROL_NRF)
-static struct onoff_manager *clk_mgr;
-
-static int clocks_init(void)
-{
-	clk_mgr = z_nrf_clock_control_get_onoff(CLOCK_CONTROL_NRF_SUBSYS_HF);
-	if (!clk_mgr)
-	{
-		LOG_ERR("Unable to get the Clock manager");
-		return -ENOTSUP;
+bool esb_wait_state_change(enum esb_tracker_state_t from_state, uint32_t timeout_ms) {
+	uint64_t start = k_uptime_get();
+	while(esb_tracker_state == from_state && start + timeout_ms > k_uptime_get()) {
+		k_msleep(1);
 	}
-
-	return 0;
+	return esb_tracker_state != from_state;
 }
 
-SYS_INIT(clocks_init, APPLICATION, CONFIG_APPLICATION_INIT_PRIORITY);
+enum esb_tracker_state_t esb_get_tracker_state(void) {
+	return esb_tracker_state;
+}
 
-int clocks_start(void)
+void fill_packets_stat(uint8_t *data) {
+	data[8] = packets_sent;
+	data[9] = packets_received;
+	data[10] = packets_failed;
+	data[11] = packets_received == 0 ? 0 : packets_rssi / packets_received;
+	packets_sent = 0;
+	packets_received = 0;
+	packets_failed = 0;
+	packets_rssi = 0;
+}
+
+int esb_initialize(bool tx, bool advertize)
 {
-	if (clock_status)
-		return 0;
-	int err;
-	int res;
-	struct onoff_client clk_cli;
-	int fetch_attempts = 0;
-
-	sys_notify_init_spinwait(&clk_cli.notify);
-
-	err = onoff_request(clk_mgr, &clk_cli);
-	if (err < 0)
-	{
-		LOG_ERR("Clock request failed: %d", err);
-		return err;
+	if(esb_initialized) {
+		if(tx == esb_tx && advertize == esb_advertize) {
+			if(advertize)
+				return 0; // Don't switch channel in advertize mode
+			uint32_t current_channel = 0;
+			esb_get_rf_channel(&current_channel);
+			if(esb_channel == current_channel)
+				return 0;		
+		}
+		esb_deinitialize();
 	}
-
-	do
-	{
-		k_usleep(100);
-		err = sys_notify_fetch_result(&clk_cli.notify, &res);
-		if (!err && res)
-		{
-			LOG_ERR("Clock could not be started: %d", res);
-			return res;
-		}
-		if (err && ++fetch_attempts > 10) {
-			LOG_WRN_ONCE("Unable to fetch Clock request result: %d", err);
-			return err;
-		}
-	} while (err);
-
-#if defined(NRF54L15_XXAA)
-	/* MLTPAN-20 */
-	nrf_clock_task_trigger(NRF_CLOCK, NRF_CLOCK_TASK_PLLSTART);
-#endif /* defined(NRF54L15_XXAA) */
-
-	LOG_DBG("HF clock started");
-	clock_status = true;
-	return 0;
-}
-
-void clocks_stop(void)
-{
-	if (!clock_status)
-		return;
-	clock_status = false;
-
-	onoff_release(clk_mgr);
-
-	LOG_DBG("HF clock stop request");
-}
-
-#else
-BUILD_ASSERT(false, "No Clock Control driver");
-#endif
-
-static struct k_thread clocks_thread_id;
-static K_THREAD_STACK_DEFINE(clocks_thread_id_stack, 128);
-
-void clocks_request_start(uint32_t delay_us)
-{
-	k_thread_create(&clocks_thread_id, clocks_thread_id_stack, K_THREAD_STACK_SIZEOF(clocks_thread_id_stack), (k_thread_entry_t)clocks_start, NULL, NULL, NULL, CLOCKS_START_THREAD_PRIORITY, 0, K_USEC(delay_us));
-}
-
-static struct k_thread clocks_stop_thread_id;
-static K_THREAD_STACK_DEFINE(clocks_stop_thread_id_stack, 128);
-
-void clocks_request_stop(uint32_t delay_us)
-{
-	k_thread_create(&clocks_stop_thread_id, clocks_stop_thread_id_stack, K_THREAD_STACK_SIZEOF(clocks_stop_thread_id), (k_thread_entry_t)clocks_stop, NULL, NULL, NULL, CLOCKS_STOP_THREAD_PRIORITY, 0, K_USEC(delay_us));
-}
-
-// this was randomly generated
-// TODO: I have no idea?
-// TODO: see esb information, check CONFIG_ESB_PIPE_COUNT
-/*
-base_addr_p0: Base address for pipe 0, in big endian.
-base_addr_p1: Base address for pipe 1-7, in big endian.
-pipe_prefixes: Address prefix for pipe 0 to 7.
-*/
-static const uint8_t discovery_base_addr_0[4] = {0x62, 0x39, 0x8A, 0xF2};
-static const uint8_t discovery_base_addr_1[4] = {0x28, 0xFF, 0x50, 0xB8}; // TODO: not used
-static const uint8_t discovery_addr_prefix[8] = {0xFE, 0xFF, 0x29, 0x27, 0x09, 0x02, 0xB2, 0xD6};
-
-static uint8_t base_addr_0[4], base_addr_1[4], addr_prefix[8] = {0};
-
-int esb_initialize(bool tx)
-{
+	esb_tx = tx;
+	esb_advertize = advertize;
+	esb_initialized = true;
 	int err;
 
 	struct esb_config config = ESB_DEFAULT_CONFIG;
@@ -265,14 +309,14 @@ int esb_initialize(bool tx)
 		// config.mode = ESB_MODE_PTX;
 		config.event_handler = event_handler;
 		// config.bitrate = ESB_BITRATE_2MBPS;
-		// config.crc = ESB_CRC_16BIT;
+		config.crc = SWEEP_TEST ? ESB_CRC_OFF : ESB_CRC_16BIT;
 		config.tx_output_power = CONFIG_2_SETTINGS_READ(CONFIG_2_RADIO_TX_POWER);
-		// config.retransmit_delay = 600;
-		//config.retransmit_count = 0;
-		//config.tx_mode = ESB_TXMODE_MANUAL;
-		// config.payload_length = 32;
-		config.selective_auto_ack = true; // TODO: while pairing, should be set to false
-//		config.use_fast_ramp_up = true;
+		config.retransmit_delay = 435;
+		config.retransmit_count = SWEEP_TEST ? 0 : 1;
+		config.tx_mode = ESB_TXMODE_MANUAL;
+		config.payload_length = CONFIG_ESB_MAX_PAYLOAD_LENGTH;
+		config.selective_auto_ack = true;
+		// config.use_fast_ramp_up = false;
 	}
 	else
 	{
@@ -282,34 +326,45 @@ int esb_initialize(bool tx)
 		// config.bitrate = ESB_BITRATE_2MBPS;
 		// config.crc = ESB_CRC_16BIT;
 		config.tx_output_power = CONFIG_2_SETTINGS_READ(CONFIG_2_RADIO_TX_POWER);
-		// config.retransmit_delay = 600;
-		// config.retransmit_count = 3;
+		config.retransmit_delay = 435;
+		config.retransmit_count = 0;
 		// config.tx_mode = ESB_TXMODE_AUTO;
-		// config.payload_length = 32;
+		config.payload_length = CONFIG_ESB_MAX_PAYLOAD_LENGTH;
 		config.selective_auto_ack = true;
-//		config.use_fast_ramp_up = true;
+		// config.use_fast_ramp_up = false;
 	}
 
 	err = esb_init(&config);
 
 	if (!err)
-		esb_set_base_address_0(base_addr_0);
-
-	if (!err)
-		esb_set_base_address_1(base_addr_1);
-
-	if (!err)
-		esb_set_prefixes(addr_prefix, ARRAY_SIZE(addr_prefix));
-
-	if (err)
 	{
+		esb_set_base_address_0(base_addr_0);
+		esb_set_base_address_1(base_addr_1);
+		esb_set_prefixes(addr_prefix, ARRAY_SIZE(addr_prefix));
+		esb_set_rf_channel(advertize ? ESB_RIMARY_ADVERTISEMENT_CHANNEL : esb_channel);
+	}
+	else
+	{
+		k_msleep(2000);
 		LOG_ERR("ESB initialization failed: %d", err);
 		set_status(SYS_STATUS_CONNECTION_ERROR, true);
+		esb_initialized = false;
 		return err;
 	}
 
-	esb_initialized = true;
+	int32_t ch;
+	esb_get_rf_channel(&ch);
+	LOG_INF("Initialized ESB, %sX mode ch %d, address %08X", tx ? "T" : "R", ch, *((uint32_t *) &base_addr_1[0]));
+
 	return 0;
+}
+
+void esb_set_channel(uint8_t ch) {
+	esb_channel = ch;
+}
+
+uint8_t esb_get_channel() {
+	return esb_channel;
 }
 
 void esb_deinitialize(void)
@@ -317,221 +372,270 @@ void esb_deinitialize(void)
 	if (esb_initialized)
 	{
 		esb_initialized = false;
-		k_msleep(10); // wait for pending transmissions
+		k_msleep(1); // wait for pending transmissions
+		esb_stop_rx();
 		esb_disable();
 	}
-	esb_initialized = false;
 }
 
-inline void esb_set_addr_discovery(void)
+void esb_set_addr_discovery(void)
 {
 	memcpy(base_addr_0, discovery_base_addr_0, sizeof(base_addr_0));
 	memcpy(base_addr_1, discovery_base_addr_1, sizeof(base_addr_1));
 	memcpy(addr_prefix, discovery_addr_prefix, sizeof(addr_prefix));
 }
 
-inline void esb_set_addr_paired(void)
+void esb_set_addr_paired(uint8_t *addr)
 {
-	// Recreate receiver address
+	uint8_t buf[6] = {0};
+	memcpy(buf, addr, 6);
 	uint8_t addr_buffer[16] = {0};
 	for (int i = 0; i < 4; i++)
 	{
-		addr_buffer[i] = paired_addr[i + 2];
-		addr_buffer[i + 4] = paired_addr[i + 2] + paired_addr[6];
+		addr_buffer[i] = buf[i];
+		addr_buffer[i + 4] = buf[i] + buf[4];
 	}
 	for (int i = 0; i < 8; i++)
-		addr_buffer[i + 8] = paired_addr[7] + i;
+		addr_buffer[i + 8] = buf[5] + i;
 	for (int i = 0; i < 16; i++)
 	{
 		if (addr_buffer[i] == 0x00 || addr_buffer[i] == 0x55 || addr_buffer[i] == 0xAA) // Avoid invalid addresses (see nrf datasheet)
 			addr_buffer[i] += 8;
 	}
-//	memcpy(base_addr_0, addr_buffer, sizeof(base_addr_0));
 	memcpy(base_addr_1, addr_buffer + 4, sizeof(base_addr_1));
-//	memcpy(addr_prefix, addr_buffer + 8, sizeof(addr_prefix));
 	memcpy(base_addr_0, discovery_base_addr_0, sizeof(base_addr_0));
 	memcpy(addr_prefix, discovery_addr_prefix, sizeof(addr_prefix));
 }
 
-void esb_set_pair(uint64_t addr)
+void esb_set_receiver_addr(uint64_t receiver_addr) {
+	esb_set_addr_paired((uint8_t *) &receiver_addr);
+}
+
+int esb_get_frequency(void) {
+	uint32_t channel;
+	esb_get_rf_channel(&channel);
+	return 2400UL + channel; // MHz
+}
+
+void esb_write_current() {
+	clocks_start();
+	// Wait for our window to broadcast
+	while(!esb_skip_tdma && !tdma_is_our_window())
+		k_sleep(K_TICKS(1)); // Spin wait?
+	esb_flush_tx(); // this will clear all transmissions even if they did not complete
+	esb_write_payload(&tx_payload); // Add transmission to queue
+	tdma_tx_started();
+#if FREQUENCY_HOPPING
+	uint32_t timer = tdma_get_time_with_static_offset();
+	uint32_t current_slot = tdma_get_slot(timer);
+	esb_set_channel(ESB_ALLOWED_CHANNEL_BUNDLES[(current_slot) % 10]);
+	esb_set_rf_channel(esb_channel);
+#endif
+	esb_start_tx();
+}
+
+void esb_write(uint8_t *data, uint8_t packet_sequnce, uint8_t data_length)
 {
-	uint64_t *device_addr = (uint64_t *)NRF_FICR->DEVICEADDR; // Use device address as unique identifier (although it is not actually guaranteed, see datasheet)
-	uint8_t buf[6] = {0};
-	memcpy(buf, device_addr, 6);
-	uint8_t checksum = crc8_ccitt(0x07, buf, 6);
-	if (checksum == 0)
-		checksum = 8;
-	if ((addr & 0xFF) != checksum)
-	{
-		LOG_INF("Incorrect checksum");
+	if (!esb_initialized || (esb_get_tracker_state() != CONNECTED))
 		return;
-	}
-	esb_reset_pair();
-	memcpy(paired_addr, &addr, sizeof(paired_addr));
-	LOG_INF("Paired");
-	sys_write(PAIRED_ID, retained->paired_addr, paired_addr, sizeof(paired_addr)); // Write new address and tracker id
-}
-
-void esb_pair(void)
-{
-	if (get_status(SYS_STATUS_CONNECTION_ERROR))
-		set_status(SYS_STATUS_CONNECTION_ERROR, false);
-	tx_errors = 0;
-	if (!paired_addr[0]) // zero, no receiver paired
-	{
-		LOG_INF("Pairing");
-		esb_set_addr_discovery();
-		esb_initialize(true);
-//		timer_init(); // TODO: shouldn't be here!!!
-		tx_payload_pair.pipe = 0;
-		tx_payload_pair.noack = false;
-		uint64_t *addr = (uint64_t *)NRF_FICR->DEVICEADDR; // Use device address as unique identifier (although it is not actually guaranteed, see datasheet)
-		memcpy(&tx_payload_pair.data[2], addr, 6);
-		LOG_INF("Device address: %012llX", *addr & 0xFFFFFFFFFFFF);
-		uint8_t checksum = crc8_ccitt(0x07, &tx_payload_pair.data[2], 6);
-		if (checksum == 0)
-			checksum = 8;
-		LOG_INF("Checksum: %02X", checksum);
-		tx_payload_pair.data[0] = checksum; // Use checksum to make sure packet is for this device
-		set_led(SYS_LED_PATTERN_SHORT, SYS_LED_PRIORITY_PAIR);
-		while (paired_addr[0] != checksum)
-		{
-			int64_t time_begin = k_uptime_get();
-
-			if (!esb_initialized)
-			{
-				esb_set_addr_discovery();
-				esb_initialize(true);
-			}
-
-			if (!clock_status)
-				clocks_start();
-
-			if (paired_addr[0])
-			{
-				LOG_INF("Incorrect checksum: %02X", paired_addr[0]);
-				paired_addr[0] = 0; // Packet not for this device
-			}
-
-//			esb_flush_rx();
-//			esb_flush_tx();
-
-			pairing_packets = 0;
-
-			// send pairing request
-			tx_payload_pair.data[1] = 0;
-			esb_write_payload(&tx_payload_pair);
-			k_usleep(100);
-			while (!esb_is_idle() && (k_uptime_get() < (time_begin + 10)))
-				k_usleep(1);
-
-			// receive ack data
-			tx_payload_pair.data[1] = 1;
-			if ((pairing_packets == 1) && (k_uptime_get() < (time_begin + 10)))
-				esb_write_payload(&tx_payload_pair);
-			k_usleep(100);
-			while (!esb_is_idle() && (k_uptime_get() < (time_begin + 10)))
-				k_usleep(1);
-
-			if (pairing_packets == 2)
-				LOG_INF("Pairing request received");
-
-			if (clock_status)
-				clocks_stop();
-
-			int64_t time_delta = k_uptime_get() - time_begin;
-			if (time_delta > 1000)
-				k_yield();
-			else
-				k_msleep(1000 - time_delta);
-		}
-		set_led(SYS_LED_PATTERN_ONESHOT_COMPLETE, SYS_LED_PRIORITY_PAIR);
-		LOG_INF("Paired");
-		sys_write(PAIRED_ID, retained->paired_addr, paired_addr, sizeof(paired_addr)); // Write new address and tracker id
-		esb_deinitialize();
-		k_msleep(1600); // wait for led pattern
-	}
-	LOG_INF("Tracker ID: %u", paired_addr[1]);
-	LOG_INF("Receiver address: %012llX", (*(uint64_t *)&retained->paired_addr[0] >> 16) & 0xFFFFFFFFFFFF);
-
-	connection_set_id(paired_addr[1]);
-
-	esb_set_addr_paired();
-	esb_paired = true;
-	clocks_stop();
-}
-
-void esb_reset_pair(void)
-{
-	if (paired_addr[0] || esb_paired)
-	{
-		esb_deinitialize(); // make sure esb is off
-		esb_paired = false;
-		memset(paired_addr, 0, sizeof(paired_addr));
-		LOG_INF("Pairing requested");
-	}
-}
-
-void esb_clear_pair(void)
-{
-	esb_reset_pair();
-	sys_write(PAIRED_ID, &retained->paired_addr, paired_addr, sizeof(paired_addr)); // write zeroes
-	LOG_INF("Pairing data reset");
-}
-
-void esb_write(uint8_t *data)
-{
-	if (!esb_initialized || !esb_paired)
-		return;
-	if (!clock_status)
-		clocks_start();
 	tx_payload.pipe = 1; // using base address 1
 #if defined(NRF54L15_XXAA) // TODO: esb halts with ack and tx fail
 	tx_payload.noack = true;
 #else
 	tx_payload.noack = false;
 #endif
-	memcpy(tx_payload.data, data, tx_payload.length);
-	esb_flush_tx(); // this will clear all transmissions even if they did not complete
-	esb_write_payload(&tx_payload); // Add transmission to queue
-	send_data = true;
+	tx_payload.length = data_length;
+	memcpy(tx_payload.data, data, data_length);
+	esb_write_current();
+	last_packet_sequence = packet_sequnce;
+	packets_sent++;
+}
+
+void esb_ping(uint64_t receiver_addr, uint8_t channel) {
+	ping_request.target = receiver_addr;
+	ping_request.time = k_uptime_ticks();
+	ping_request.channel = channel;
+	ping_request.return_sate = esb_get_tracker_state();
+	esb_set_tracker_state(SEND_PING);
+}
+
+void esb_send_ping() {
+	uint8_t ch = esb_get_channel();
+
+	esb_set_channel(ping_request.channel);
+	esb_initialize(true, false);
+
+	uint64_t *addr = (uint64_t *)NRF_FICR->DEVICEADDR;
+	tx_payload.data[1] = ESB_PACKET_CONTROL_PING;
+	memcpy(&tx_payload.data[2], addr, 6);
+	memcpy(&tx_payload.data[8], &ping_request.target, 6);
+	tx_payload.pipe = 0; // Send ping on broadcast address
+
+	esb_write_current();
+	k_msleep(100);
+
+	esb_set_channel(ch);
+	esb_deinitialize();
+	esb_set_tracker_state(ping_request.return_sate);
 }
 
 bool esb_ready(void)
 {
-	return esb_initialized && esb_paired;
+	return esb_initialized && esb_get_tracker_state() == CONNECTED;
+}
+
+bool find_dongle() {
+	dongle_found = false;
+	LOG_INF("Searching for our dongle %012llX...", (*(uint64_t *)&retained->paired_addr[0] >> 16) & 0xFFFFFFFFFFFF);
+	clocks_allow_stopping(false);
+	clocks_start();
+	esb_initialize(false, true);
+	esb_start_rx();
+	uint64_t start = k_uptime_get();
+	while(!dongle_found && start + ESB_SEARCH_TIMEOUT > k_uptime_get()) {
+		k_msleep(20);
+		if(esb_get_tracker_state() != FIND_DONGLE)
+			return true;
+	}
+	return dongle_found;
+}
+
+void populate_connect_payload() {
+	uint64_t device_addr = *((uint64_t *) NRF_FICR->DEVICEADDR) & 0xFFFFFFFFFFFF;
+	tx_payload.pipe = 1;
+	tx_payload.noack = false;
+	tx_payload.data[0] = 0;
+	tx_payload.data[1] = ESB_PACKET_DONGLE_CONNECT;
+	tx_payload.data[2] = connection_get_id();
+	memcpy(&tx_payload.data[3], &device_addr, 6);
+	tx_payload.data[9] = ESB_VERSION;
+	tx_payload.data[10] = PROTOCOL_VERSION;
+}
+
+void connect_to_dongle() {
+	// TODO : Fast connect if we just woke up
+	// TODO : Frequency hopping
+	clocks_allow_stopping(false);
+	clocks_start();
+	esb_initialize(true, false);
+	uint64_t start = k_uptime_get();
+	while(esb_get_tracker_state() == DONGLE_CONNECT && start + 1000 > k_uptime_get()) {
+		populate_connect_payload();
+		esb_write_current();
+		k_msleep(15);
+	}
+	if(esb_get_tracker_state() == DONGLE_CONNECT)
+		esb_set_tracker_state(FIND_DONGLE);
+}
+
+bool should_raise_errors() {
+	return CONFIG_0_SETTINGS_READ(CONFIG_0_CONNECTION_OVER_HID) == 0 || get_status(SYS_STATUS_USB_CONNECTED) == 0;
+}
+
+void shutdown_unconnected() {
+	if(dongle_search_started == 0)
+		return;
+	bool use_shutdown = CONFIG_0_SETTINGS_READ(CONFIG_0_USER_SHUTDOWN);
+	if(use_shutdown && should_raise_errors() && !get_status(SYS_STATUS_SERIAL_ACTIVE) && k_uptime_get_32() - dongle_search_started > CONFIG_3_SETTINGS_READ(CONFIG_3_CONNECTION_TIMEOUT_DELAY)) {
+		sys_request_system_off(false);
+	}
 }
 
 static void esb_thread(void)
 {
-	bool use_hid = CONFIG_0_SETTINGS_READ(CONFIG_0_CONNECTION_OVER_HID);
-	bool use_shutdown = CONFIG_0_SETTINGS_READ(CONFIG_0_USER_SHUTDOWN);
-	int64_t start_time = k_uptime_get();
+	//k_msleep(5000);
+	clocks_start();
+	clock_init_external();
 
-	// Read paired address from retained
-	memcpy(paired_addr, retained->paired_addr, sizeof(paired_addr));
+	pairing_restore();
+	esb_channel = retained->last_dongle_channel; // TODO Channel bundles?
+	if(esb_channel != 0 && esb_get_tracker_state() == FIND_DONGLE) {
+		dongle_found = true;
+		esb_set_tracker_state(DONGLE_CONNECT);
+	}
+	tdma_set_our_window(retained->tdma_window);
+	// TODO Restore TDMA timer & frequency hopping
+	// But we need RTC for this...
+
+#if SWEEP_TEST
+	sweep_test_run();
+#endif
 
 	while (1)
 	{
-		if (!esb_paired && (!use_hid || paired_addr[0] || (!get_status(SYS_STATUS_USB_CONNECTED) && k_uptime_get() - 750 > start_time))) // only automatically enter pairing while not potentially communicating by usb, however allow esb if already paired
-		{
-			esb_pair();
-			esb_initialize(true);
+		switch(esb_tracker_state) {
+			case PAIRING_REJECTED:
+				// pairing_rejected_counter++;
+				// Fall-trhough
+			case NOT_PAIRED:
+			case PAIRING_FIND_DONGLES:
+				if(dongle_search_started == 0) {
+					dongle_search_started = k_uptime_get_32();
+				}
+				if(!pairing_find_dongles_to_pair()) {
+					LOG_WRN("Pairing timeout");
+					esb_set_tracker_state(PAIRING_ERROR);
+				} else {
+					dongle_search_started = 0;
+				}
+			break;
+			case PAIRING_PICK_DONGLE:
+				if(!pairing_pick_dongle_and_pair()) {
+					LOG_WRN("No dongles approved pairing");
+					esb_set_tracker_state(PAIRING_FIND_DONGLES);
+				}
+				break;
+			case FIND_DONGLE:
+				if(dongle_search_started == 0) {
+					dongle_search_started = k_uptime_get_32();
+				}
+				if(!find_dongle()) {
+					LOG_WRN("Couldn't find our dongle");
+					esb_set_tracker_state(CONNECTION_ERROR);
+				} else {
+					dongle_search_started = 0;
+				}
+				break;
+			case DONGLE_CONNECT:
+				connect_to_dongle();
+				break;
+			case PAIRING_ERROR:
+				if (!get_status(SYS_STATUS_CONNECTION_ERROR) && should_raise_errors())
+					set_status(SYS_STATUS_CONNECTION_ERROR, true);
+				shutdown_unconnected();
+				esb_set_tracker_state(PAIRING_FIND_DONGLES);
+			break;
+			case CONNECTION_ERROR:
+				if (!get_status(SYS_STATUS_CONNECTION_ERROR) && should_raise_errors())
+					set_status(SYS_STATUS_CONNECTION_ERROR, true);
+				clocks_allow_stopping(true);
+				shutdown_unconnected();
+				esb_set_tracker_state(FIND_DONGLE);
+				break;
+			case CONNECTED:
+				clocks_allow_stopping(true);
+				if(tx_errors >= TX_ERROR_THRESHOLD)
+				{
+					esb_set_tracker_state(CONNECTION_ERROR);
+				}
+				else if (tx_errors < TX_ERROR_THRESHOLD && get_status(SYS_STATUS_CONNECTION_ERROR))
+				{
+					set_status(SYS_STATUS_CONNECTION_ERROR, false);
+				}
+				if(!connection_process()) {
+					clocks_stop();
+				}
+				k_msleep(1); // Sleep less in CONNECTED state to send packets faster
+				continue;
+			break;
+			case SEND_PING:
+				esb_send_ping();
+			break;
+			default: // Other states are handled in a different place
+				break;
 		}
-		if (tx_errors >= TX_ERROR_THRESHOLD)
-		{
-			if (!get_status(SYS_STATUS_CONNECTION_ERROR) && (!use_hid || !get_status(SYS_STATUS_USB_CONNECTED))) // only raise error while not potentially communicating by usb
-				set_status(SYS_STATUS_CONNECTION_ERROR, true);
-			if (use_shutdown && k_uptime_get() - last_tx_success > CONFIG_3_SETTINGS_READ(CONFIG_3_CONNECTION_TIMEOUT_DELAY)) // shutdown if receiver is not detected // TODO: is shutdown necessary if usb is connected at the time?
-			{
-				LOG_WRN("No response from receiver in %dm", CONFIG_3_SETTINGS_READ(CONFIG_3_CONNECTION_TIMEOUT_DELAY) / 60000);
-				sys_request_system_off(false);
-			}
-		}
-		else if (tx_errors < TX_ERROR_THRESHOLD && get_status(SYS_STATUS_CONNECTION_ERROR) && k_uptime_get() - last_tx_fail > 3000) // TODO: there is possibly some race condition causing tx_error to potentially be above zero more often than not, so the check is more lenient; tx_error under threshold and last errors above threshold was not recent
-		{
-			set_status(SYS_STATUS_CONNECTION_ERROR, false);
-		}
-		k_msleep(100);
+		pairing_save_retained();
+
+		k_msleep(10);
 	}
 }

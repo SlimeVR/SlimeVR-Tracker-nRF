@@ -20,13 +20,11 @@
 	OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 	THE SOFTWARE.
 */
-#ifndef SLIMENRF_CONNECTION
-#define SLIMENRF_CONNECTION
+#pragma once
 
-void connection_clocks_request_start(void);
-void connection_clocks_request_start_delay_us(uint32_t delay_us);
+#include "../system/led.h"
+
 void connection_clocks_request_stop(void);
-void connection_clocks_request_stop_delay_us(uint32_t delay_us);
 
 uint8_t connection_get_id(void);
 void connection_set_id(uint8_t id);
@@ -49,4 +47,23 @@ void connection_write_packet_3(void);
 void connection_write_packet_4(void);
 void connection_write_packet_5(void);
 
-#endif
+bool connection_process(void);
+
+void connection_packet_received(uint8_t * data, uint8_t length);
+
+void connection_motion_ack(uint8_t packet_sequence);
+
+#define ESB_PACKET_LED_CONTROL 52
+
+typedef struct __attribute__((packed)) {
+	uint8_t sequence;
+	uint8_t packet_id;
+	uint8_t tracker_id;
+	uint8_t sensor_id;
+	enum user_led_pattern pattern;
+	uint8_t r;
+	uint8_t g;
+	uint8_t b;
+	uint8_t brightness;
+	uint16_t timeout;
+} packet_led_control_t;

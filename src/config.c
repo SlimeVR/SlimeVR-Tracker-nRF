@@ -1,6 +1,6 @@
 #include "globals.h"
 #include "system/system.h"
-
+#include <zephyr/sys/printk.h>
 #include "config.h"
 
 #if DT_NODE_HAS_STATUS_OKAY(DT_ALIAS(retainedmemdevice))
@@ -43,6 +43,7 @@ const char *config_settings_names[] = {
 	"sensor_gyro_fs",
 	"sensor_fusion",
 	"radio_tx_power",
+	"esb_channel",
 	"connection_timeout_delay", // 3
 	"sensor_lp_timeout",
 	"imu_timeout_ramp_min",

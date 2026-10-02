@@ -3,6 +3,7 @@
 #include "sensor/calibration.h"
 #include "connection/connection.h"
 #include "connection/esb.h"
+#include "connection/pairing.h"
 
 #include <zephyr/drivers/gpio.h>
 #include <zephyr/drivers/pwm.h>
@@ -73,6 +74,11 @@ static const struct pwm_dt_spec clk_out = PWM_DT_SPEC_GET(CLKOUT_NODE);
 static const struct pwm_dt_spec clk_out = {0};
 #endif
 
+#if DT_NODE_HAS_PROP(ZEPHYR_USER_NODE, test_gpios)
+#define TEST_PIN_EXISTS true
+static const struct gpio_dt_spec test_pin = GPIO_DT_SPEC_GET(ZEPHYR_USER_NODE, test_gpios);
+#endif
+
 #define DFU_EXISTS CONFIG_BUILD_OUTPUT_UF2 || CONFIG_BOARD_HAS_NRF5_BOOTLOADER
 #define ADAFRUIT_BOOTLOADER CONFIG_BUILD_OUTPUT_UF2
 #define NRF5_BOOTLOADER CONFIG_BOARD_HAS_NRF5_BOOTLOADER
@@ -88,7 +94,10 @@ static const struct device *gpio_dev = DEVICE_DT_GET(DT_NODELABEL(gpio0));
 int sys_get_die_temperature(float *ptr)
 {
 	if (k_uptime_get() - last_temp_time > 1000)
+	{
+		*ptr = 25.0f; // fallback
 		return -1;
+	}
 	sensor_channel_get(temp_dev, SENSOR_CHAN_DIE_TEMP, &temp);
 	*ptr = sensor_value_to_float(&temp);
 	return 0;
@@ -313,11 +322,14 @@ int set_sensor_clock(bool enable, float rate, float *actual_rate)
 static const struct gpio_dt_spec button0 = GPIO_DT_SPEC_GET(DT_ALIAS(sw0), gpios);
 static int64_t press_time = 0;
 static int64_t last_press_duration = 0;
+bool button_held_from_init;
 
 static void button_interrupt_handler(const struct device *dev, struct gpio_callback *cb, uint32_t pins)
 {
 	bool pressed = button_read();
 	int64_t current_time = k_uptime_get();
+	if (!pressed && button_held_from_init) // after first depress, now allow events that need unambiguous button hold
+		button_held_from_init = false;
 	if (press_time && !pressed && current_time - press_time > 50) // debounce
 		last_press_duration = current_time - press_time;
 	else if (press_time && pressed) // unusual press event on button already pressed
@@ -330,17 +342,34 @@ static struct gpio_callback button_cb_data;
 
 static int sys_button_init(void)
 {
+	// Not clearing RESETREAS here
+#ifdef NRF_RESET
+	bool reset_vbus_reset = NRF_RESET->RESETREAS & RESET_RESETREAS_VBUS_Msk;
+#else
+	bool reset_vbus_reset = NRF_POWER->RESETREAS & POWER_RESETREAS_VBUS_Msk;
+#endif
 	gpio_pin_configure_dt(&button0, GPIO_INPUT);
 	gpio_pin_interrupt_configure_dt(&button0, GPIO_INT_EDGE_BOTH);
 	gpio_init_callback(&button_cb_data, button_interrupt_handler, BIT(button0.pin));
 	gpio_add_callback(button0.port, &button_cb_data);
+	if (!reset_vbus_reset)
+		button_held_from_init = gpio_pin_get_dt(&button0);
 	return 0;
 }
 
 SYS_INIT(sys_button_init, APPLICATION, CONFIG_APPLICATION_INIT_PRIORITY);
 #endif
 
-bool button_read(void)
+bool button_read_filtered() // ignores inital press only if button was used as a wakeup key
+{
+#if BUTTON_EXISTS // Alternate button if available to use as "reset key"
+	return button_held_from_init ? false : gpio_pin_get_dt(&button0);
+#else
+	return false;
+#endif
+}
+
+bool button_read()
 {
 #if BUTTON_EXISTS // Alternate button if available to use as "reset key"
 	return gpio_pin_get_dt(&button0);
@@ -390,7 +419,7 @@ static void button_thread(void)
 			if (sys_user_shutdown()) // held for 1 second, reset pairing
 			{
 				LOG_INF("Pairing requested");
-				esb_reset_pair();
+				pairing_request_pair();
 				press_time = 0;
 				set_status(SYS_STATUS_BUTTON_PRESSED, false); // TODO: is needed?
 			}
@@ -407,6 +436,12 @@ static void button_thread(void)
 }
 #endif
 
+void test_pin_set(int value) {
+#if TEST_PIN_EXISTS
+	gpio_pin_set_dt(&test_pin, value);
+#endif
+}
+
 static int sys_gpio_init(void)
 {
 #if DOCK_EXISTS // configure if exists
@@ -420,6 +455,9 @@ static int sys_gpio_init(void)
 #endif
 #if CLK_EN_EXISTS
 	gpio_pin_configure_dt(&clk_en, GPIO_OUTPUT);
+#endif
+#ifdef TEST_PIN_EXISTS
+	gpio_pin_configure_dt(&test_pin, GPIO_OUTPUT);
 #endif
 #if DCDC_EN_EXISTS
 	gpio_pin_configure_dt(&dcdc_en, GPIO_OUTPUT);
@@ -497,7 +535,7 @@ void sys_reset_mode(uint8_t mode)
 		break;
 	case 2: // Reset mode pairing reset
 		LOG_INF("Pairing reset requested");
-		esb_reset_pair();
+		pairing_request_pair();
 		break;
 #if DFU_EXISTS // Using DFU bootloader
 	case 3:

@@ -6,6 +6,7 @@
 #include "connection/esb.h"
 #include "build_defines.h"
 #include "parse_args.h"
+#include "connection/pairing.h"
 
 #if CONFIG_USB_DEVICE_STACK
 #define USB DT_NODELABEL(usbd)
@@ -21,7 +22,6 @@
 #include "system/rtt_console.h"
 #endif
 #include <zephyr/drivers/gpio.h>
-#include <zephyr/sys/reboot.h>
 #include <zephyr/sys/base64.h>
 
 #include <ctype.h>
@@ -31,7 +31,7 @@ LOG_MODULE_REGISTER(console, LOG_LEVEL_INF);
 static void console_thread(void);
 #if USB_EXISTS
 static struct k_thread console_thread_id;
-static K_THREAD_STACK_DEFINE(console_thread_id_stack, 1024); // TODO: larger stack size to handle print info
+static K_THREAD_STACK_DEFINE(console_thread_stack, 1024); // TODO: larger stack size to handle print info
 #else
 K_THREAD_DEFINE(console_thread_id, 1024, console_thread, NULL, NULL, NULL, CONSOLE_THREAD_PRIORITY, 0, 0);
 #endif
@@ -101,7 +101,7 @@ static uint8_t meow_colors[] = {
 void console_thread_create(void)
 {
 #if USB_EXISTS
-	k_thread_create(&console_thread_id, console_thread_id_stack, K_THREAD_STACK_SIZEOF(console_thread_id_stack), (k_thread_entry_t)console_thread, NULL, NULL, NULL, CONSOLE_THREAD_PRIORITY, 0, K_NO_WAIT);
+	k_thread_create(&console_thread_id, console_thread_stack, K_THREAD_STACK_SIZEOF(console_thread_stack), (k_thread_entry_t)console_thread, NULL, NULL, NULL, CONSOLE_THREAD_PRIORITY, 0, K_NO_WAIT);
 #endif
 }
 
@@ -167,6 +167,8 @@ static void print_connection(void)
 	printk(paired ? "Tracker ID: %u\n" : "Tracker ID: None\n", retained->paired_addr[1]);
 	printk("Device address: %012llX\n", *(uint64_t *)NRF_FICR->DEVICEADDR & 0xFFFFFFFFFFFF);
 	printk(paired ? "Receiver address: %012llX\n" : "Receiver address: None\n", (*(uint64_t *)&retained->paired_addr[0] >> 16) & 0xFFFFFFFFFFFF);
+	printk("Channel frequency: %d\n", esb_get_frequency());
+	printk("Device status: %d, ESB state: %d\n", get_status(SYS_STATUS_ALL), esb_get_tracker_state());
 }
 
 static void print_battery(void)
@@ -489,6 +491,7 @@ static void print_help(void)
 	printk("\ninfo                         Get device information\n");
 	printk("uptime                       Get device uptime\n");
 	printk("reboot                       Soft reset the device\n");
+	printk("shutdown                     Power off the device\n");
 	printk("battery                      Get battery information\n");
 	printk("\nscan                         Restart sensor scan\n");
 	printk("calibrate                    Calibrate sensor ZRO\n");
@@ -496,13 +499,15 @@ static void print_help(void)
 #if SENSOR_MAG_EXISTS
 	printk("mag                          Clear magnetometer calibration\n");
 #endif
-	printk("\nset <address>                Manually set receiver\n");
+	printk("\nset <address> <id>         Manually set receiver\n");
+	printk("\nping <address>             Ping specified address\n");
 	printk("pair                         Enter pairing mode\n");
 	printk("clear                        Clear pairing data\n");
 #if DFU_EXISTS
 	printk("\ndfu                          Enter DFU bootloader\n");
 #endif
 	printk("\nmeow                         Meow!\n");
+	printk("\nled <r> <g> <b> <bright> <timeout>  LED Override\n");
 
 #if SENSOR_MAG_EXISTS
 	printk("\nreset_data (zro|acc|mag|bat|all)\n");
@@ -518,19 +523,6 @@ static void print_help(void)
 
 static void console_thread(void)
 {
-#if USB_EXISTS && DFU_EXISTS
-	if (button_read()) // button held on usb connect, enter DFU
-	{
-#if ADAFRUIT_BOOTLOADER
-		NRF_POWER->GPREGRET = 0x57;
-		sys_request_system_reboot(false);
-#endif
-#if NRF5_BOOTLOADER
-		gpio_pin_configure(gpio_dev, 19, GPIO_OUTPUT | GPIO_OUTPUT_INIT_LOW);
-#endif
-	}
-#endif
-
 #if USB_EXISTS
 	console_getline_init();
 	while (log_data_pending())
@@ -546,6 +538,7 @@ static void console_thread(void)
 	const char command_info[] = "info";
 	const char command_uptime[] = "uptime";
 	const char command_reboot[] = "reboot";
+	const char command_shutdown[] = "shutdown";
 	const char command_battery[] = "battery";
 	const char command_scan[] = "scan";
 	const char command_calibrate[] = "calibrate";
@@ -554,12 +547,14 @@ static void console_thread(void)
 	const char command_mag[] = "mag";
 #endif
 	const char command_set[] = "set";
+	const char command_ping[] = "ping";
 	const char command_pair[] = "pair";
 	const char command_clear[] = "clear";
 #if DFU_EXISTS
 	const char command_dfu[] = "dfu";
 #endif
 	const char command_meow[] = "meow";
+	const char command_led[] = "led";
 
 	// data
 	const char command_reset_data[] = "reset_data";
@@ -588,7 +583,7 @@ static void console_thread(void)
 #else
 		char *line = rtt_console_getline();
 #endif
-		char* argv[5] = {NULL}; // command and 4 args
+		char* argv[7] = {NULL}; // command and 4 args
 		size_t argc = parse_args(line, argv, ARRAY_SIZE(argv));
 		if(argc == 0)
 			continue;
@@ -616,6 +611,10 @@ static void console_thread(void)
 		{
 			sys_request_system_reboot(false);
 		}
+		else if (strcmp(argv[0], command_shutdown) == 0)
+		{
+			sys_request_system_silent_off(true);
+		}
 		else if (strcmp(argv[0], command_battery) == 0)
 		{
 			print_battery_tracker();
@@ -640,32 +639,45 @@ static void console_thread(void)
 #endif
 		else if (strcmp(argv[0], command_set) == 0)
 		{
-			if (argc != 2)
+			if (argc != 3)
 			{
 				printk("Invalid number of arguments\n");
 				continue;
 			}
 			uint64_t addr = parse_u64(argv[1], 16);
+			uint64_t tracker_id = parse_u64(argv[2], 10);
 			uint8_t buf[17];
 			snprintk(buf, 17, "%016llx", addr);
 			if (addr != 0 && strcmp(buf, argv[1]) == 0)
-				esb_set_pair(addr);
+				pairing_set_pair(addr, tracker_id);
 			else
 				printk("Invalid address\n");
 		}
+		else if (strcmp(argv[0], command_ping) == 0)
+		{
+			if (argc != 3)
+			{
+				printk("Invalid number of arguments\n");
+				continue;
+			}
+			uint64_t addr = parse_u64(argv[1], 16);
+			uint64_t channel = parse_u64(argv[2], 10);
+			printk("Sending PING to %012llx on channel %d\n", addr, (int) channel);
+			esb_ping(addr, channel);
+		}
 		else if (strcmp(argv[0], command_pair) == 0)
 		{
-			esb_reset_pair();
+			pairing_request_pair();
 		}
 		else if (strcmp(argv[0], command_clear) == 0)
 		{
-			esb_clear_pair();
+			pairing_clear_pair();
 		}
 #if DFU_EXISTS
 		else if (strcmp(argv[0], command_dfu) == 0)
 		{
 #if ADAFRUIT_BOOTLOADER
-			NRF_POWER->GPREGRET = 0x57;
+			NRF_POWER->GPREGRET = 0x57; // DFU_MAGIC_UF2_RESET
 			sys_request_system_reboot(false);
 #endif
 #if NRF5_BOOTLOADER
@@ -676,6 +688,20 @@ static void console_thread(void)
 		else if (strcmp(argv[0], command_meow) == 0)
 		{
 			print_meow();
+		}
+		else if (strcmp(argv[0], command_led) == 0)
+		{
+			if (argc != 6)
+			{
+				printk("Invalid number of arguments\n");
+				continue;
+			}
+			uint64_t r = parse_u64(argv[1], 16);
+			uint64_t g = parse_u64(argv[2], 16);
+			uint64_t b = parse_u64(argv[3], 16);
+			uint64_t br = parse_u64(argv[4], 16);
+			uint64_t timeout = parse_u64(argv[5], 16);
+			led_override(U_PATTERN_ON, r, g, b, br, timeout);
 		}
 		else if (strcmp(argv[0], command_reset_data) == 0)
 		{
