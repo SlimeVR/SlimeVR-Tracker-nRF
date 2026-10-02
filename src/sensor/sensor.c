@@ -120,7 +120,7 @@ static const sensor_mag_t *sensor_mag = &sensor_mag_none;
 
 static uint8_t current_sensor;
 
-#define DEBUG true
+// #define DEBUG true
 
 #if DEBUG
 LOG_MODULE_REGISTER(sensor, LOG_LEVEL_DBG);
