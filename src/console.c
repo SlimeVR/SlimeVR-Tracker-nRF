@@ -613,7 +613,7 @@ static void console_thread(void)
 		}
 		else if (strcmp(argv[0], command_shutdown) == 0)
 		{
-			sys_request_system_off(false);
+			sys_request_system_silent_off(true);
 		}
 		else if (strcmp(argv[0], command_battery) == 0)
 		{
