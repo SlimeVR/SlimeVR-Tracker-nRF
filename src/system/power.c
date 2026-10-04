@@ -1,3 +1,25 @@
+/*
+	SlimeVR Code is placed under the MIT license
+	Copyright (c) 2025 SlimeVR Contributors
+
+	Permission is hereby granted, free of charge, to any person obtaining a copy
+	of this software and associated documentation files (the "Software"), to deal
+	in the Software without restriction, including without limitation the rights
+	to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+	copies of the Software, and to permit persons to whom the Software is
+	furnished to do so, subject to the following conditions:
+
+	The above copyright notice and this permission notice shall be included in
+	all copies or substantial portions of the Software.
+
+	THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+	IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+	FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+	AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+	LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+	OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+	THE SOFTWARE.
+*/
 #include "globals.h"
 #include "sensor/sensor.h"
 #include "battery.h"
@@ -6,6 +28,7 @@
 #include "system.h"
 #include "led.h"
 #include "connection/esb.h"
+#include "usb.h"
 
 #include <zephyr/drivers/gpio.h>
 #include <zephyr/logging/log_ctrl.h>
@@ -13,13 +36,12 @@
 #include <zephyr/sys/reboot.h>
 #include <hal/nrf_gpio.h>
 #include <zephyr/pm/device.h>
+#include <zephyr/drivers/clock_control/nrf_clock_control.h>
 
 #include "power.h"
+#include "clocks.h"
 
-#define DFU_DBL_RESET_MEM 0x20007F7C
-#define DFU_DBL_RESET_APP 0x4ee5677e
-
-static uint32_t *dbl_reset_mem __attribute__((unused)) = ((uint32_t *)DFU_DBL_RESET_MEM); // retained
+#define ADAFRUIT_BOOTLOADER CONFIG_BUILD_OUTPUT_UF2
 
 enum sys_regulator {
 	SYS_REGULATOR_DCDC,
@@ -39,6 +61,7 @@ static bool battery_low = false;
 
 static bool plugged = false;
 static bool power_init = false;
+static bool usb_plugged = false;
 static bool device_plugged = false;
 static bool device_charged = false;
 
@@ -54,7 +77,7 @@ static void sys_system_reboot(void);
 static int sys_power_state_request(int id);
 
 static void disable_DFU_thread(void);
-K_THREAD_DEFINE(disable_DFU_thread_id, 128, disable_DFU_thread, NULL, NULL, NULL, DISABLE_DFU_THREAD_PRIORITY, 0, 500); // disable DFU if the system is running correctly
+K_THREAD_DEFINE(disable_DFU_thread_id, 128, disable_DFU_thread, NULL, NULL, NULL, DISABLE_DFU_THREAD_PRIORITY, 0, 100); // disable DFU if the system is running correctly
 
 static void power_thread(void);
 K_THREAD_DEFINE(power_thread_id, 1024, power_thread, NULL, NULL, NULL, POWER_THREAD_PRIORITY, 0, 0);
@@ -84,8 +107,6 @@ static const struct gpio_dt_spec chg_en = GPIO_DT_SPEC_GET(ZEPHYR_USER_NODE, chg
 #else
 #pragma message "Charge enable GPIO does not exist"
 #endif
-
-#define ADAFRUIT_BOOTLOADER CONFIG_BUILD_OUTPUT_UF2
 
 static void sys_disconnect_interface_pins(void)
 {
@@ -165,6 +186,7 @@ static void configure_system_off(void)
 		LOG_WRN("Entering new power state while sensor error is raised");
 	if (get_status(SYS_STATUS_SYSTEM_ERROR))
 		LOG_WRN("Entering new power state while system error is raised");
+	clock_pre_shutdown();
 	main_imu_suspend();
 	sensor_shutdown();
 	set_led(SYS_LED_PATTERN_OFF_FORCE, SYS_LED_PRIORITY_HIGHEST);
@@ -326,7 +348,7 @@ static void sys_WOM(bool force) // TODO: if IMU interrupt does not exist what do
 //	retained_update();
 	wait_for_logging();
 #if ADAFRUIT_BOOTLOADER // if using Adafruit bootloader, always skip dfu for next boot
-	(*dbl_reset_mem) = DFU_DBL_RESET_APP; // Skip DFU
+	NRF_POWER->GPREGRET = 0x6d; // DFU_MAGIC_SKIP
 #endif
 	sys_poweroff();
 #else
@@ -371,7 +393,7 @@ static void sys_system_off(bool silent) // TODO: add timeout
 		wait_for_logging();
 	}
 #if ADAFRUIT_BOOTLOADER // if using Adafruit bootloader, always skip dfu for next boot
-	(*dbl_reset_mem) = DFU_DBL_RESET_APP; // Skip DFU
+	NRF_POWER->GPREGRET = 0x6d; // DFU_MAGIC_SKIP
 #endif
 	sys_poweroff();
 }
@@ -386,8 +408,9 @@ static void sys_system_reboot(void) // TODO: add timeout
 	sys_update_battery_tracker(current_battery_pptt, device_plugged);
 //	retained_update();
 	wait_for_logging();
-#if ADAFRUIT_BOOTLOADER // if using Adafruit bootloader, always skip dfu for next boot
-	(*dbl_reset_mem) = DFU_DBL_RESET_APP; // Skip DFU
+#if ADAFRUIT_BOOTLOADER // if using Adafruit bootloader, skip dfu for next boot
+	if (!NRF_POWER->GPREGRET) // no other request
+		NRF_POWER->GPREGRET = 0x6d; // DFU_MAGIC_SKIP
 #endif
 	sys_reboot(SYS_REBOOT_COLD);
 }
@@ -423,7 +446,8 @@ bool vin_read(void) // blocking
 static void disable_DFU_thread(void)
 {
 #if ADAFRUIT_BOOTLOADER
-	(*dbl_reset_mem) = DFU_DBL_RESET_APP; // Skip DFU
+	if (!NRF_POWER->GPREGRET) // no other request
+		NRF_POWER->GPREGRET = 0x6d; // DFU_MAGIC_SKIP
 #endif
 }
 
@@ -575,10 +599,18 @@ static void power_thread(void)
 			plugged = true;
 		else if ((plugged && battery_mV <= 4250) || abnormal_reading)
 			plugged = false;
+
 #ifdef POWER_USBREGSTATUS_VBUSDETECT_Msk
-		bool usb_plugged = NRF_POWER->USBREGSTATUS & POWER_USBREGSTATUS_VBUSDETECT_Msk;
-#else
-		bool usb_plugged = false;
+		if (!usb_plugged && (NRF_POWER->USBREGSTATUS & POWER_USBREGSTATUS_VBUSDETECT_Msk))
+		{
+			usb_plugged = true;
+			usb_initialize();
+		}
+		else if (usb_plugged && !(NRF_POWER->USBREGSTATUS & POWER_USBREGSTATUS_VBUSDETECT_Msk))
+		{
+			usb_plugged = false;
+			usb_deinitialize();
+		}
 #endif
 
 		if (!device_plugged && (charging || charged || plugged || usb_plugged))

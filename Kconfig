@@ -321,4 +321,32 @@ config CONNECTION_OVER_HID
         Use HID if available.
         Otherwise, use ESB only.
 
+choice CLOCK_SOURCE_LFCLK
+    prompt "LF clock source for TDMA"
+    default CLOCK_SOURCE_LFCLK_FULL_SWING
+    help
+        Chose which crystal or oscillator is connected
+        to XL1/XL2 pins, if any. External 32.768kHz crystal
+        or oscillator is recommended.
+
+config CLOCK_SOURCE_LFCLK_XTAL
+    bool "External passive crystal"
+
+config CLOCK_SOURCE_LFCLK_LOW_SWING
+    bool "External low-swing oscillator"
+
+config CLOCK_SOURCE_LFCLK_FULL_SWING
+    bool "External full-swing oscillator"
+
+config CLOCK_SOURCE_LFCLK_SYNTH
+    bool "Synthesized from internal HF clock (high power consumption)"
+
+config CLOCK_SOURCE_LFCLK_RC
+    bool "Internal RC clock (bad performance)"
+
+endchoice
+    
+config BTF_DUT
+    bool "Test mode for certification"
+
 source "Kconfig.zephyr"

@@ -46,6 +46,7 @@
 #define FIXED_11_TO_DOUBLE(x) (((double)(x)) / (1 << 11))
 #define FIXED_10_TO_DOUBLE(x) (((double)(x)) / (1 << 10))
 #define FIXED_7_TO_DOUBLE(x) (((double)(x)) / (1 << 7))
+#define ABS(x) (x < 0 ? -x : x)
 
 #define CONST_EARTH_GRAVITY 9.80665f
 
@@ -67,5 +68,6 @@ void a_to_lin_a(const float *q, const float *a, float *lin_a);
 
 void q_fem(const float *q, float *out);
 void q_iem(const float *v, float *out);
+
 
 #endif

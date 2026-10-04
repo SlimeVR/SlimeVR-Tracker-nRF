@@ -21,50 +21,40 @@
 	THE SOFTWARE.
 */
 #include "globals.h"
+#include "connection.h"
 #include "util.h"
 #include "esb.h"
 #include "build_defines.h"
 #include "hid.h"
 #include "system/battery_tracker.h"
+#include "system/clocks.h"
 
 #include <zephyr/kernel.h>
 #include <zephyr/sys/crc.h>
 
-static bool sleep = false;
+#define ALWAYS_SEND false
 
 static uint8_t tracker_id, batt, batt_v, sensor_temp, imu_id, mag_id, tracker_status, tracker_button;
 static uint8_t tracker_svr_status = SVR_STATUS_OK;
 static float sensor_q[4], sensor_a[3], sensor_m[3];
 
-static uint8_t data_buffer[21] = {0};
+static uint8_t raw_data_buffer[ESB_PACKET_MAX_SIZE] = {0};
+static uint8_t *data_buffer = &raw_data_buffer[1];
+static uint8_t data_buffer_position = 0;
 static int64_t last_data_time = 0;
 static uint8_t packet_sequence = 0;
+static bool allow_packet_bundling = false; // Can only be used with new server and dongle
+static bool motion_acked = false;
+static enum esb_prtocol_version_t server_protocol = P_VERSION_LEGACY;
 
 LOG_MODULE_REGISTER(connection, LOG_LEVEL_INF);
 
-static void connection_thread(void);
-K_THREAD_DEFINE(connection_thread_id, 512, connection_thread, NULL, NULL, NULL, CONNECTION_THREAD_PRIORITY, K_FP_REGS, 0);
-
-K_MUTEX_DEFINE(data_buffer_mutex);
-
-void connection_clocks_request_start(void)
-{
-	clocks_request_start(0);
-}
-
-void connection_clocks_request_start_delay_us(uint32_t delay_us)
-{
-	clocks_request_start(delay_us);
-}
+struct k_msgq send_packets;
+K_MSGQ_DEFINE(send_packets, sizeof(struct packet_t), 10, 1);
 
 void connection_clocks_request_stop(void)
 {
 	clocks_stop();
-}
-
-void connection_clocks_request_stop_delay_us(uint32_t delay_us)
-{
-	clocks_request_stop(delay_us);
 }
 
 uint8_t connection_get_id(void)
@@ -101,8 +91,6 @@ void connection_update_sensor_data(float *q, float *a, int64_t data_time)
 	memcpy(sensor_q, q, sizeof(sensor_q));
 	memcpy(sensor_a, a, sizeof(sensor_a));
 	quat_update_time = k_uptime_get();
-	if (sleep)
-		k_wakeup(connection_thread_id);
 }
 
 static int64_t mag_update_time = 0;
@@ -112,8 +100,6 @@ void connection_update_sensor_mag(float *m)
 {
 	memcpy(sensor_m, m, sizeof(sensor_m));
 	mag_update_time = k_uptime_get();
-	if (sleep)
-		k_wakeup(connection_thread_id);
 }
 
 void connection_update_sensor_temp(float temp)
@@ -184,6 +170,32 @@ void connection_set_shutdown(void)
 	shutdown = true;
 }
 
+bool data_buffer_write(uint8_t* data, size_t size) {
+	if(data_buffer_position + size > ESB_PACKET_MAX_DATA_SIZE) {
+		LOG_ERR("ESB data buffer overflow. Writing %d, have space for %d", size, ESB_PACKET_MAX_DATA_SIZE - data_buffer_position);
+		return false;
+	}
+	memcpy(data_buffer + data_buffer_position, data, size);
+	data_buffer_position += size;
+	last_data_time = k_uptime_get(); // TODO: use ticks
+	hid_write_packet_n(data); // TODO:
+	return true;
+}
+
+void data_buffer_reset() {
+	data_buffer_position = 0;
+}
+
+bool can_send_packet(size_t size) {
+	if(data_buffer_position + size > ESB_PACKET_MAX_DATA_SIZE) {
+		return false;
+	}
+	if(data_buffer_position != 0 && !allow_packet_bundling) {
+		return false;
+	}
+	return true;
+}
+
 //|type    |priority|motion  |precise |interval|description
 //|TX     0|       4|        |        |     100|device info ("info")
 //|TX     1|       3|*       |*       |       -|full precision quat and accel
@@ -209,7 +221,17 @@ void connection_set_shutdown(void)
 
 // runtime is in microseconds (overkill), sleeptime is in milliseconds (overkill but less)
 
-void connection_write_packet_0() // device info
+void connection_queue_packet(uint8_t * data, uint8_t length) {
+	if(length > sizeof(((struct packet_t *) 0)->data)) {
+		LOG_ERR("Trying too queue too large packet: %d, packet id %d", length, data[0]);
+	}
+	struct packet_t packet;
+	packet.length = length;
+	memcpy(&packet.data, data, length);
+	k_msgq_put(&send_packets, &packet, K_NO_WAIT);
+}
+
+bool connection_write_packet_0() // device info
 {
 	uint8_t data[16] = {0};
 	data[0] = 0; // packet 0
@@ -228,21 +250,10 @@ void connection_write_packet_0() // device info
 	data[13] = FW_VERSION_MINOR & 255; // fw_minor
 	data[14] = FW_VERSION_PATCH & 255; // fw_patch
 	data[15] = 0; // rssi (supplied by receiver)
-	int ret = k_mutex_lock(&data_buffer_mutex, K_MSEC(100));
-	if (ret) {
-		LOG_ERR("Failed mutex lock");
-		return;
-	}
-	memcpy(data_buffer, data, sizeof(data));
-	last_data_time = k_uptime_get(); // TODO: use ticks
-	if (sleep)
-		k_wakeup(connection_thread_id);
-//	esb_write(data); // TODO: schedule in thread
-	k_mutex_unlock(&data_buffer_mutex);
-	hid_write_packet_n(data); // TODO:
+	return data_buffer_write(data, sizeof(data));
 }
 
-void connection_write_packet_1() // full precision quat and accel
+bool connection_write_packet_1() // full precision quat and accel
 {
 	uint8_t data[16] = {0};
 	data[0] = 1; // packet 1
@@ -255,21 +266,11 @@ void connection_write_packet_1() // full precision quat and accel
 	buf[4] = TO_FIXED_7(sensor_a[0]); // range is ±256m/s² or ±26.1g
 	buf[5] = TO_FIXED_7(sensor_a[1]);
 	buf[6] = TO_FIXED_7(sensor_a[2]);
-	int ret = k_mutex_lock(&data_buffer_mutex, K_MSEC(100));
-	if (ret) {
-		LOG_ERR("Failed mutex lock");
-		return;
-	}
-	memcpy(data_buffer, data, sizeof(data));
-	last_data_time = k_uptime_get(); // TODO: use ticks
-	if (sleep)
-		k_wakeup(connection_thread_id);
-//	esb_write(data); // TODO: schedule in thread
-	k_mutex_unlock(&data_buffer_mutex);
-	hid_write_packet_n(data); // TODO:
+	motion_acked = false;
+	return data_buffer_write(data, sizeof(data));
 }
 
-void connection_write_packet_2() // reduced precision quat and accel with battery, temp, and rssi
+bool connection_write_packet_2() // reduced precision quat and accel with battery, temp, and rssi
 {
 	uint8_t data[16] = {0};
 	data[0] = 2; // packet 2
@@ -298,43 +299,33 @@ void connection_write_packet_2() // reduced precision quat and accel with batter
 	buf[1] = TO_FIXED_7(sensor_a[1]);
 	buf[2] = TO_FIXED_7(sensor_a[2]);
 	data[15] = 0; // rssi (supplied by receiver)
-	int ret = k_mutex_lock(&data_buffer_mutex, K_MSEC(100));
-	if (ret) {
-		LOG_ERR("Failed mutex lock");
-		return;
-	}
-	memcpy(data_buffer, data, sizeof(data));
-	last_data_time = k_uptime_get(); // TODO: use ticks
-	if (sleep)
-		k_wakeup(connection_thread_id);
-//	esb_write(data); // TODO: schedule in thread
-	k_mutex_unlock(&data_buffer_mutex);
-	hid_write_packet_n(data); // TODO:
+	motion_acked = false;
+	return data_buffer_write(data, sizeof(data));
 }
 
-void connection_write_packet_3() // status
+bool connection_write_packet_3() // status
 {
 	uint8_t data[16] = {0};
 	data[0] = 3; // packet 3
 	data[1] = tracker_id;
 	data[2] = tracker_svr_status;
 	data[3] = tracker_status;
+	// data[4] - packets received (filled by dongle)
+	// data[5] - packets lost (filled by dongle)
+	// data[6] - windows hit (filled by dongle)
+	// data[7] - windows missed (filled by dongle)
+	fill_packets_stat(data); // Fills 4 fields below
+	// data[8] - packets sent (by the tracker)
+	// data[9] - packets received (by the tracker)
+	// data[10] - packets failed (by the tracker)
+	// data[11] - average rssi (received by the tracker)
+	// data[12] - repeat packets (filled by dongle)
+	// data[13] - largest gap (filled by dongle)
 	data[15] = 0; // rssi (supplied by receiver)
-	int ret = k_mutex_lock(&data_buffer_mutex, K_MSEC(100));
-	if (ret) {
-		LOG_ERR("Failed mutex lock");
-		return;
-	}
-	memcpy(data_buffer, data, sizeof(data));
-	last_data_time = k_uptime_get(); // TODO: use ticks
-	if (sleep)
-		k_wakeup(connection_thread_id);
-//	esb_write(data); // TODO: schedule in thread
-	k_mutex_unlock(&data_buffer_mutex);
-	hid_write_packet_n(data); // TODO:
+	return data_buffer_write(data, sizeof(data));
 }
 
-void connection_write_packet_4() // full precision quat and magnetometer
+bool connection_write_packet_4() // full precision quat and magnetometer
 {
 	uint8_t data[16] = {0};
 	data[0] = 4; // packet 4
@@ -347,21 +338,11 @@ void connection_write_packet_4() // full precision quat and magnetometer
 	buf[4] = TO_FIXED_10(sensor_m[0]); // range is ±32G
 	buf[5] = TO_FIXED_10(sensor_m[1]);
 	buf[6] = TO_FIXED_10(sensor_m[2]);
-	int ret = k_mutex_lock(&data_buffer_mutex, K_MSEC(100));
-	if (ret) {
-		LOG_ERR("Failed mutex lock");
-		return;
-	}
-	memcpy(data_buffer, data, sizeof(data));
-	last_data_time = k_uptime_get(); // TODO: use ticks
-	if (sleep)
-		k_wakeup(connection_thread_id);
-//	esb_write(data); // TODO: schedule in thread
-	k_mutex_unlock(&data_buffer_mutex);
-	hid_write_packet_n(data); // TODO:
+	motion_acked = false;
+	return data_buffer_write(data, sizeof(data));
 }
 
-void connection_write_packet_5() // runtime
+bool connection_write_packet_5() // runtime
 {
 	uint8_t data[16] = {0};
 	data[0] = 5; // packet 5
@@ -371,21 +352,10 @@ void connection_write_packet_5() // runtime
 		*buf = k_ticks_to_us_floor64(sys_get_battery_remaining_time_estimate());
 	else
 		*buf = -1; // no valid reading yet, but previous estimate may still be valid
-	int ret = k_mutex_lock(&data_buffer_mutex, K_MSEC(100));
-	if (ret) {
-		LOG_ERR("Failed mutex lock");
-		return;
-	}
-	memcpy(data_buffer, data, sizeof(data));
-	last_data_time = k_uptime_get(); // TODO: use ticks
-	if (sleep)
-		k_wakeup(connection_thread_id);
-//	esb_write(data); // TODO: schedule in thread
-	k_mutex_unlock(&data_buffer_mutex);
-	hid_write_packet_n(data); // TODO:
+	return data_buffer_write(data, sizeof(data));
 }
 
-void connection_write_packet_6() // reduced precision quat and accel with button and sleep time
+bool connection_write_packet_6() // reduced precision quat and accel with button and sleep time
 {
 	uint8_t data[16] = {0};
 	data[0] = 6; // packet 6
@@ -404,21 +374,11 @@ void connection_write_packet_6() // reduced precision quat and accel with button
 		tracker_button = 0;
 		button_update_time = 0;
 	}
-	int ret = k_mutex_lock(&data_buffer_mutex, K_MSEC(100));
-	if (ret) {
-		LOG_ERR("Failed mutex lock");
-		return;
-	}
-	memcpy(data_buffer, data, sizeof(data));
-	last_data_time = k_uptime_get(); // TODO: use ticks
-	if (sleep)
-		k_wakeup(connection_thread_id);
-//	esb_write(data); // TODO: schedule in thread
-	k_mutex_unlock(&data_buffer_mutex);
-	hid_write_packet_n(data); // TODO:
+	motion_acked = false;
+	return data_buffer_write(data, sizeof(data));
 }
 
-void connection_write_packet_7() // button and sleep time
+bool connection_write_packet_7() // button and sleep time
 {
 	uint8_t data[16] = {0};
 	data[0] = 7; // packet 7
@@ -448,28 +408,88 @@ void connection_write_packet_7() // button and sleep time
 		tracker_button = 0;
 		button_update_time = 0;
 	}
-	int ret = k_mutex_lock(&data_buffer_mutex, K_MSEC(100));
-	if (ret) {
-		LOG_ERR("Failed mutex lock");
-		return;
-	}
-	memcpy(data_buffer, data, sizeof(data));
-	last_data_time = k_uptime_get(); // TODO: use ticks
-	if (sleep)
-		k_wakeup(connection_thread_id);
-//	esb_write(data); // TODO: schedule in thread
-	k_mutex_unlock(&data_buffer_mutex);
-	hid_write_packet_n(data); // TODO:
+	motion_acked = false;
+	return data_buffer_write(data, sizeof(data));
 }
 
-// TODO: get radio channel from receiver
-// TODO: new packet format
+void connection_motion_ack(uint8_t packet_sequence) {
+	motion_acked = true;
+	// TODO Check if this sequence is from motion
+}
+
+void connection_led_control(uint8_t * data, uint8_t length) {
+	if(length < sizeof(packet_led_control_t)) {
+		LOG_WRN("LED control packet is too short: %d", length);
+		return;
+	}
+	packet_led_control_t * packet = (packet_led_control_t *) data;
+	led_override(packet->pattern, packet->r, packet->g, packet->b, packet->brightness, packet->timeout);
+}
+
+static void send_device_info() {
+	packet_device_info_t device_info = {
+		.packet_id = ESB_PACKET_DEVICE_INFO,
+		.tracker_id = tracker_id,
+		.hwid = *((uint64_t *) NRF_FICR->DEVICEADDR) & 0xFFFFFFFFFFFF,
+		.protocol_version = ESB_TRACKER_PROTOCOL,
+		.board_id = FW_BOARD,
+		.mcu_id = FW_MCU,
+		.board_revision = 0,
+		.device_type = 0, // Normal tracker
+		.fw_build_date = ((BUILD_YEAR - 2020) & 127) << 9 | (BUILD_MONTH & 15) << 5 | (BUILD_DAY & 31),
+		.fw_major = FW_VERSION_MAJOR & 255,
+		.fw_minor = FW_VERSION_MINOR & 255,
+		.fw_patch = FW_VERSION_PATCH,
+		.sensors_number = 1
+	};
+	connection_queue_packet((uint8_t *) &device_info, sizeof(device_info));
+}
+
+static void send_sensor_info() {
+	packet_sensor_info_t sensor_info = {
+		.packet_id = ESB_PACKET_SENSOR_INFO,
+		.tracker_id = tracker_id,
+		.sensor_id = 0,
+		.imu_id = imu_id,
+		.mag_id = mag_id,
+		.sensor_state = tracker_svr_status, // TODO Better status
+		.def_body_position = 0,
+		.target_tps = 100,
+		._reserved = 0
+	};
+	connection_queue_packet((uint8_t *) &sensor_info, sizeof(sensor_info));
+}
+
+void connection_hello(uint8_t * data, uint8_t length) {
+	if(length < sizeof(packet_hello_t)) {
+		LOG_WRN("Hello packet is too short: %d", length);
+		return;
+	}
+	packet_hello_t * packet = (packet_hello_t *) data;
+	server_protocol = packet->protocol_version;
+	LOG_INF("Hello from server!");
+	send_device_info();
+	send_sensor_info();
+	// TODO Send device state too
+}
+
+void connection_packet_received(uint8_t * data, uint8_t length) {
+	if(tracker_id != data[2]) {
+		LOG_WRN("Received packet for wrong tracker id: %d != %d", data[2], tracker_id);
+		return;
+	}
+	// TODO Check sequence for packet loss statistics
+	switch(data[3]) {
+		case ESB_PACKET_LED_CONTROL:
+			connection_led_control(data, length);
+		break;
+		case ESB_PACKET_HELLO:
+			connection_hello(data, length);
+		break;
+	}
+}
 
 // TODO: use timing from IMU to get actual delay in tracking
-// TODO: aware of sensor state? error status, timing/phase, maybe "send_precise_quat"
-
-// TODO: queuing, status is lowest priority, info low priority, existing data highest priority (from sensor loop)
-
 // TODO: queue packets directly for HID, or maintain separate loop while connected by USB
 
 static int64_t last_info_time = 0;
@@ -477,91 +497,95 @@ static int64_t last_info2_time = 0;
 static int64_t last_status_time = 0;
 static int64_t last_status2_time = 0;
 
-void connection_thread(void)
+bool connection_process(void)
 {
-	uint8_t data_copy[21];
-	// TODO: checking for connection_update events from sensor_loop, here we will time and send them out
-	while (1)
-	{
-		if (last_data_time != 0) // have valid data
-		{
-			int ret = k_mutex_lock(&data_buffer_mutex, K_MSEC(100));
-			if (ret) {
-				LOG_ERR("Failed mutex lock");
-				continue;
+	bool packet_written = false;
+	// Have packets in buffer, send them first
+	if(k_msgq_num_used_get(&send_packets) > 0) {
+		struct packet_t packet;
+		int ret = k_msgq_peek(&send_packets, &packet);
+		if(ret == 0) {
+			if(can_send_packet(packet.length)) {
+				ret = k_msgq_get(&send_packets, &packet, K_NO_WAIT);
+				if(ret == 0) {
+					packet_written = data_buffer_write(packet.data, packet.length);
+				}
 			}
-			last_data_time = 0;
-			memcpy(data_copy, data_buffer, sizeof(data_copy));
-			k_mutex_unlock(&data_buffer_mutex);
-			data_copy[20] = packet_sequence++;
-			uint32_t *crc_ptr = (uint32_t *)&data_copy[16];
-			*crc_ptr = crc32_k_4_2_update(0x93a409eb, data_copy, 16);
-			esb_write(data_copy);
 		}
-		// mag is higher priority (skip accel, quat is full precision)
-		else if (mag_update_time && k_uptime_get() - last_mag_time > 200)
-		{
-			mag_update_time = 0; // data has been sent
-			last_mag_time = k_uptime_get();
-			connection_write_packet_4();
-			continue;
-		}
-		// if time for info and precise quat not needed
-		else if (quat_update_time && !send_precise_quat && k_uptime_get() - last_info_time > 100)
-		{
-			quat_update_time = 0;
-			last_quat_time = k_uptime_get();
-			last_info_time = k_uptime_get();
-			connection_write_packet_2();
-			continue;
-		}
-		// if time for info2 and precise quat not needed
-		else if (quat_update_time && !send_precise_quat && k_uptime_get() - last_info2_time > 100)
-		{
-			quat_update_time = 0;
-			last_quat_time = k_uptime_get();
-			last_info2_time = k_uptime_get();
-			connection_write_packet_7();
-			continue;
-		}
-		// send quat otherwise
-		else if (quat_update_time)
-		{
-			quat_update_time = 0;
-			last_quat_time = k_uptime_get();
-			connection_write_packet_1();
-			continue;
-		}
-		else if (k_uptime_get() - last_info_time > 100)
-		{
-			last_info_time = k_uptime_get();
-			connection_write_packet_0();
-			continue;
-		}
-		else if (k_uptime_get() - last_info2_time > 100)
-		{
-			last_info2_time = k_uptime_get();
-			connection_write_packet_6();
-			continue;
-		}
-		else if (k_uptime_get() - last_status_time > 1000)
-		{
-			last_status_time = k_uptime_get();
-			connection_write_packet_3();
-			continue;
-		}
-		else if (k_uptime_get() - last_status2_time > 1000)
-		{
-			last_status2_time = k_uptime_get();
-			connection_write_packet_5();
-			continue;
-		}
-		else
-		{
-			connection_clocks_request_stop();
-		}
-		sleep = true;
-		k_msleep(MIN(MIN(MIN(last_info_time + 100, last_info2_time + 100), last_status_time + 1000), last_status2_time + 1000) - k_uptime_get()); // will be woken up if sending immediately
-		sleep = false;
 	}
+	if(packet_written) {
+		// Nothing
+	}
+	// Didn't send status in 2 seconds, prioritize it
+	else if (k_uptime_get() - last_status_time > 2000)
+	{
+		last_status_time = k_uptime_get();
+		connection_write_packet_3();
+	}
+	// mag is higher priority (skip accel, quat is full precision)
+	else if (mag_update_time && k_uptime_get() - last_mag_time > 200)
+	{
+		mag_update_time = 0; // data has been sent
+		last_mag_time = k_uptime_get();
+		connection_write_packet_4();
+	}
+	// if time for info and precise quat not needed
+	else if (quat_update_time && !send_precise_quat && k_uptime_get() - last_info_time > 100)
+	{
+		quat_update_time = 0;
+		last_quat_time = k_uptime_get();
+		last_info_time = k_uptime_get();
+		connection_write_packet_2();
+	}
+	// if time for info2 and precise quat not needed
+	else if (quat_update_time && !send_precise_quat && k_uptime_get() - last_info2_time > 100)
+	{
+		quat_update_time = 0;
+		last_quat_time = k_uptime_get();
+		last_info2_time = k_uptime_get();
+		connection_write_packet_7();
+	}
+	// send quat otherwise
+	else if (quat_update_time)
+	{
+		quat_update_time = 0;
+		last_quat_time = k_uptime_get();
+		connection_write_packet_1();
+	}
+	else if (k_uptime_get() - last_status_time > 1000)
+	{
+		last_status_time = k_uptime_get();
+		connection_write_packet_3();
+	}
+	else if (server_protocol < P_VERSION_TRANSITIONAL && k_uptime_get() - last_info_time > 500)
+	{
+		last_info_time = k_uptime_get();
+		connection_write_packet_0();
+	}
+	else if (k_uptime_get() - last_info2_time > 100)
+	{
+		last_info2_time = k_uptime_get();
+		connection_write_packet_6();
+	}
+	else if (k_uptime_get() - last_status2_time > 1000)
+	{
+		last_status2_time = k_uptime_get();
+		connection_write_packet_5();
+	}
+	else if(!motion_acked || ALWAYS_SEND) // Didn't ack last motion packet, will send rotation again
+	{
+		quat_update_time = 0;
+		last_quat_time = k_uptime_get();
+		connection_write_packet_1();
+	}
+	
+	if (data_buffer_position != 0) // have valid data
+	{
+		last_data_time = 0;
+		raw_data_buffer[0] = packet_sequence++;
+		esb_write(raw_data_buffer, packet_sequence - 1, data_buffer_position + 1);
+		data_buffer_reset();
+		return true;
+	}
+	return false;
 }
