@@ -521,7 +521,7 @@ void populate_connect_payload() {
 	tx_payload.data[2] = connection_get_id();
 	memcpy(&tx_payload.data[3], &device_addr, 6);
 	tx_payload.data[9] = ESB_VERSION;
-	tx_payload.data[10] = PROTOCOL_VERSION;
+	tx_payload.data[10] = ESB_TRACKER_PROTOCOL;
 }
 
 void connect_to_dongle() {

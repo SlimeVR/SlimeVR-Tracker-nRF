@@ -34,8 +34,6 @@
 
 #define ALWAYS_SEND false
 
-static bool sleep = false;
-
 static uint8_t tracker_id, batt, batt_v, sensor_temp, imu_id, mag_id, tracker_status, tracker_button;
 static uint8_t tracker_svr_status = SVR_STATUS_OK;
 static float sensor_q[4], sensor_a[3], sensor_m[3];
@@ -45,10 +43,14 @@ static uint8_t *data_buffer = &raw_data_buffer[1];
 static uint8_t data_buffer_position = 0;
 static int64_t last_data_time = 0;
 static uint8_t packet_sequence = 0;
-static bool allow_packet_bundling = false; // Can only be used with new server
+static bool allow_packet_bundling = false; // Can only be used with new server and dongle
 static bool motion_acked = false;
+static enum esb_prtocol_version_t server_protocol = P_VERSION_LEGACY;
 
 LOG_MODULE_REGISTER(connection, LOG_LEVEL_INF);
+
+struct k_msgq send_packets;
+K_MSGQ_DEFINE(send_packets, sizeof(struct packet_t), 10, 1);
 
 void connection_clocks_request_stop(void)
 {
@@ -168,15 +170,16 @@ void connection_set_shutdown(void)
 	shutdown = true;
 }
 
-void data_buffer_write(uint8_t* data, size_t size) {
+bool data_buffer_write(uint8_t* data, size_t size) {
 	if(data_buffer_position + size > ESB_PACKET_MAX_DATA_SIZE) {
 		LOG_ERR("ESB data buffer overflow. Writing %d, have space for %d", size, ESB_PACKET_MAX_DATA_SIZE - data_buffer_position);
-		return;
+		return false;
 	}
 	memcpy(data_buffer + data_buffer_position, data, size);
 	data_buffer_position += size;
 	last_data_time = k_uptime_get(); // TODO: use ticks
 	hid_write_packet_n(data); // TODO:
+	return true;
 }
 
 void data_buffer_reset() {
@@ -218,7 +221,17 @@ bool can_send_packet(size_t size) {
 
 // runtime is in microseconds (overkill), sleeptime is in milliseconds (overkill but less)
 
-void connection_write_packet_0() // device info
+void connection_queue_packet(uint8_t * data, uint8_t length) {
+	if(length > sizeof(((struct packet_t *) 0)->data)) {
+		LOG_ERR("Trying too queue too large packet: %d, packet id %d", length, data[0]);
+	}
+	struct packet_t packet;
+	packet.length = length;
+	memcpy(&packet.data, data, length);
+	k_msgq_put(&send_packets, &packet, K_NO_WAIT);
+}
+
+bool connection_write_packet_0() // device info
 {
 	uint8_t data[16] = {0};
 	data[0] = 0; // packet 0
@@ -237,10 +250,10 @@ void connection_write_packet_0() // device info
 	data[13] = FW_VERSION_MINOR & 255; // fw_minor
 	data[14] = FW_VERSION_PATCH & 255; // fw_patch
 	data[15] = 0; // rssi (supplied by receiver)
-	data_buffer_write(data, sizeof(data));
+	return data_buffer_write(data, sizeof(data));
 }
 
-void connection_write_packet_1() // full precision quat and accel
+bool connection_write_packet_1() // full precision quat and accel
 {
 	uint8_t data[16] = {0};
 	data[0] = 1; // packet 1
@@ -253,11 +266,11 @@ void connection_write_packet_1() // full precision quat and accel
 	buf[4] = TO_FIXED_7(sensor_a[0]); // range is ±256m/s² or ±26.1g
 	buf[5] = TO_FIXED_7(sensor_a[1]);
 	buf[6] = TO_FIXED_7(sensor_a[2]);
-	data_buffer_write(data, sizeof(data));
 	motion_acked = false;
+	return data_buffer_write(data, sizeof(data));
 }
 
-void connection_write_packet_2() // reduced precision quat and accel with battery, temp, and rssi
+bool connection_write_packet_2() // reduced precision quat and accel with battery, temp, and rssi
 {
 	uint8_t data[16] = {0};
 	data[0] = 2; // packet 2
@@ -286,11 +299,11 @@ void connection_write_packet_2() // reduced precision quat and accel with batter
 	buf[1] = TO_FIXED_7(sensor_a[1]);
 	buf[2] = TO_FIXED_7(sensor_a[2]);
 	data[15] = 0; // rssi (supplied by receiver)
-	data_buffer_write(data, sizeof(data));
 	motion_acked = false;
+	return data_buffer_write(data, sizeof(data));
 }
 
-void connection_write_packet_3() // status
+bool connection_write_packet_3() // status
 {
 	uint8_t data[16] = {0};
 	data[0] = 3; // packet 3
@@ -309,10 +322,10 @@ void connection_write_packet_3() // status
 	// data[12] - repeat packets (filled by dongle)
 	// data[13] - largest gap (filled by dongle)
 	data[15] = 0; // rssi (supplied by receiver)
-	data_buffer_write(data, sizeof(data));
+	return data_buffer_write(data, sizeof(data));
 }
 
-void connection_write_packet_4() // full precision quat and magnetometer
+bool connection_write_packet_4() // full precision quat and magnetometer
 {
 	uint8_t data[16] = {0};
 	data[0] = 4; // packet 4
@@ -325,11 +338,11 @@ void connection_write_packet_4() // full precision quat and magnetometer
 	buf[4] = TO_FIXED_10(sensor_m[0]); // range is ±32G
 	buf[5] = TO_FIXED_10(sensor_m[1]);
 	buf[6] = TO_FIXED_10(sensor_m[2]);
-	data_buffer_write(data, sizeof(data));
 	motion_acked = false;
+	return data_buffer_write(data, sizeof(data));
 }
 
-void connection_write_packet_5() // runtime
+bool connection_write_packet_5() // runtime
 {
 	uint8_t data[16] = {0};
 	data[0] = 5; // packet 5
@@ -339,10 +352,10 @@ void connection_write_packet_5() // runtime
 		*buf = k_ticks_to_us_floor64(sys_get_battery_remaining_time_estimate());
 	else
 		*buf = -1; // no valid reading yet, but previous estimate may still be valid
-	data_buffer_write(data, sizeof(data));
+	return data_buffer_write(data, sizeof(data));
 }
 
-void connection_write_packet_6() // reduced precision quat and accel with button and sleep time
+bool connection_write_packet_6() // reduced precision quat and accel with button and sleep time
 {
 	uint8_t data[16] = {0};
 	data[0] = 6; // packet 6
@@ -361,11 +374,11 @@ void connection_write_packet_6() // reduced precision quat and accel with button
 		tracker_button = 0;
 		button_update_time = 0;
 	}
-	data_buffer_write(data, sizeof(data));
 	motion_acked = false;
+	return data_buffer_write(data, sizeof(data));
 }
 
-void connection_write_packet_7() // button and sleep time
+bool connection_write_packet_7() // button and sleep time
 {
 	uint8_t data[16] = {0};
 	data[0] = 7; // packet 7
@@ -395,8 +408,8 @@ void connection_write_packet_7() // button and sleep time
 		tracker_button = 0;
 		button_update_time = 0;
 	}
-	data_buffer_write(data, sizeof(data));
 	motion_acked = false;
+	return data_buffer_write(data, sizeof(data));
 }
 
 void connection_motion_ack(uint8_t packet_sequence) {
@@ -410,6 +423,54 @@ void connection_led_control(uint8_t * data, uint8_t length) {
 		return;
 	}
 	packet_led_control_t * packet = (packet_led_control_t *) data;
+	led_override(packet->pattern, packet->r, packet->g, packet->b, packet->brightness, packet->timeout);
+}
+
+static void send_device_info() {
+	packet_device_info_t device_info = {
+		.packet_id = ESB_PACKET_DEVICE_INFO,
+		.tracker_id = tracker_id,
+		.hwid = *((uint64_t *) NRF_FICR->DEVICEADDR) & 0xFFFFFFFFFFFF,
+		.protocol_version = ESB_TRACKER_PROTOCOL,
+		.board_id = FW_BOARD,
+		.mcu_id = FW_MCU,
+		.board_revision = 0,
+		.device_type = 0, // Normal tracker
+		.fw_build_date = ((BUILD_YEAR - 2020) & 127) << 9 | (BUILD_MONTH & 15) << 5 | (BUILD_DAY & 31),
+		.fw_major = FW_VERSION_MAJOR & 255,
+		.fw_minor = FW_VERSION_MINOR & 255,
+		.fw_patch = FW_VERSION_PATCH,
+		.sensors_number = 1
+	};
+	connection_queue_packet((uint8_t *) &device_info, sizeof(device_info));
+}
+
+static void send_sensor_info() {
+	packet_sensor_info_t sensor_info = {
+		.packet_id = ESB_PACKET_SENSOR_INFO,
+		.tracker_id = tracker_id,
+		.sensor_id = 0,
+		.imu_id = imu_id,
+		.mag_id = mag_id,
+		.sensor_state = tracker_svr_status, // TODO Better status
+		.def_body_position = 0,
+		.target_tps = 100,
+		._reserved = 0
+	};
+	connection_queue_packet((uint8_t *) &sensor_info, sizeof(sensor_info));
+}
+
+void connection_hello(uint8_t * data, uint8_t length) {
+	if(length < sizeof(packet_hello_t)) {
+		LOG_WRN("Hello packet is too short: %d", length);
+		return;
+	}
+	packet_hello_t * packet = (packet_hello_t *) data;
+	server_protocol = packet->protocol_version;
+	LOG_INF("Hello from server!");
+	send_device_info();
+	send_sensor_info();
+	// TODO Send device state too
 }
 
 void connection_packet_received(uint8_t * data, uint8_t length) {
@@ -421,6 +482,9 @@ void connection_packet_received(uint8_t * data, uint8_t length) {
 	switch(data[3]) {
 		case ESB_PACKET_LED_CONTROL:
 			connection_led_control(data, length);
+		break;
+		case ESB_PACKET_HELLO:
+			connection_hello(data, length);
 		break;
 	}
 }
@@ -435,8 +499,25 @@ static int64_t last_status2_time = 0;
 
 bool connection_process(void)
 {
+	bool packet_written = false;
+	// Have packets in buffer, send them first
+	if(k_msgq_num_used_get(&send_packets) > 0) {
+		struct packet_t packet;
+		int ret = k_msgq_peek(&send_packets, &packet);
+		if(ret == 0) {
+			if(can_send_packet(packet.length)) {
+				ret = k_msgq_get(&send_packets, &packet, K_NO_WAIT);
+				if(ret == 0) {
+					packet_written = data_buffer_write(packet.data, packet.length);
+				}
+			}
+		}
+	}
+	if(packet_written) {
+		// Nothing
+	}
 	// Didn't send status in 2 seconds, prioritize it
-	if (k_uptime_get() - last_status_time > 2000)
+	else if (k_uptime_get() - last_status_time > 2000)
 	{
 		last_status_time = k_uptime_get();
 		connection_write_packet_3();
