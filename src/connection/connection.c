@@ -557,7 +557,7 @@ bool connection_process(void)
 		last_status_time = k_uptime_get();
 		connection_write_packet_3();
 	}
-	else if (k_uptime_get() - last_info_time > 500)
+	else if (server_protocol < P_VERSION_TRANSITIONAL && k_uptime_get() - last_info_time > 500)
 	{
 		last_info_time = k_uptime_get();
 		connection_write_packet_0();
