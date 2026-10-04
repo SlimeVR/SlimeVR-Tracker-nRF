@@ -57,6 +57,7 @@ base_addr_p1: Base address for pipe 1-7, in big endian (not used, set to dongle'
 pipe_prefixes: Address prefix for pipe 0 to 7.
 This was randomly generated
 */
+
 static const uint8_t discovery_base_addr_0[4] = {0x62, 0x39, 0x8A, 0xF2};
 static const uint8_t discovery_base_addr_1[4] = {0x28, 0xFF, 0x50, 0xB8}; // Not used
 static const uint8_t discovery_addr_prefix[8] = {0xFE, 0xFF, 0x29, 0x27, 0x09, 0x02, 0xB2, 0xD6};
@@ -80,6 +81,9 @@ uint32_t tx_errors = 0;
 int64_t last_tx_success = 0;
 int64_t last_tx_fail = 0;
 uint8_t last_packet_sequence = 0;
+uint8_t rcv_last_packet_number = 0;
+uint8_t rcv_packets_lost = 0;
+uint8_t rcv_packets_repeats = 0;
 uint8_t packets_sent;
 uint8_t packets_received;
 uint8_t packets_failed;
@@ -148,15 +152,23 @@ void event_handler(struct esb_evt const *event)
 			}
 			
 			const uint8_t packet_number = rx_payload.data[0];
+			const uint8_t packet_id = rx_payload.data[1];
 			
 			packets_received++;
 			packets_rssi += (uint8_t) rx_payload.rssi;
-			const uint8_t packet_id = rx_payload.data[1];
 			
 			//LOG_INF("Packet %016llX", *(uint64_t *)tx_payload_pair.data);
 			if(packet_id > ESB_PACKET_DONGLE_PACKETS) {
 				if(packet_number != 0 && packet_number != last_packet_sequence) {
 					LOG_WRN("Dongle response packet number missmatch %d != %d", packet_number, last_packet_sequence);
+				} else {
+					if(packet_number == rcv_last_packet_number) {
+						rcv_packets_repeats++;
+					} else {
+						uint8_t diff = packet_number - rcv_last_packet_number;
+						rcv_packets_lost += diff - 1;
+						rcv_last_packet_number = packet_number;
+					}
 				}
 				// Control packet received
 				switch(packet_id) {
@@ -192,7 +204,6 @@ void event_handler(struct esb_evt const *event)
 								if(tracker_id == ESB_STATUS_NOT_PAIRED) {
 									esb_set_tracker_state(NOT_PAIRED);
 								} else if(tracker_id == ESB_STATUS_NO_SLOTS) {
-									// Shouldn't happen really...
 									esb_set_tracker_state(NOT_PAIRED);
 								} else {
 									esb_set_tracker_state(CONNECTION_ERROR);
@@ -240,12 +251,6 @@ void event_handler(struct esb_evt const *event)
 			} else if(rx_payload.pipe == 1 && packet_id > 7) {
 				connection_packet_received(rx_payload.data, rx_payload.length);
 			}
-			// if(last_received_packet != 0) {
-			// 	uint64_t diff = k_uptime_get() - last_received_packet;
-			// 	if(diff > 35) {
-			// 		LOG_WRN("Packet gap of %dms", diff);
-			// 	}
-			// }
 			last_received_packet = k_uptime_get();
 			connection_motion_ack(packet_number);
 		}
@@ -312,7 +317,11 @@ int esb_initialize(bool tx, bool advertize)
 		config.crc = SWEEP_TEST ? ESB_CRC_OFF : ESB_CRC_16BIT;
 		config.tx_output_power = CONFIG_2_SETTINGS_READ(CONFIG_2_RADIO_TX_POWER);
 		config.retransmit_delay = 435;
-		config.retransmit_count = SWEEP_TEST ? 0 : 1;
+#if CONFIG_BTF_DUT || SWEEP_TEST
+		config.retransmit_count = 0;
+#else
+		config.retransmit_count = 1;
+#endif
 		config.tx_mode = ESB_TXMODE_MANUAL;
 		config.payload_length = CONFIG_ESB_MAX_PAYLOAD_LENGTH;
 		config.selective_auto_ack = true;
@@ -423,7 +432,11 @@ void esb_write_current() {
 	while(!esb_skip_tdma && !tdma_is_our_window())
 		k_sleep(K_TICKS(1)); // Spin wait?
 	esb_flush_tx(); // this will clear all transmissions even if they did not complete
-	esb_write_payload(&tx_payload); // Add transmission to queue
+	int ret = esb_write_payload(&tx_payload); // Add transmission to queue
+	if(ret != 0) {
+		LOG_ERR("Can't write payload: %d", ret);
+		return;
+	}
 	tdma_tx_started();
 #if FREQUENCY_HOPPING
 	uint32_t timer = tdma_get_time_with_static_offset();
@@ -431,7 +444,11 @@ void esb_write_current() {
 	esb_set_channel(ESB_ALLOWED_CHANNEL_BUNDLES[(current_slot) % 10]);
 	esb_set_rf_channel(esb_channel);
 #endif
-	esb_start_tx();
+	ret = esb_start_tx();
+	if(ret != 0) {
+		LOG_ERR("Can't start TX: %d", ret);
+		return;
+	}
 }
 
 void esb_write(uint8_t *data, uint8_t packet_sequnce, uint8_t data_length)
@@ -439,11 +456,7 @@ void esb_write(uint8_t *data, uint8_t packet_sequnce, uint8_t data_length)
 	if (!esb_initialized || (esb_get_tracker_state() != CONNECTED))
 		return;
 	tx_payload.pipe = 1; // using base address 1
-#if defined(NRF54L15_XXAA) // TODO: esb halts with ack and tx fail
-	tx_payload.noack = true;
-#else
 	tx_payload.noack = false;
-#endif
 	tx_payload.length = data_length;
 	memcpy(tx_payload.data, data, data_length);
 	esb_write_current();
@@ -472,15 +485,14 @@ void esb_send_ping() {
 	tx_payload.pipe = 0; // Send ping on broadcast address
 
 	esb_write_current();
-	k_msleep(100);
+	k_msleep(10);
 
 	esb_set_channel(ch);
 	esb_deinitialize();
 	esb_set_tracker_state(ping_request.return_sate);
 }
 
-bool esb_ready(void)
-{
+bool esb_ready(void) {
 	return esb_initialized && esb_get_tracker_state() == CONNECTED;
 }
 
@@ -543,7 +555,7 @@ void shutdown_unconnected() {
 
 static void esb_thread(void)
 {
-	//k_msleep(5000);
+	// k_msleep(5000);
 	clocks_start();
 	clock_init_external();
 
@@ -560,9 +572,46 @@ static void esb_thread(void)
 #if SWEEP_TEST
 	sweep_test_run();
 #endif
+#if CONFIG_BTF_DUT
+	uint64_t last_dut_report = 0;
+	uint8_t ping_number = 0;
+#endif
 
 	while (1)
 	{
+#if CONFIG_BTF_DUT
+		if(esb_tracker_state != CONNECTED) {
+			k_msleep(5000);
+			esb_set_channel(50);
+			esb_initialize(true, false);
+			esb_skip_tdma = true;
+			esb_set_tracker_state(CONNECTED);
+		} else {
+			if(last_dut_report + 1000 < k_uptime_get()) {
+				last_dut_report = k_uptime_get();
+				LOG_INF("[DUT] Packets received: %d, packets lost: %d, sent: %d, repeats: %d, loss: %d%%", packets_received, rcv_packets_lost, packets_sent, rcv_packets_repeats,
+				packets_received == 0 ? 0 : 100 * rcv_packets_lost / (packets_received + rcv_packets_lost));
+				rcv_packets_lost = 0;
+				packets_received = 0;
+				rcv_packets_repeats = 0;
+				packets_sent = 0;
+			}
+			while(!esb_is_idle())
+				k_msleep(1);
+			uint64_t *addr = (uint64_t *)NRF_FICR->DEVICEADDR;
+			tx_payload.data[0] = ping_number++;
+			last_packet_sequence = tx_payload.data[0];
+			tx_payload.data[1] = ESB_PACKET_CONTROL_PING;
+			tx_payload.noack = false;
+			memcpy(&tx_payload.data[2], addr, 6);
+			memcpy(&tx_payload.data[8], &ping_request.target, 6);
+			tx_payload.pipe = 0; // Send ping on broadcast address
+			esb_write_current();
+			packets_sent++;
+		}
+		k_msleep(1);
+		continue;
+#endif
 		switch(esb_tracker_state) {
 			case PAIRING_REJECTED:
 				// pairing_rejected_counter++;
