@@ -30,7 +30,7 @@ uint32_t last_dtr = 0;
 LOG_MODULE_REGISTER(usb, LOG_LEVEL_INF);
 
 static void usb_init_thread(void);
-K_THREAD_DEFINE(usb_init_thread_id, 256, usb_init_thread, NULL, NULL, NULL, USB_INIT_THREAD_PRIORITY, 0, 0);
+K_THREAD_DEFINE(usb_init_thread_id, 512, usb_init_thread, NULL, NULL, NULL, USB_INIT_THREAD_PRIORITY, 0, 500); // Wait before enabling USB
 
 static void usb_ctrl_thread(void);
 static struct k_thread usb_ctrl_thread_id;

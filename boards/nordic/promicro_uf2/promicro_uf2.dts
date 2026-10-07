@@ -107,7 +107,7 @@
 	battery-divider {
 		compatible = "voltage-divider";
 		status = "okay";
-		io-channels = <&adc 12>; // Measure VDDHDIV5
+		io-channels = <&adc NRF_SAADC_VDDHDIV5>; // Measure VDDHDIV5
 		output-ohms = <1>;
 		full-ohms = <5>;
 	};

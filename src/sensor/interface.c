@@ -2,8 +2,8 @@
 
 #include <zephyr/logging/log.h>
 
-//#define DEBUG true
-//#define DEBUG_RATE true
+// #define DEBUG true
+// #define DEBUG_RATE true
 
 #if DEBUG || DEBUG_RATE
 LOG_MODULE_REGISTER(sensor_interface, LOG_LEVEL_DBG);
@@ -15,6 +15,7 @@ LOG_MODULE_REGISTER(sensor_interface, LOG_LEVEL_INF);
 
 struct spi_dt_spec *sensor_interface_dev_spi[SENSOR_INTERFACE_DEV_COUNT];
 struct i2c_dt_spec *sensor_interface_dev_i2c[SENSOR_INTERFACE_DEV_COUNT];
+sensor_position_e sensor_position;
 enum sensor_interface_spec sensor_interface_dev_spec[SENSOR_INTERFACE_DEV_COUNT];
 
 uint32_t sensor_interface_dev_spi_dummy_reads[SENSOR_INTERFACE_DEV_COUNT] = {0};
@@ -46,6 +47,13 @@ void sensor_interface_register_sensor_imu_i2c(struct i2c_dt_spec *dev)
 	sensor_interface_dev_spec[SENSOR_INTERFACE_DEV_IMU] = SENSOR_INTERFACE_SPEC_I2C;
 }
 
+/*
+void sensor_interface_register_sensor_shift_register(sensor_shift_register_t *dev_shift_reg0, sensor_shift_register_t *dev_shift_reg1)
+{
+	sensor_shift_registers[0] = dev_shift_reg0;
+	sensor_shift_registers[1] = dev_shift_reg1;
+}
+*/
 void sensor_interface_register_sensor_mag_spi(struct spi_dt_spec *dev)
 {
 	sensor_interface_dev_spi[SENSOR_INTERFACE_DEV_MAG] = dev;
@@ -104,6 +112,31 @@ int sensor_interface_spi_configure(enum sensor_interface_dev dev, uint32_t frequ
 	return 0;
 }
 
+/*
+int sensor_interface_shift_register_configure(void)
+{
+	if (!gpio_is_ready_dt(&sensor_shift_registers[0]->dsb) || !gpio_is_ready_dt(&sensor_shift_registers[0]->cp) ||
+		!gpio_is_ready_dt(&sensor_shift_registers[1]->dsb) || !gpio_is_ready_dt(&sensor_shift_registers[1]->cp))
+	{
+		LOG_ERR("Shift register GPIO pins not ready");
+		return -1;
+	}
+
+	gpio_pin_configure_dt(&sensor_shift_registers[0]->dsb, GPIO_OUTPUT_ACTIVE);
+	gpio_pin_configure_dt(&sensor_shift_registers[0]->cp, GPIO_OUTPUT_INACTIVE);
+	gpio_pin_configure_dt(&sensor_shift_registers[1]->dsb, GPIO_OUTPUT_ACTIVE);
+	gpio_pin_configure_dt(&sensor_shift_registers[1]->dsb, GPIO_OUTPUT_INACTIVE);
+
+	ssi_shift_pattern(sensor_shift_registers[0], 0xFF);
+
+	ssi_shift_pattern(sensor_shift_registers[1], 0xFF);
+
+	k_busy_wait(75);
+
+	return 0;
+}
+	*/
+
 void sensor_interface_ext_configure(const sensor_ext_ssi_t *ext)
 {
 	ext_ssi = ext;
@@ -113,6 +146,13 @@ const sensor_ext_ssi_t *sensor_interface_ext_get(void)
 {
 	return ext_ssi;
 }
+
+/*
+sensor_shift_register_t **sensor_interface_shift_registers_get(void)
+{
+	return sensor_shift_registers;
+}
+	*/
 
 // TODO: spi config by device
 
@@ -185,7 +225,7 @@ static inline int ssi_read(enum sensor_interface_dev dev, uint8_t *buf, uint32_t
 	}
 }
 
-static inline int ssi_write_read(enum sensor_interface_dev dev, const void *write_buf, size_t num_write, void *read_buf, size_t num_read)
+static inline int ssi_write_read(enum sensor_interface_dev dev, const uint8_t *write_buf, size_t num_write, uint8_t *read_buf, size_t num_read)
 {
 	// TODO: is separate read/write better for spi?
 	switch (sensor_interface_dev_spec[dev])
@@ -252,6 +292,7 @@ int ssi_burst_write(enum sensor_interface_dev dev, uint8_t start_addr, const uin
 		LOG_DBG("ssi_burst_write: dev=%d, start_addr=0x%02X, num_bytes=%d", dev, start_addr, num_bytes);
 		LOG_HEXDUMP_DBG(&start_addr, 1, "ssi_burst_write: start_addr");
 		LOG_HEXDUMP_DBG(buf, num_bytes, "ssi_burst_write: buf");
+		LOG_INF("Current SPI speed: %d", sensor_interface_dev_spi[dev]->config.frequency);
 		int err = spi_transceive_dt(sensor_interface_dev_spi[dev], &tx, NULL);
 		LOG_DBG("ssi_burst_write: err=%d", err);
 		k_msleep(500);
@@ -294,7 +335,8 @@ int ssi_reg_update_byte(enum sensor_interface_dev dev, uint8_t reg_addr, uint8_t
 	if (err)
 		return err;
 	new_value = (old_value & ~mask) | (value & mask);
-	if (new_value == old_value) {
+	if (new_value == old_value)
+	{
 		return 0;
 	}
 	if (sensor_interface_dev_spec[dev] == SENSOR_INTERFACE_SPEC_SPI)
@@ -310,7 +352,7 @@ int ssi_reg_read_interval(enum sensor_interface_dev dev, uint8_t start_addr, uin
 	// TODO: better way to handle with spi?
 	// TODO: not working
 	if (sensor_interface_dev_spec[dev] == SENSOR_INTERFACE_SPEC_SPI)
-		start_addr |= 0x80; // set read bit
+		start_addr |= 0x80;					  // set read bit
 	int err = ssi_write(dev, &start_addr, 1); // Start read buffer
 //	if (err)
 //		return err;
@@ -330,8 +372,8 @@ int ssi_reg_read_interval(enum sensor_interface_dev dev, uint8_t start_addr, uin
 		if (interval > num_bytes)
 			interval = num_bytes;
 		err |= ssi_read(dev, buf, interval);
-//		if (err)
-//			return err;
+		//		if (err)
+		//			return err;
 		buf += interval;
 		num_bytes -= interval;
 	}
@@ -364,8 +406,8 @@ int ssi_burst_read_interval(enum sensor_interface_dev dev, uint8_t start_addr, u
 		if (interval > num_bytes)
 			interval = num_bytes;
 		err |= ssi_burst_read(dev, start_addr, buf, interval);
-//		if (err)
-//			return err;
+		//		if (err)
+		//			return err;
 		buf += interval;
 		num_bytes -= interval;
 	}
@@ -375,3 +417,43 @@ int ssi_burst_read_interval(enum sensor_interface_dev dev, uint8_t start_addr, u
 #endif
 	return err;
 }
+
+/*
+int ssi_shift_pattern(sensor_shift_register_t *sensor_shift_register, uint8_t pattern)
+{
+	LOG_DBG("Shifting pattern %d", pattern);
+
+	for (int i = 7; i >= 0; i--)
+	{
+		uint8_t bit = (pattern >> i) & 0x01;
+
+		gpio_pin_set_dt(&sensor_shift_register->dsb, bit);
+		gpio_pin_set_dt(&sensor_shift_register->cp, 1);
+		gpio_pin_set_dt(&sensor_shift_register->cp, 0);
+	}
+	gpio_pin_set_dt(&sensor_shift_register->dsb, 0);
+	k_busy_wait(10);
+
+	return 0;
+}
+
+int ssi_shift_set_all_high(sensor_shift_register_t *sensor_shift_register)
+{
+	int err;
+	for (int i = 0; i < SENSOR_SHIFT_REGISTER_COUNT; i++)
+	{
+		LOG_DBG("Shifting %d high", i);
+		err = ssi_shift_pattern(&sensor_shift_register[i], 0xFF);
+		if (err != 0)
+			LOG_ERR("Error in setting all high");
+		return -1;
+	}
+	return 0;
+}
+
+// TODO: Implement this
+int ssi_shift_one(sensor_shift_register_t *sensor_shift_register)
+{
+	return 0;
+}
+	*/

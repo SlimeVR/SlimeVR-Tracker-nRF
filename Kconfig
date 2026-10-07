@@ -346,4 +346,9 @@ config CLOCK_SOURCE_LFCLK_RC
 
 endchoice
 
+config GPIO_LV164
+	bool "74LV164 shift register GPIO driver"
+	default y
+	depends on DT_HAS_VENDOR_LV164_GPIO_ENABLED
+
 source "Kconfig.zephyr"

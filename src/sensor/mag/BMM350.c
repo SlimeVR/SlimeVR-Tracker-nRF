@@ -54,6 +54,7 @@ static const float sensitivity_z = (power / (bz_sens * ina_z_gain_trgt * adc_gai
 static const float sensitivity_temp = 1 / (temp_sens * adc_gain * lut_gain * 1048576); // C/LSB
 
 static uint8_t last_odr = 0xff;
+static float last_real_time = 0.0f;
 
 LOG_MODULE_REGISTER(BMM350, LOG_LEVEL_DBG);
 
@@ -71,6 +72,11 @@ void bmm3_shutdown(void)
 	err |= ssi_reg_write_byte(SENSOR_INTERFACE_DEV_MAG, BMM350_PMU_CMD, PMU_CMD_SUS); // enter suspend (amogus,)
 	if (err)
 		LOG_ERR("Communication error");
+}
+
+float bmm3_get_odr(void)
+{
+	return last_real_time;
 }
 
 int bmm3_update_odr(float time, float *actual_time)
@@ -170,6 +176,7 @@ int bmm3_update_odr(float time, float *actual_time)
 		LOG_ERR("Communication error");
 
 	*actual_time = time;
+	last_real_time = time;
 	return err;
 }
 
@@ -226,11 +233,12 @@ const sensor_mag_t sensor_mag_bmm350 = {
 	*bmm3_shutdown,
 
 	*bmm3_update_odr,
+	*bmm3_get_odr,
 
 	*bmm3_mag_oneshot,
 	*bmm3_mag_read,
 	*bmm3_temp_read,
 
 	*bmm3_mag_process,
-	9, 9
+	9, 9, 2, BMM350_MAG_X_XLSB
 };

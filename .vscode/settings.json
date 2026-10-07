@@ -1,5 +1,8 @@
 {
     "files.associations": {
         "*.h": "c"
+    },
+    "nrf-connect.debugging.bindings": {
+        "${workspaceFolder}/build_glove/SlimeVR-Tracker-nRF": "Launch SlimeVR-Tracker-nRF/build_glove/SlimeVR-Tracker-nRF"
     }
 }

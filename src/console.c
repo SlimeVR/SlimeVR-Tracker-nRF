@@ -44,10 +44,6 @@ K_THREAD_DEFINE(console_thread_id, 1024, console_thread, NULL, NULL, NULL, CONSO
 static const struct device *gpio_dev = DEVICE_DT_GET(DT_NODELABEL(gpio0));
 #endif
 
-#if DT_NODE_HAS_STATUS(DT_NODELABEL(mag), okay)
-#define SENSOR_MAG_EXISTS true
-#endif
-
 static const char *meows[] = {
 	"Mew",
 	"Meww",
@@ -77,8 +73,7 @@ static const char *meow_punctuations[] = {
 	"!",
 	"-",
 	"~",
-	""
-};
+	""};
 
 static const char *meow_suffixes[] = {
 	" :3",
@@ -93,14 +88,12 @@ static const char *meow_suffixes[] = {
 	" >:3c",
 	" >;3",
 	" >;3c",
-	""
-};
+	""};
 
 static uint8_t meow_colors[] = {
 	212,
 	176,
-	177
-};
+	177};
 
 void console_thread_create(void)
 {
@@ -122,8 +115,8 @@ static void print_board(void)
 	printk(CONFIG_USB_DEVICE_MANUFACTURER " " CONFIG_USB_DEVICE_PRODUCT "\n");
 #endif
 	printk(FW_STRING);
-    printk("Commit: " TOSTRING(APP_BUILD_VERSION) "\n");
-    printk("Build: %d-%02d-%02d %02d:%02d:%02d\n", BUILD_YEAR, BUILD_MONTH, BUILD_DAY, BUILD_HOUR, BUILD_MIN, BUILD_SEC);
+	printk("Commit: " TOSTRING(APP_BUILD_VERSION) "\n");
+	printk("Build: %d-%02d-%02d %02d:%02d:%02d\n", BUILD_YEAR, BUILD_MONTH, BUILD_DAY, BUILD_HOUR, BUILD_MIN, BUILD_SEC);
 
 	printk("\nBoard: " CONFIG_BOARD "\n");
 	printk("SOC: " CONFIG_SOC "\n");
@@ -156,7 +149,7 @@ static void print_sensor(void)
 	}
 	printk("Gyroscope bias: %.5f %.5f %.5f\n", (double)retained->gyroBias[0], (double)retained->gyroBias[1], (double)retained->gyroBias[2]);
 #if SENSOR_MAG_EXISTS
-//	printk("Magnetometer bridge offset: %.5f %.5f %.5f\n", (double)retained->magBias[0], (double)retained->magBias[1], (double)retained->magBias[2]);
+	//	printk("Magnetometer bridge offset: %.5f %.5f %.5f\n", (double)retained->magBias[0], (double)retained->magBias[1], (double)retained->magBias[2]);
 	printk("Magnetometer matrix:\n");
 	for (int i = 0; i < 3; i++)
 		printk("%.5f %.5f %.5f %.5f\n", (double)retained->magBAinv[0][i], (double)retained->magBAinv[1][i], (double)retained->magBAinv[2][i], (double)retained->magBAinv[3][i]);
@@ -502,6 +495,7 @@ static void print_help(void)
 	printk("mag                          Clear magnetometer calibration\n");
 #endif
 	printk("\nset <address> <id>         Manually set receiver\n");
+	printk("\nping <address>             Ping specified address\n");
 	printk("pair                         Enter pairing mode\n");
 	printk("clear                        Clear pairing data\n");
 #if DFU_EXISTS
@@ -546,6 +540,7 @@ static void console_thread(void)
 	const char command_mag[] = "mag";
 #endif
 	const char command_set[] = "set";
+	const char command_ping[] = "ping";
 	const char command_pair[] = "pair";
 	const char command_clear[] = "clear";
 #if DFU_EXISTS
@@ -574,19 +569,20 @@ static void console_thread(void)
 	// debug
 	const char command_nvs[] = "nvs";
 
-	while (1) {
+	while (1)
+	{
 #if USB_EXISTS
 		char *line = console_getline();
 #else
 		char *line = rtt_console_getline();
 #endif
-		char* argv[5] = {NULL}; // command and 4 args
+		char *argv[5] = {NULL}; // command and 4 args
 		size_t argc = parse_args(line, argv, ARRAY_SIZE(argv));
-		if(argc == 0)
+		if (argc == 0)
 			continue;
-		if(argc > 0)
+		if (argc > 0)
 			strtolower(argv[0]); // lower case the command
-		if(argc > 1)
+		if (argc > 1)
 			strtolower(argv[1]); // lower case the first argument
 		// only care that the first words are matchable
 
@@ -645,6 +641,18 @@ static void console_thread(void)
 				pairing_set_pair(addr, tracker_id);
 			else
 				printk("Invalid address\n");
+		}
+		else if (strcmp(argv[0], command_ping) == 0)
+		{
+			if (argc != 3)
+			{
+				printk("Invalid number of arguments\n");
+				continue;
+			}
+			uint64_t addr = parse_u64(argv[1], 16);
+			uint64_t channel = parse_u64(argv[2], 10);
+			printk("Sending PING to %012llx on channel %d\n", addr, (int)channel);
+			esb_ping(addr, channel);
 		}
 		else if (strcmp(argv[0], command_pair) == 0)
 		{
@@ -718,7 +726,7 @@ static void console_thread(void)
 					printk("Unable to decode input");
 					continue;
 				}
-				//printk("decode: %d, len %d\n", err, len);
+				// printk("decode: %d, len %d\n", err, len);
 				memcpy(retained->settings, tmp, sizeof(retained->settings));
 				config_settings_init(); // reset any non-overridden values
 				sys_write(SETTINGS_ID, NULL, retained->settings, sizeof(retained->settings));
@@ -746,7 +754,7 @@ static void console_thread(void)
 				uint8_t *tmp = k_malloc(173);
 				uint16_t len = 0;
 				base64_encode(tmp, 173, (size_t *)&len, retained->settings, 128);
-				//printk("encode: %d, len %d\n", err, len);
+				// printk("encode: %d, len %d\n", err, len);
 				printk("%s\n", tmp);
 				k_free(tmp);
 			}

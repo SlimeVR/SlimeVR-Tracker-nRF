@@ -9,7 +9,7 @@
 
 #define PACKET_SIZE 12
 
-static float accel_sensitivity = 16.0f / 32768.0f; // default 16g
+static float accel_sensitivity = 16.0f / 32768.0f;	// default 16g
 static float gyro_sensitivity = 2000.0f / 32768.0f; // default 2000dps
 
 static const uint16_t accel_ranges[] = {16, 8, 4, 2, 0};
@@ -45,7 +45,7 @@ int bmi_init(float clock_rate, float accel_time, float gyro_time, float *accel_a
 		return -1;
 	factor_zx = factor_zx_read();
 	last_accel_odr = 0xff; // reset last odr
-	last_gyro_odr = 0xff; // reset last odr
+	last_gyro_odr = 0xff;  // reset last odr
 	err |= ssi_reg_write_byte(SENSOR_INTERFACE_DEV_IMU, BMI270_ACC_RANGE, accel_fs);
 	err |= ssi_reg_write_byte(SENSOR_INTERFACE_DEV_IMU, BMI270_GYR_RANGE, gyro_fs);
 	err |= bmi_update_odr(accel_time, gyro_time, accel_actual_time, gyro_actual_time);
@@ -58,10 +58,10 @@ int bmi_init(float clock_rate, float accel_time, float gyro_time, float *accel_a
 
 void bmi_shutdown(void) // this does not reset the device, to avoid clearing the config
 {
-	last_accel_odr = 0xff; // reset last odr
-	last_gyro_odr = 0xff; // reset last odr
+	last_accel_odr = 0xff;														   // reset last odr
+	last_gyro_odr = 0xff;														   // reset last odr
 	int err = ssi_reg_write_byte(SENSOR_INTERFACE_DEV_IMU, BMI270_PWR_CTRL, 0x00); // disable all sensors
-	err |= ssi_reg_write_byte(SENSOR_INTERFACE_DEV_IMU, BMI270_PWR_CONF, 0x01); // enable adv_power_save (suspend)
+	err |= ssi_reg_write_byte(SENSOR_INTERFACE_DEV_IMU, BMI270_PWR_CONF, 0x01);	   // enable adv_power_save (suspend)
 	if (err)
 		LOG_ERR("Communication error");
 	// TODO : Correctly wait for the reset to finish
@@ -166,45 +166,39 @@ int bmi_update_odr(float accel_time, float gyro_time, float *accel_actual_time, 
 }
 
 // TODO: gyro rotation data is delayed for some reason, accelerometer still responds instantly
-uint16_t bmi_fifo_read(uint8_t *data, uint16_t len)
+uint16_t bmi_data_read(uint8_t *data, uint16_t len)
 {
-	int err = 0;
-	uint16_t total = 0;
-	uint16_t packets = UINT16_MAX;
-	while (packets > 0 && len >= PACKET_SIZE)
+	uint8_t rawCount[2] = {0};
+	int err = ssi_burst_read(SENSOR_INTERFACE_DEV_IMU, BMI270_FIFO_LENGTH_0, &rawCount[0], 2);
+
+	uint16_t packets = (uint16_t)((rawCount[1] & 0x3F) << 8 | rawCount[0]); // Turn the 16 bits into a unsigned 16-bit value
+
+	const uint16_t limit = len / PACKET_SIZE;
+	if (packets > limit)
 	{
-		uint8_t rawCount[2];
-		err |= ssi_burst_read(SENSOR_INTERFACE_DEV_IMU, BMI270_FIFO_LENGTH_0, &rawCount[0], 2);
-		uint16_t count = (uint16_t)((rawCount[1] & 0x3F) << 8 | rawCount[0]); // Turn the 16 bits into a unsigned 16-bit value
-		if (!count) // nothing to do
-			break;
-		packets = count / PACKET_SIZE;
-		uint16_t limit = len / PACKET_SIZE;
-		if (packets > limit)
-		{
-			LOG_WRN("FIFO read buffer limit reached, %d packets dropped", packets - limit);
-			packets = limit;
-			count = packets * PACKET_SIZE;
-		}
-		err |= ssi_burst_read_interval(SENSOR_INTERFACE_DEV_IMU, BMI270_FIFO_DATA, data, count, PACKET_SIZE);
-		if (err)
-			LOG_ERR("Communication error");
-		data += packets * PACKET_SIZE;
-		len -= packets * PACKET_SIZE;
-		total += packets;
+		LOG_WRN("FIFO read buffer limit reached, %d packets dropped", packets - limit);
+		packets = limit;
 	}
-	return total;
+
+	const uint16_t read_size = packets * PACKET_SIZE;
+	err |= ssi_burst_read_interval(SENSOR_INTERFACE_DEV_IMU, BMI270_FIFO_DATA, data, read_size, PACKET_SIZE);
+	if (err)
+		LOG_ERR("Communication error");
+
+	return packets;
 }
 
 static const uint8_t overread[2] = {0x00, 0x80};
 static const uint8_t invalid_accel[6] = {0x01, 0x7F, 0x00, 0x80, 0x00, 0x80};
 static const uint8_t invalid_gyro[6] = {0x02, 0x7F, 0x00, 0x80, 0x00, 0x80};
 
-int bmi_fifo_process(uint16_t index, uint8_t *data, float a[3], float g[3])
+sensor_data_attrs_t bmi_data_process(uint16_t index, uint8_t *data, float a[3], float g[3], float m[3])
 {
 	index *= PACKET_SIZE;
 	if (!memcmp(&data[index], overread, sizeof(overread)))
-		return 1; // Skip overread packets
+		return DATA_INVALID; // Skip overread packets
+
+	sensor_data_attrs_t result = 0;
 	float a_bmi[3];
 	float g_bmi[3];
 	for (int i = 0; i < 3; i++) // x, y, z
@@ -219,6 +213,7 @@ int bmi_fifo_process(uint16_t index, uint8_t *data, float a[3], float g[3])
 		a[0] = -a_bmi[1];
 		a[1] = a_bmi[0];
 		a[2] = a_bmi[2];
+		result |= DATA_VALID_ACCEL;
 	}
 	if (memcmp(&data[index], invalid_gyro, sizeof(invalid_gyro))) // valid gyro data
 	{
@@ -227,8 +222,9 @@ int bmi_fifo_process(uint16_t index, uint8_t *data, float a[3], float g[3])
 		g[0] = -g_bmi[1];
 		g[1] = g_bmi[0];
 		g[2] = g_bmi[2];
+		result |= DATA_VALID_GYRO;
 	}
-	return 0;
+	return result;
 }
 
 void bmi_accel_read(float a[3])
@@ -294,8 +290,8 @@ uint8_t bmi_setup_DRDY(uint16_t threshold)
 	buf[1] = (threshold >> 8) & 0x1F;
 	int err = ssi_burst_write(SENSOR_INTERFACE_DEV_IMU, BMI270_FIFO_WTM_0, buf, 2);
 	err |= ssi_reg_write_byte(SENSOR_INTERFACE_DEV_IMU, BMI270_INT1_MAP_FEAT, 0x00); // disable any_motion_out (interrupt)
-	err |= ssi_reg_write_byte(SENSOR_INTERFACE_DEV_IMU, BMI270_INT1_IO_CTRL, 0x0C); // set INT1 active low, open-drain, output enabled
-	err |= ssi_reg_write_byte(SENSOR_INTERFACE_DEV_IMU, BMI270_INT_MAP_DATA, 0x02); // FIFO threshold interrupt
+	err |= ssi_reg_write_byte(SENSOR_INTERFACE_DEV_IMU, BMI270_INT1_IO_CTRL, 0x0C);	 // set INT1 active low, open-drain, output enabled
+	err |= ssi_reg_write_byte(SENSOR_INTERFACE_DEV_IMU, BMI270_INT_MAP_DATA, 0x02);	 // FIFO threshold interrupt
 	if (err)
 		LOG_ERR("Communication error");
 	return NRF_GPIO_PIN_PULLUP << 4 | NRF_GPIO_PIN_SENSE_LOW; // active low
@@ -304,20 +300,20 @@ uint8_t bmi_setup_DRDY(uint16_t threshold)
 uint8_t bmi_setup_WOM(void) // TODO: seems too sensitive? try to match icm at least // TODO: half working.
 {
 	uint8_t config[4] = {0};
-	uint16_t *ptr = (uint16_t *)config; // bmi is little endian
-	ptr[0] = 0x7 << 13 | 0x000; // enable all axes, set detection duration to 0
-	ptr[1] = 0x1 << 15 | 0x7 << 11 | 0x040; // enable any_motion, set out_conf to bit 6, set threshold (1LSB equals to 0.488mg, 64 * 0.488mg is ~31.25mg)
+	uint16_t *ptr = (uint16_t *)config;											   // bmi is little endian
+	ptr[0] = 0x7 << 13 | 0x000;													   // enable all axes, set detection duration to 0
+	ptr[1] = 0x1 << 15 | 0x7 << 11 | 0x040;										   // enable any_motion, set out_conf to bit 6, set threshold (1LSB equals to 0.488mg, 64 * 0.488mg is ~31.25mg)
 	int err = ssi_reg_write_byte(SENSOR_INTERFACE_DEV_IMU, BMI270_PWR_CONF, 0x00); // disable adv_power_save
 	k_usleep(450);
-	err |= ssi_reg_write_byte(SENSOR_INTERFACE_DEV_IMU, BMI270_ACC_CONF, ODR_200); // disable filters, set accel ODR
-	err |= ssi_reg_write_byte(SENSOR_INTERFACE_DEV_IMU, BMI270_PWR_CTRL, 0x04); // enable accel
-	err |= ssi_reg_write_byte(SENSOR_INTERFACE_DEV_IMU, BMI270_FEAT_PAGE, 0x01); // go to page 1
+	err |= ssi_reg_write_byte(SENSOR_INTERFACE_DEV_IMU, BMI270_ACC_CONF, ODR_200);			  // disable filters, set accel ODR
+	err |= ssi_reg_write_byte(SENSOR_INTERFACE_DEV_IMU, BMI270_PWR_CTRL, 0x04);				  // enable accel
+	err |= ssi_reg_write_byte(SENSOR_INTERFACE_DEV_IMU, BMI270_FEAT_PAGE, 0x01);			  // go to page 1
 	err |= ssi_burst_write(SENSOR_INTERFACE_DEV_IMU, BMI270_ANYMO_1, config, sizeof(config)); // Start write buffer
-	err |= ssi_reg_write_byte(SENSOR_INTERFACE_DEV_IMU, BMI270_INT_MAP_DATA, 0x00); // disable FIFO threshold interrupt
-	err |= ssi_reg_write_byte(SENSOR_INTERFACE_DEV_IMU, BMI270_INT1_IO_CTRL, 0x0C); // set INT1 active low, open-drain, output enabled
-	k_msleep(55); // wait for sensor to settle
-	err |= ssi_reg_write_byte(SENSOR_INTERFACE_DEV_IMU, BMI270_INT1_MAP_FEAT, 0x40); // enable any_motion_out (interrupt)
-	err |= ssi_reg_write_byte(SENSOR_INTERFACE_DEV_IMU, BMI270_PWR_CONF, 0x01); // enable adv_power_save (suspend)
+	err |= ssi_reg_write_byte(SENSOR_INTERFACE_DEV_IMU, BMI270_INT_MAP_DATA, 0x00);			  // disable FIFO threshold interrupt
+	err |= ssi_reg_write_byte(SENSOR_INTERFACE_DEV_IMU, BMI270_INT1_IO_CTRL, 0x0C);			  // set INT1 active low, open-drain, output enabled
+	k_msleep(55);																			  // wait for sensor to settle
+	err |= ssi_reg_write_byte(SENSOR_INTERFACE_DEV_IMU, BMI270_INT1_MAP_FEAT, 0x40);		  // enable any_motion_out (interrupt)
+	err |= ssi_reg_write_byte(SENSOR_INTERFACE_DEV_IMU, BMI270_PWR_CONF, 0x01);				  // enable adv_power_save (suspend)
 	if (err)
 		LOG_ERR("Communication error");
 	// LOG_DBG("WOM setup complete");
@@ -396,10 +392,10 @@ int bmi_crt(uint8_t *data)
 {
 	uint8_t status;
 	uint8_t acc_odr = last_accel_odr; // store last odr
-	uint8_t gyr_odr = last_gyro_odr; // store last odr
+	uint8_t gyr_odr = last_gyro_odr;  // store last odr
 	uint8_t config[2] = {0};
-	uint16_t *ptr = (uint16_t *)config; // bmi is little endian
-	*ptr = 0x0100; // CRT will be executed
+	uint16_t *ptr = (uint16_t *)config;										  // bmi is little endian
+	*ptr = 0x0100;															  // CRT will be executed
 	int err = ssi_reg_write_byte(SENSOR_INTERFACE_DEV_IMU, BMI270_CMD, 0xB6); // softreset
 	k_msleep(2);
 	// in case of SPI, where CS pin must trigger rising edge for BMI to enable interface
@@ -414,16 +410,15 @@ int bmi_crt(uint8_t *data)
 	err |= ssi_reg_write_byte(SENSOR_INTERFACE_DEV_IMU, BMI270_OFFSET_6, 0x80); // gyr_gain_en
 	err |= ssi_reg_write_byte(SENSOR_INTERFACE_DEV_IMU, BMI270_PWR_CTRL, 0x04); // enable accel
 	k_msleep(2);
-	err |= ssi_reg_write_byte(SENSOR_INTERFACE_DEV_IMU, BMI270_GYR_CRT_CONF, 0x04); // set CRT running
-	err |= ssi_reg_write_byte(SENSOR_INTERFACE_DEV_IMU, BMI270_FEAT_PAGE, 0x01); // go to page 1
+	err |= ssi_reg_write_byte(SENSOR_INTERFACE_DEV_IMU, BMI270_GYR_CRT_CONF, 0x04);			   // set CRT running
+	err |= ssi_reg_write_byte(SENSOR_INTERFACE_DEV_IMU, BMI270_FEAT_PAGE, 0x01);			   // go to page 1
 	err |= ssi_burst_write(SENSOR_INTERFACE_DEV_IMU, BMI270_G_TRIG_1, config, sizeof(config)); // Start write buffer
-	err |= ssi_reg_write_byte(SENSOR_INTERFACE_DEV_IMU, BMI270_CMD, 0x02); // g_trigger
+	err |= ssi_reg_write_byte(SENSOR_INTERFACE_DEV_IMU, BMI270_CMD, 0x02);					   // g_trigger
 	do
 	{
 		k_msleep(200);
 		err |= ssi_reg_read_byte(SENSOR_INTERFACE_DEV_IMU, BMI270_GYR_CRT_CONF, &status);
-	}
-	while (status == 0x04);
+	} while (status == 0x04);
 
 	err |= ssi_reg_write_byte(SENSOR_INTERFACE_DEV_IMU, BMI270_FEAT_PAGE, 0x00); // go to page 0
 	err |= ssi_reg_read_byte(SENSOR_INTERFACE_DEV_IMU, BMI270_GYR_GAIN_STATUS, &status);
@@ -453,7 +448,7 @@ int bmi_crt(uint8_t *data)
 	if (acc_odr != 0)
 		err |= ssi_reg_write_byte(SENSOR_INTERFACE_DEV_IMU, BMI270_ACC_CONF, 0xA0 | acc_odr);
 	if (gyr_odr != 0)
-		err |= ssi_reg_write_byte(SENSOR_INTERFACE_DEV_IMU, BMI270_GYR_CONF, 0xE0 | gyr_odr); // set performance opt. noise performance
+		err |= ssi_reg_write_byte(SENSOR_INTERFACE_DEV_IMU, BMI270_GYR_CONF, 0xE0 | gyr_odr);											// set performance opt. noise performance
 	err |= ssi_reg_write_byte(SENSOR_INTERFACE_DEV_IMU, BMI270_PWR_CTRL, 0x08 | (acc_odr != 0 ? 0x04 : 0) | (gyr_odr != 0 ? 0x02 : 0)); // enable temp, set accel and gyro power
 	last_accel_odr = acc_odr;
 	last_gyro_odr = gyr_odr;
@@ -482,8 +477,8 @@ const sensor_imu_t sensor_imu_bmi270 = {
 	*bmi_update_fs,
 	*bmi_update_odr,
 
-	*bmi_fifo_read,
-	*bmi_fifo_process,
+	*bmi_data_read,
+	*bmi_data_process,
 	*bmi_accel_read,
 	*bmi_gyro_read,
 	*bmi_temp_read,
@@ -491,6 +486,4 @@ const sensor_imu_t sensor_imu_bmi270 = {
 	*bmi_setup_DRDY,
 	*bmi_setup_WOM,
 
-	*imu_none_ext_setup,
-	*imu_none_ext_passthrough
-};
+	*imu_none_ext_setup};

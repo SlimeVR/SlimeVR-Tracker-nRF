@@ -44,6 +44,8 @@
 #define ESB_PACKET_CONTROL_DONGLE_STATUS 233
 #define ESB_PACKET_CONTROL_NO_WINDOWS 234
 #define ESB_PACKET_CONTROL_WINDOW_INFO 235
+#define ESB_PACKET_CONTROL_PING 236
+#define ESB_PACKET_CONTROL_PONG 237
 
 #define ESB_PACKET_CONTROL_TEST 250
 
@@ -59,8 +61,7 @@
 	{                                     \
 		.pipe = _pipe,                    \
 		.length = _length,                \
-		.data = { 0 }                     \
-	}
+		.data = {0}}
 
 void event_handler(struct esb_evt const *event);
 int esb_initialize(bool tx, bool advertize);
@@ -74,12 +75,14 @@ void esb_set_channel(uint8_t channel);
 uint8_t esb_get_channel();
 void esb_set_receiver_addr(uint64_t receiver_addr);
 int esb_get_frequency(void);
+void esb_ping(uint64_t receiver_addr, uint8_t channel);
 
 void esb_write(uint8_t *data, uint8_t packet_sequnce); // TODO: give packets some names
 
 bool esb_ready(void);
 
-struct pairing_discovery_t {
+struct pairing_discovery_t
+{
 	uint64_t dongle_hwid;
 	uint8_t channel;
 	int8_t rssi;
@@ -91,7 +94,8 @@ struct pairing_discovery_t {
 	uint32_t response_time;
 };
 
-enum esb_tracker_state_t {
+enum esb_tracker_state_t
+{
 	NOT_PAIRED,
 	PAIRING_FIND_DONGLES,
 	PAIRING_PICK_DONGLE,
@@ -102,7 +106,16 @@ enum esb_tracker_state_t {
 	DONGLE_CONNECT,
 	CONNECTED,
 	PAIRING_ERROR,
-	CONNECTION_ERROR
+	CONNECTION_ERROR,
+	SEND_PING
+};
+
+struct ping_request_t
+{
+	uint64_t target;
+	uint64_t time;
+	uint8_t channel;
+	enum esb_tracker_state_t return_sate;
 };
 
 enum esb_tracker_state_t esb_get_tracker_state(void);

@@ -46,10 +46,10 @@ static uint8_t packet_sequence = 0;
 static bool allow_packet_bundling = false; // Can only be used with new server
 static bool motion_acked = false;
 
-LOG_MODULE_REGISTER(connection, LOG_LEVEL_INF);
+LOG_MODULE_REGISTER(connection, LOG_LEVEL_DBG);
 
 static void connection_thread(void);
-K_THREAD_DEFINE(connection_thread_id, 512, connection_thread, NULL, NULL, NULL, CONNECTION_THREAD_PRIORITY, K_FP_REGS, 0);
+K_THREAD_DEFINE(connection_thread_id, 1024, connection_thread, NULL, NULL, NULL, CONNECTION_THREAD_PRIORITY, K_FP_REGS, 0);
 
 void connection_clocks_request_stop(void)
 {
@@ -72,7 +72,7 @@ void connection_update_sensor_ids(int imu, int mag)
 	// not using get_server_constant_mag_id, does not exist in server enums
 	if (mag < 0)
 		mag_id = SVR_MAG_STATUS_NOT_SUPPORTED;
-	else if CONFIG_1_SETTINGS_READ(CONFIG_1_SENSOR_USE_MAG)
+	else if CONFIG_1_SETTINGS_READ (CONFIG_1_SENSOR_USE_MAG)
 		mag_id = SVR_MAG_STATUS_ENABLED;
 	else
 		mag_id = SVR_MAG_STATUS_DISABLED;
@@ -139,7 +139,7 @@ void connection_update_battery(bool battery_available, bool plugged, bool charge
 	if (charged) // 255, server will show fully charged indicator (not yet)
 		batt = 255;
 
-	if (plugged) // Charging
+	if (plugged)							// Charging
 		battery_mV = MAX(battery_mV, 4310); // server will show a charging indicator
 
 	battery_mV /= 10;
@@ -173,8 +173,10 @@ void connection_set_shutdown(void)
 	shutdown = true;
 }
 
-void data_buffer_write(uint8_t* data, size_t size) {
-	if(data_buffer_position + size > sizeof(data_buffer)) {
+void data_buffer_write(uint8_t *data, size_t size)
+{
+	if (data_buffer_position + size > sizeof(data_buffer))
+	{
 		LOG_ERR("ESB data buffer overflow. Writing %d, have space for %d", size, sizeof(data_buffer) - data_buffer_position);
 		return;
 	}
@@ -186,15 +188,19 @@ void data_buffer_write(uint8_t* data, size_t size) {
 	hid_write_packet_n(data); // TODO:
 }
 
-void data_buffer_reset() {
+void data_buffer_reset()
+{
 	data_buffer_position = 0;
 }
 
-bool can_send_packet(size_t size) {
-	if(data_buffer_position + size > sizeof(data_buffer)) {
+bool can_send_packet(size_t size)
+{
+	if (data_buffer_position + size > sizeof(data_buffer))
+	{
 		return false;
 	}
-	if(data_buffer_position != 0 && !allow_packet_bundling) {
+	if (data_buffer_position != 0 && !allow_packet_bundling)
+	{
 		return false;
 	}
 	return true;
@@ -233,17 +239,17 @@ void connection_write_packet_0() // device info
 	data[2] = batt;
 	data[3] = batt_v;
 	data[4] = sensor_temp; // temp
-	data[5] = FW_BOARD; // brd_id
-	data[6] = FW_MCU; // mcu_id
-	data[7] = 0; // resv
-	data[8] = imu_id; // imu_id
-	data[9] = mag_id; // mag_id
+	data[5] = FW_BOARD;	   // brd_id
+	data[6] = FW_MCU;	   // mcu_id
+	data[7] = 0;		   // resv
+	data[8] = imu_id;	   // imu_id
+	data[9] = mag_id;	   // mag_id
 	uint16_t *buf = (uint16_t *)&data[10];
 	buf[0] = ((BUILD_YEAR - 2020) & 127) << 9 | (BUILD_MONTH & 15) << 5 | (BUILD_DAY & 31); // fw_date
-	data[12] = FW_VERSION_MAJOR & 255; // fw_major
-	data[13] = FW_VERSION_MINOR & 255; // fw_minor
-	data[14] = FW_VERSION_PATCH & 255; // fw_patch
-	data[15] = 0; // rssi (supplied by receiver)
+	data[12] = FW_VERSION_MAJOR & 255;														// fw_major
+	data[13] = FW_VERSION_MINOR & 255;														// fw_minor
+	data[14] = FW_VERSION_PATCH & 255;														// fw_patch
+	data[15] = 0;																			// rssi (supplied by receiver)
 	data_buffer_write(data, sizeof(data));
 }
 
@@ -275,18 +281,18 @@ void connection_write_packet_2() // reduced precision quat and accel with batter
 	float v[3] = {0};
 	q_fem(sensor_q, v); // exponential map
 	for (int i = 0; i < 3; i++)
-		v[i] = (v[i] + 1) / 2; // map -1-1 to 0-1
+		v[i] = (v[i] + 1) / 2;																									   // map -1-1 to 0-1
 	uint16_t v_buf[3] = {SATURATE_UINT10((1 << 10) * v[0]), SATURATE_UINT11((1 << 11) * v[1]), SATURATE_UINT11((1 << 11) * v[2])}; // fill 32 bits
 	uint32_t *q_buf = (uint32_t *)&data[5];
 	*q_buf = v_buf[0] | (v_buf[1] << 10) | (v_buf[2] << 21);
 
-//	v[0] = FIXED_10_TO_DOUBLE(*q_buf & 1023);
-//	v[1] = FIXED_11_TO_DOUBLE((*q_buf >> 10) & 2047);
-//	v[2] = FIXED_11_TO_DOUBLE((*q_buf >> 21) & 2047);
-//	for (int i = 0; i < 3; i++)
-//	v[i] = v[i] * 2 - 1;
-//	float q[4] = {0};
-//	q_iem(v, q); // inverse exponential map
+	//	v[0] = FIXED_10_TO_DOUBLE(*q_buf & 1023);
+	//	v[1] = FIXED_11_TO_DOUBLE((*q_buf >> 10) & 2047);
+	//	v[2] = FIXED_11_TO_DOUBLE((*q_buf >> 21) & 2047);
+	//	for (int i = 0; i < 3; i++)
+	//	v[i] = v[i] * 2 - 1;
+	//	float q[4] = {0};
+	//	q_iem(v, q); // inverse exponential map
 
 	uint16_t *buf = (uint16_t *)&data[9];
 	buf[0] = TO_FIXED_7(sensor_a[0]);
@@ -361,8 +367,8 @@ void connection_write_packet_6() // reduced precision quat and accel with button
 		*buf = timeout_time < 1 ? 1 : timeout_time;
 	if (k_ticks_to_ms_floor64(sys_get_battery_remaining_time_estimate()) < 60000 && timeout_time == UINT16_MAX)
 		timeout_time = UINT16_MAX - 1;
-	data[15] = 0; // rssi (supplied by receiver)
-	if (tracker_button && k_uptime_get() > button_update_time + 1000) // attempt to send button press for 1000 ms
+	data[15] = 0;														// rssi (supplied by receiver)
+	if (tracker_button && k_uptime_ticks() > button_update_time + 1000) // attempt to send button press for 1000 ms
 	{
 		tracker_button = 0;
 		button_update_time = 0;
@@ -387,7 +393,7 @@ void connection_write_packet_7() // button and sleep time
 	float v[3] = {0};
 	q_fem(sensor_q, v); // exponential map
 	for (int i = 0; i < 3; i++)
-		v[i] = (v[i] + 1) / 2; // map -1-1 to 0-1
+		v[i] = (v[i] + 1) / 2;																									   // map -1-1 to 0-1
 	uint16_t v_buf[3] = {SATURATE_UINT10((1 << 10) * v[0]), SATURATE_UINT11((1 << 11) * v[1]), SATURATE_UINT11((1 << 11) * v[2])}; // fill 32 bits
 	uint32_t *q_buf = (uint32_t *)&data[5];
 	*q_buf = v_buf[0] | (v_buf[1] << 10) | (v_buf[2] << 21);
@@ -395,8 +401,8 @@ void connection_write_packet_7() // button and sleep time
 	buf[0] = TO_FIXED_7(sensor_a[0]);
 	buf[1] = TO_FIXED_7(sensor_a[1]);
 	buf[2] = TO_FIXED_7(sensor_a[2]);
-	data[15] = 0; // rssi (supplied by receiver)
-	if (tracker_button && k_uptime_get() > button_update_time + 1000) // attempt to send button press for 1000 ms
+	data[15] = 0;														// rssi (supplied by receiver)
+	if (tracker_button && k_uptime_ticks() > button_update_time + 1000) // attempt to send button press for 1000 ms
 	{
 		tracker_button = 0;
 		button_update_time = 0;
@@ -405,7 +411,8 @@ void connection_write_packet_7() // button and sleep time
 	motion_acked = false;
 }
 
-void connection_motion_ack(uint8_t packet_sequence) {
+void connection_motion_ack(uint8_t packet_sequence)
+{
 	motion_acked = true;
 	// TODO Check if this sequence is from motion
 }
@@ -496,7 +503,7 @@ void connection_thread(void)
 			connection_write_packet_5();
 			continue;
 		}
-		else if(!motion_acked || ALWAYS_SEND) // Didn't ack last motion packet, will send rotation again
+		else if (!motion_acked || ALWAYS_SEND) // Didn't ack last motion packet, will send rotation again
 		{
 			quat_update_time = 0;
 			last_quat_time = k_uptime_get();
