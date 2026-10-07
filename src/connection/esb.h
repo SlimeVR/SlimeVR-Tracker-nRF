@@ -26,9 +26,9 @@
 #include <nrfx_timer.h>
 
 #define ESB_VERSION 2
-#define PROTOCOL_VERSION 2
 
-#define ESB_PACKET_MAX_SIZE 17
+#define ESB_PACKET_MAX_SIZE 24
+#define ESB_PACKET_MAX_DATA_SIZE 23
 #define ESB_PACKET_DATA_LEGACY_SIZE 16
 
 #define ESB_PACKET_BROADCAST 255
@@ -51,6 +51,11 @@
 
 #define ESB_DONGLE_FLAG_ACCEPTS_NEW_TRACKERS 0x1
 #define ESB_DONGLE_FLAG_FORCE_PAIRING 0x2
+#define ESB_DONGLE_FLAG_NO_TDMA 0x4
+
+#define ESB_DEVICE_TYPE_NORMAL 0
+#define ESB_DEVICE_TYPE_GLOVE_LEFT 1
+#define ESB_DEVICE_TYPE_GLOVE_RIGHT 2
 
 #define ESB_STATUS_ERROR 200
 #define ESB_STATUS_NO_SLOTS 201
@@ -77,7 +82,7 @@ void esb_set_receiver_addr(uint64_t receiver_addr);
 int esb_get_frequency(void);
 void esb_ping(uint64_t receiver_addr, uint8_t channel);
 
-void esb_write(uint8_t *data, uint8_t packet_sequnce); // TODO: give packets some names
+void esb_write(uint8_t *data, uint8_t packet_sequnce, uint8_t data_length);
 
 bool esb_ready(void);
 
@@ -140,8 +145,8 @@ bool esb_wait_state_change(enum esb_tracker_state_t from_state, uint32_t timeout
 
 #define ESB_RIMARY_ADVERTISEMENT_CHANNEL 22
 #define ESB_SECONDARY_ADVERTISEMENT_CHANNEL 4
-#define ESB_CHANNELS_AMOUNT 36
-#define ESB_CHANNELS 52, 72, 74, 76, 78, 82, 50, 24, 48, 70, 68, 46, 44, 20, 54, 56, 28, 30, 6, 8, 10, 12, 14, 16, 18, 32, 34, 36, 38, 40, 42, 58, 60, 62, 64, 66
+#define ESB_CHANNELS_AMOUNT 37
+#define ESB_CHANNELS 78, 76, 80, 82, 74, 72, 52, 50, 24, 48, 70, 68, 46, 44, 20, 54, 56, 28, 30, 6, 8, 10, 12, 14, 16, 18, 32, 34, 36, 38, 40, 42, 58, 60, 62, 64, 66
 
 #define ESB_SEARCH_TIMEOUT 30000
 #define ESB_SEARCH_DONGLES_PAIRING 2000

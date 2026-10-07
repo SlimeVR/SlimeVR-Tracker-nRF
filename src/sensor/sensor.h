@@ -129,7 +129,6 @@ typedef struct sensor_imu
 	uint8_t (*setup_WOM)(void);
 
 	int (*ext_setup)(sensor_ext_mode_t, const sensor_mag_t *mag, uint8_t mag_addr); // mag used for autonomous mode
-	sensor_position_e sensor_position;
 } sensor_imu_t;
 
 #endif

@@ -32,14 +32,6 @@ LOG_MODULE_REGISTER(usb, LOG_LEVEL_INF);
 static void usb_init_thread(void);
 K_THREAD_DEFINE(usb_init_thread_id, 512, usb_init_thread, NULL, NULL, NULL, USB_INIT_THREAD_PRIORITY, 0, 500); // Wait before enabling USB
 
-static void usb_ctrl_thread(void);
-static struct k_thread usb_ctrl_thread_id;
-static K_THREAD_STACK_DEFINE(usb_ctrl_thread_stack, 256);
-
-#if NRF5_BOOTLOADER
-static const struct device *gpio_dev = DEVICE_DT_GET(DT_NODELABEL(gpio0));
-#endif
-
 static void status_cb(enum usb_dc_status_code status, const uint8_t *param)
 {
 	const struct log_backend *backend = log_backend_get_by_name("log_backend_uart");

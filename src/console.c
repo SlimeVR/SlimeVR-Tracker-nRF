@@ -165,6 +165,7 @@ static void print_connection(void)
 	printk("Device address: %012llX\n", *(uint64_t *)NRF_FICR->DEVICEADDR & 0xFFFFFFFFFFFF);
 	printk(paired ? "Receiver address: %012llX\n" : "Receiver address: None\n", (*(uint64_t *)&retained->paired_addr[0] >> 16) & 0xFFFFFFFFFFFF);
 	printk("Channel frequency: %d\n", esb_get_frequency());
+	printk("Device status: %d, ESB state: %d\n", get_status(SYS_STATUS_ALL), esb_get_tracker_state());
 }
 
 static void print_battery(void)
@@ -487,6 +488,7 @@ static void print_help(void)
 	printk("\ninfo                         Get device information\n");
 	printk("uptime                       Get device uptime\n");
 	printk("reboot                       Soft reset the device\n");
+	printk("shutdown                     Power off the device\n");
 	printk("battery                      Get battery information\n");
 	printk("\nscan                         Restart sensor scan\n");
 	printk("calibrate                    Calibrate sensor ZRO\n");
@@ -502,6 +504,7 @@ static void print_help(void)
 	printk("\ndfu                          Enter DFU bootloader\n");
 #endif
 	printk("\nmeow                         Meow!\n");
+	printk("\nled <r> <g> <b> <bright> <timeout>  LED Override\n");
 
 #if SENSOR_MAG_EXISTS
 	printk("\nreset_data (zro|acc|mag|bat|all)\n");
@@ -532,6 +535,7 @@ static void console_thread(void)
 	const char command_info[] = "info";
 	const char command_uptime[] = "uptime";
 	const char command_reboot[] = "reboot";
+	const char command_shutdown[] = "shutdown";
 	const char command_battery[] = "battery";
 	const char command_scan[] = "scan";
 	const char command_calibrate[] = "calibrate";
@@ -547,6 +551,7 @@ static void console_thread(void)
 	const char command_dfu[] = "dfu";
 #endif
 	const char command_meow[] = "meow";
+	const char command_led[] = "led";
 
 	// data
 	const char command_reset_data[] = "reset_data";
@@ -576,7 +581,7 @@ static void console_thread(void)
 #else
 		char *line = rtt_console_getline();
 #endif
-		char *argv[5] = {NULL}; // command and 4 args
+		char *argv[7] = {NULL}; // command and 4 args
 		size_t argc = parse_args(line, argv, ARRAY_SIZE(argv));
 		if (argc == 0)
 			continue;
@@ -603,6 +608,10 @@ static void console_thread(void)
 		else if (strcmp(argv[0], command_reboot) == 0)
 		{
 			sys_request_system_reboot(false);
+		}
+		else if (strcmp(argv[0], command_shutdown) == 0)
+		{
+			sys_request_system_silent_off(true);
 		}
 		else if (strcmp(argv[0], command_battery) == 0)
 		{
@@ -677,6 +686,20 @@ static void console_thread(void)
 		else if (strcmp(argv[0], command_meow) == 0)
 		{
 			print_meow();
+		}
+		else if (strcmp(argv[0], command_led) == 0)
+		{
+			if (argc != 6)
+			{
+				printk("Invalid number of arguments\n");
+				continue;
+			}
+			uint64_t r = parse_u64(argv[1], 16);
+			uint64_t g = parse_u64(argv[2], 16);
+			uint64_t b = parse_u64(argv[3], 16);
+			uint64_t br = parse_u64(argv[4], 16);
+			uint64_t timeout = parse_u64(argv[5], 16);
+			led_override(U_PATTERN_ON, r, g, b, br, timeout);
 		}
 		else if (strcmp(argv[0], command_reset_data) == 0)
 		{

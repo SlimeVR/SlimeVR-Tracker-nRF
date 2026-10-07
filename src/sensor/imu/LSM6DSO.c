@@ -185,7 +185,7 @@ uint16_t lsm6dso_data_read(uint8_t *data, uint16_t len)
 }
 
 uint8_t lsm6dso_setup_WOM(void)
-{	// TODO: should be off by the time WOM will be setup
+{ // TODO: should be off by the time WOM will be setup
 	//	ssi_reg_write_byte(SENSOR_INTERFACE_DEV_IMU, LSM6DSO_CTRL1, ODR_OFF); // set accel off
 	//	ssi_reg_write_byte(SENSOR_INTERFACE_DEV_IMU, LSM6DSO_CTRL2, ODR_OFF); // set gyro off
 

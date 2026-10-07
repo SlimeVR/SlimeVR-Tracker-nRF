@@ -345,6 +345,9 @@ config CLOCK_SOURCE_LFCLK_RC
     bool "Internal RC clock (bad performance)"
 
 endchoice
+    
+config BTF_DUT
+    bool "Test mode for certification"
 
 config GPIO_LV164
 	bool "74LV164 shift register GPIO driver"

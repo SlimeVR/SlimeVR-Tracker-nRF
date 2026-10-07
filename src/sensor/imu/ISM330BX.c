@@ -27,7 +27,6 @@ sensor_data_attrs_t ism_data_process(uint16_t index, uint8_t *data, float a[3], 
 			g[i] *= gyro_sensitivity;
 		}
 		return DATA_VALID_GYRO;
-		return DATA_VALID_GYRO;
 	default:
 	}
 	// TODO: need to skip invalid data

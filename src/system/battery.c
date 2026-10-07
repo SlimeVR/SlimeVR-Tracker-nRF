@@ -22,12 +22,6 @@
 #include <zephyr/dt-bindings/adc/nrf-saadc.h>
 #endif
 
-#if __has_include(<zephyr/dt-bindings/adc/nrf-saadc-v3.h>)
-#include <zephyr/dt-bindings/adc/nrf-saadc-v3.h>
-#else
-#include <zephyr/dt-bindings/adc/nrf-saadc.h>
-#endif
-
 #include "battery.h"
 
 LOG_MODULE_REGISTER(BATTERY, CONFIG_ADC_LOG_LEVEL);
@@ -150,7 +144,7 @@ static int divider_setup(void)
 		.acquisition_time = ADC_ACQ_TIME(ADC_ACQ_TIME_MICROSECONDS, 3),
 	};
 
-	// TODO: cam this fine tuning be moved somehow to device tree? this is jank
+	// TODO: can this fine tuning be moved somehow to device tree? this is jank
 
 	if (cfg->output_ohm != 0)
 	{

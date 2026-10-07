@@ -69,4 +69,5 @@ void a_to_lin_a(const float *q, const float *a, float *lin_a);
 void q_fem(const float *q, float *out);
 void q_iem(const float *v, float *out);
 
+
 #endif

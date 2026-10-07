@@ -280,7 +280,7 @@ uint8_t lsm_setup_DRDY(uint16_t threshold)
 }
 
 uint8_t lsm_setup_WOM(void)
-{	// TODO: should be off by the time WOM will be setup
+{ // TODO: should be off by the time WOM will be setup
 	//	ssi_reg_write_byte(SENSOR_INTERFACE_DEV_IMU, LSM6DSV_CTRL1, ODR_OFF); // set accel off
 	//	ssi_reg_write_byte(SENSOR_INTERFACE_DEV_IMU, LSM6DSV_CTRL2, ODR_OFF); // set gyro off
 
