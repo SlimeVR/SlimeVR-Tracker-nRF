@@ -1,6 +1,6 @@
-identifier: slimevrglove/nrf54l15/cpuapp
+identifier: slimevrglove_left/nrf54l15/cpuapp
 name: SlimeVR Glove
-vendor: nighty-electronics
+vendor: slimevr
 arch: arm
 toolchain:
   - zephyr

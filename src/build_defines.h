@@ -88,6 +88,10 @@ static uint8_t get_server_constant_tracker_status(int status) __attribute__((unu
 #define SVR_BOARD_GENERIC_NRF 24
 #define SVR_BOARD_SLIMEVR_BUTTERFLY_DEV 25
 #define SVR_BOARD_SLIMEVR_BUTTERFLY 26
+#define SVR_BOARD_SLIMEVR_GLOVE_DEV_LEFT 27
+#define SVR_BOARD_SLIMEVR_GLOVE_DEV_RIGHT 28
+#define SVR_BOARD_SLIMEVR_GLOVE_LEFT 29
+#define SVR_BOARD_SLIMEVR_GLOVE_RIGHT 30
 #define SVR_BOARD_DEV_RESERVED 250
 
 #define SVR_MCU_UNKNOWN 0
@@ -115,12 +119,28 @@ static uint8_t get_server_constant_tracker_status(int status) __attribute__((unu
 #define SVR_STATUS_OCCLUDED 4
 #define SVR_STATUS_TIMED_OUT 5
 
+#define NORMAL_TRACKER 0
+#define GLOVE_LEFT 1
+#define GLOVE_RIGHT 2
+
 #if CONFIG_BOARD_SLIMEVRMINI_P1_UF2 || CONFIG_BOARD_SLIMEVRMINI_P2_UF2 || CONFIG_BOARD_SLIMEVRMINI_P3R6_UF2 || CONFIG_BOARD_SLIMEVRMINI_P3R7_UF2 || CONFIG_BOARD_SLIMEVRMINI_P4_UF2 || CONFIG_BOARD_SLIMEVRMINI_P4R9_UF2 || CONFIG_BOARD_SLIMEVRMINI_P4R11_UF2
 #define FW_BOARD SVR_BOARD_SLIMEVR_BUTTERFLY_DEV
+#define DEVICE_TYPE SVR_BUTTERFLY_TRACKER
+#define SENSORS_NUMBER 1
+#define DEVICE_TYPE NORMAL_TRACKER
 #elif CONFIG_BOARD_BUTTERFLY_R15_UF2
 #define FW_BOARD SVR_BOARD_SLIMEVR_BUTTERFLY
+#define DEVICE_TYPE SVR_BUTTERFLY_TRACKER
+#define SENSORS_NUMBER 1
+#define NORMAL_TRACKER
+#elif CONFIG_BOARD_SLIMEVRGLOVE_LEFT
+#define FW_BOARD SVR_BOARD_SLIMEVR_GLOVE_DEV_LEFT
+#define SENSORS_NUMBER 16
+#define DEVICE_TYPE GLOVE_LEFT
 #else
 #define FW_BOARD SVR_BOARD_GENERIC_NRF
+#define SESNORS_NUMVER 1
+#define DEVICE_TYPE NORMAL_TRACKER
 #endif
 
 #if CONFIG_SOC_SERIES_NRF52X
@@ -180,47 +200,47 @@ static uint8_t get_server_constant_imu_id(int id)
 static uint8_t get_server_constant_mag_id(int id)
 {
 	return SVR_MAG_STATUS_NOT_SUPPORTED;
-//	switch (id)
-//	{
-//	case MAG_HMC5883L:
-//		return 0;
-//	case MAG_QMC5883L:
-//		return 0;
-//	case MAG_AK8963:
-//		return 0;
-//	case MAG_AK09916:
-//		return 0;
-//	case MAG_AK09940:
-//		return 0;
-//	case MAG_BMM150:
-//		return 0;
-//	case MAG_BMM350:
-//		return 0;
-//	case MAG_IST8306:
-//		return 0;
-//	case MAG_IST8308:
-//		return 0;
-//	case MAG_IST8320:
-//		return 0;
-//	case MAG_IST8321:
-//		return 0;
-//	case MAG_LIS2MDL:
-//		return 0;
-//	case MAG_LIS3MDL:
-//		return 0;
-//	case MAG_MMC34160PJ:
-//		return 0;
-//	case MAG_MMC3630KJ:
-//		return 0;
-//	case MAG_MMC5633NJL:
-//		return 0;
-//	case MAG_MMC5616WA:
-//		return 0;
-//	case MAG_MMC5983MA:
-//		return 0;
-//	default:
-//		return 0;
-//	}
+	//	switch (id)
+	//	{
+	//	case MAG_HMC5883L:
+	//		return 0;
+	//	case MAG_QMC5883L:
+	//		return 0;
+	//	case MAG_AK8963:
+	//		return 0;
+	//	case MAG_AK09916:
+	//		return 0;
+	//	case MAG_AK09940:
+	//		return 0;
+	//	case MAG_BMM150:
+	//		return 0;
+	//	case MAG_BMM350:
+	//		return 0;
+	//	case MAG_IST8306:
+	//		return 0;
+	//	case MAG_IST8308:
+	//		return 0;
+	//	case MAG_IST8320:
+	//		return 0;
+	//	case MAG_IST8321:
+	//		return 0;
+	//	case MAG_LIS2MDL:
+	//		return 0;
+	//	case MAG_LIS3MDL:
+	//		return 0;
+	//	case MAG_MMC34160PJ:
+	//		return 0;
+	//	case MAG_MMC3630KJ:
+	//		return 0;
+	//	case MAG_MMC5633NJL:
+	//		return 0;
+	//	case MAG_MMC5616WA:
+	//		return 0;
+	//	case MAG_MMC5983MA:
+	//		return 0;
+	//	default:
+	//		return 0;
+	//	}
 }
 
 static uint8_t get_server_constant_tracker_status(int status)
@@ -232,19 +252,17 @@ static uint8_t get_server_constant_tracker_status(int status)
 }
 
 // https://stackoverflow.com/questions/11697820/how-to-use-date-and-time-predefined-macros-in-as-two-integers-then-stri
-#define COMPUTE_BUILD_YEAR \
-	( \
-		(__DATE__[ 7] - '0') * 1000 + \
-		(__DATE__[ 8] - '0') *  100 + \
-		(__DATE__[ 9] - '0') *   10 + \
-		(__DATE__[10] - '0') \
-	)
+#define COMPUTE_BUILD_YEAR           \
+	(                                \
+		(__DATE__[7] - '0') * 1000 + \
+		(__DATE__[8] - '0') * 100 +  \
+		(__DATE__[9] - '0') * 10 +   \
+		(__DATE__[10] - '0'))
 
-#define COMPUTE_BUILD_DAY \
-	( \
+#define COMPUTE_BUILD_DAY                                       \
+	(                                                           \
 		((__DATE__[4] >= '0') ? (__DATE__[4] - '0') * 10 : 0) + \
-		(__DATE__[5] - '0') \
-	)
+		(__DATE__[5] - '0'))
 
 #define BUILD_MONTH_IS_JAN (__DATE__[0] == 'J' && __DATE__[1] == 'a' && __DATE__[2] == 'n')
 #define BUILD_MONTH_IS_FEB (__DATE__[0] == 'F')
@@ -259,38 +277,36 @@ static uint8_t get_server_constant_tracker_status(int status)
 #define BUILD_MONTH_IS_NOV (__DATE__[0] == 'N')
 #define BUILD_MONTH_IS_DEC (__DATE__[0] == 'D')
 
-#define COMPUTE_BUILD_MONTH \
-	( \
-		(BUILD_MONTH_IS_JAN) ?  1 : \
-		(BUILD_MONTH_IS_FEB) ?  2 : \
-		(BUILD_MONTH_IS_MAR) ?  3 : \
-		(BUILD_MONTH_IS_APR) ?  4 : \
-		(BUILD_MONTH_IS_MAY) ?  5 : \
-		(BUILD_MONTH_IS_JUN) ?  6 : \
-		(BUILD_MONTH_IS_JUL) ?  7 : \
-		(BUILD_MONTH_IS_AUG) ?  8 : \
-		(BUILD_MONTH_IS_SEP) ?  9 : \
-		(BUILD_MONTH_IS_OCT) ? 10 : \
-		(BUILD_MONTH_IS_NOV) ? 11 : \
-		(BUILD_MONTH_IS_DEC) ? 12 : \
-		/* error default */  99 \
-	)
+#define COMPUTE_BUILD_MONTH                                  \
+	(                                                        \
+		(BUILD_MONTH_IS_JAN) ? 1 : (BUILD_MONTH_IS_FEB) ? 2  \
+							   : (BUILD_MONTH_IS_MAR)	? 3  \
+							   : (BUILD_MONTH_IS_APR)	? 4  \
+							   : (BUILD_MONTH_IS_MAY)	? 5  \
+							   : (BUILD_MONTH_IS_JUN)	? 6  \
+							   : (BUILD_MONTH_IS_JUL)	? 7  \
+							   : (BUILD_MONTH_IS_AUG)	? 8  \
+							   : (BUILD_MONTH_IS_SEP)	? 9  \
+							   : (BUILD_MONTH_IS_OCT)	? 10 \
+							   : (BUILD_MONTH_IS_NOV)	? 11 \
+							   : (BUILD_MONTH_IS_DEC)	? 12 \
+														: /* error default */ 99)
 
 #define COMPUTE_BUILD_HOUR ((__TIME__[0] - '0') * 10 + __TIME__[1] - '0')
-#define COMPUTE_BUILD_MIN  ((__TIME__[3] - '0') * 10 + __TIME__[4] - '0')
-#define COMPUTE_BUILD_SEC  ((__TIME__[6] - '0') * 10 + __TIME__[7] - '0')
+#define COMPUTE_BUILD_MIN ((__TIME__[3] - '0') * 10 + __TIME__[4] - '0')
+#define COMPUTE_BUILD_SEC ((__TIME__[6] - '0') * 10 + __TIME__[7] - '0')
 
 #define BUILD_DATE_IS_BAD (__DATE__[0] == '?')
 
-#define BUILD_YEAR  ((BUILD_DATE_IS_BAD) ? 99 : COMPUTE_BUILD_YEAR)
+#define BUILD_YEAR ((BUILD_DATE_IS_BAD) ? 99 : COMPUTE_BUILD_YEAR)
 #define BUILD_MONTH ((BUILD_DATE_IS_BAD) ? 99 : COMPUTE_BUILD_MONTH)
-#define BUILD_DAY   ((BUILD_DATE_IS_BAD) ? 99 : COMPUTE_BUILD_DAY)
+#define BUILD_DAY ((BUILD_DATE_IS_BAD) ? 99 : COMPUTE_BUILD_DAY)
 
 #define BUILD_TIME_IS_BAD (__TIME__[0] == '?')
 
-#define BUILD_HOUR  ((BUILD_TIME_IS_BAD) ? 99 :  COMPUTE_BUILD_HOUR)
-#define BUILD_MIN   ((BUILD_TIME_IS_BAD) ? 99 :  COMPUTE_BUILD_MIN)
-#define BUILD_SEC   ((BUILD_TIME_IS_BAD) ? 99 :  COMPUTE_BUILD_SEC)
+#define BUILD_HOUR ((BUILD_TIME_IS_BAD) ? 99 : COMPUTE_BUILD_HOUR)
+#define BUILD_MIN ((BUILD_TIME_IS_BAD) ? 99 : COMPUTE_BUILD_MIN)
+#define BUILD_SEC ((BUILD_TIME_IS_BAD) ? 99 : COMPUTE_BUILD_SEC)
 
 #define BUILD_TIMESTAMP (((((((BUILD_YEAR - 2020) & 127) * 12 + (BUILD_MONTH & 15)) * 31 + (BUILD_DAY & 31)) * 24 + (BUILD_HOUR & 24)) * 60 + (BUILD_MIN & 60)) * 60 + (BUILD_SEC & 60))
 

@@ -46,7 +46,7 @@
 LOG_MODULE_REGISTER(esb_event, LOG_LEVEL_INF);
 
 static void esb_thread(void);
-K_THREAD_DEFINE(esb_thread_id, 512, esb_thread, NULL, NULL, NULL, ESB_THREAD_PRIORITY, 0, 0);
+K_THREAD_DEFINE(esb_thread_id, 1024, esb_thread, NULL, NULL, NULL, ESB_THREAD_PRIORITY, 0, 0);
 
 static struct esb_payload rx_payload;
 static struct esb_payload tx_payload = ESB_EMPTY_PAYLOAD(0, ESB_PACKET_MAX_SIZE);

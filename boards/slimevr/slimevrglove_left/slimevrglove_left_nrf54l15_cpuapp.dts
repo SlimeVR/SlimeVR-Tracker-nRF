@@ -1,6 +1,6 @@
 /dts-v1/;
 #include <nordic/nrf54l15_cpuapp.dtsi>
-#include "slimevrglove-pinctrl.dtsi"
+#include "slimevrglove_left-pinctrl.dtsi"
 
 #ifndef IMU_SPI_FREQ_MHZ
 #define IMU_SPI_FREQ_MHZ 4
@@ -251,139 +251,157 @@
 		   <&csgpio1 5 GPIO_ACTIVE_LOW>,
 		   <&csgpio1 6 GPIO_ACTIVE_LOW>,
 		   <&csgpio1 7 GPIO_ACTIVE_LOW>,
-		<&csgpio2 0 GPIO_ACTIVE_LOW>,
-		<&csgpio2 1 GPIO_ACTIVE_LOW>,
-		<&csgpio2 2 GPIO_ACTIVE_LOW>,
-		<&csgpio2 3 GPIO_ACTIVE_LOW>,
-		<&csgpio2 4 GPIO_ACTIVE_LOW>,
-		<&csgpio2 5 GPIO_ACTIVE_LOW>,
-		<&csgpio2 6 GPIO_ACTIVE_LOW>,
-		<&csgpio2 7 GPIO_ACTIVE_LOW>;
+		   <&csgpio2 0 GPIO_ACTIVE_LOW>,
+		   <&csgpio2 1 GPIO_ACTIVE_LOW>,
+		   <&csgpio2 2 GPIO_ACTIVE_LOW>,
+		   <&csgpio2 3 GPIO_ACTIVE_LOW>,
+		   <&csgpio2 4 GPIO_ACTIVE_LOW>,
+		   <&csgpio2 5 GPIO_ACTIVE_LOW>,
+		   <&csgpio2 6 GPIO_ACTIVE_LOW>,
+		   <&csgpio2 7 GPIO_ACTIVE_LOW>;
+
+	// See sensor_position.h for mappings of sensor-position
 
 	imu_spi_0: pinky_3@0 {
 		status = "okay";
-		compatible = "vnd,spi-device";
-		label = "pinky-3";
+		compatible = "svr,imu-spi";
+		label = "POSITION_LEFT_LITTLE_DISTAL";
+		sensor-position = <35>;
 		reg = <0x00>;
 		spi-max-frequency = <DT_FREQ_M(IMU_SPI_FREQ_MHZ)>;
 	};
 
 	imu_spi_1: pinky_2@1 {
 		status = "okay";
-		compatible = "vnd,spi-device";
-		label = "pinky-2";
+		compatible = "svr,imu-spi";
+		label = "POSITION_LEFT_LITTLE_INTERMEDIATE";
+		sensor-position = <34>;
 		reg = <0x01>;
 		spi-max-frequency = <DT_FREQ_M(IMU_SPI_FREQ_MHZ)>;
 	};
 
 	imu_spi_2: pinky_1@2 {
 		status = "okay";
-		compatible = "vnd,spi-device";
-		label = "pinky-1";
+		compatible = "svr,imu-spi";
+		label = "POSITION_LEFT_LITTLE_PROXIMAL";
+		sensor-position = <33>;
 		reg = <0x02>;
 		spi-max-frequency = <DT_FREQ_M(IMU_SPI_FREQ_MHZ)>;
 	};
 
 	imu_spi_3: imu_spi_3@3 {
 		status = "okay";
-		compatible = "vnd,spi-device";
-		label = "palm";
+		compatible = "svr,imu-spi";
+		label = "POSITION_LEFT_HAND";
+		sensor-position = <18>;
 		reg = <0x03>;
 		spi-max-frequency = <DT_FREQ_M(IMU_SPI_FREQ_MHZ)>;
 	};
 
 	imu_spi_4: imu_spi_4@4 {
 		status = "okay";
-		compatible = "vnd,spi-device";
-		label = "middle-1";
+		compatible = "svr,imu-spi";
+		label = "POSITION_LEFT_MIDDLE_PROXIMAL";
+		sensor-position = <27>;
 		reg = <0x04>;
 		spi-max-frequency = <DT_FREQ_M(IMU_SPI_FREQ_MHZ)>;
 	};
 
 	imu_spi_5: imu_spi_5@5 {
 		status = "okay";
-		compatible = "vnd,spi-device";
-		label = "ring-3";
+		compatible = "svr,imu-spi";
+		label = "POSITION_LEFT_RING_DISTAL";
+		sensor-position = <32>;
 		reg = <0x05>;
 		spi-max-frequency = <DT_FREQ_M(IMU_SPI_FREQ_MHZ)>;
 	};
 
 	imu_spi_6: imu_spi_6@6 {
 		status = "okay";
-		compatible = "vnd,spi-device";
-		label = "ring-2";
+		compatible = "svr,imu-spi";
+		label = "POSITION_LEFT_RING_INTERMEDIATE";
+		sensor-position = <31>;
 		reg = <0x06>;
 		spi-max-frequency = <DT_FREQ_M(IMU_SPI_FREQ_MHZ)>;
 	};
 
 	imu_spi_7: imu_spi_7@7 {
 		status = "okay";
-		compatible = "vnd,spi-device";
-		label = "ring-1";
+		compatible = "svr,imu-spi";
+		label = "POSITION_LEFT_RING_PROXIMAL";
+		sensor-position = <30>;
 		reg = <0x07>;
 		spi-max-frequency = <DT_FREQ_M(IMU_SPI_FREQ_MHZ)>;
 	};
 
 	imu_spi_8: imu_spi_8@8 {
 		status = "okay";
-		compatible = "vnd,spi-device";
-		label = "index-2";
+		compatible = "svr,imu-spi";
+		label = "POSITION_LEFT_INDEX_INTERMEDIATE";
+		sensor-position = <25>;
 		reg = <0x08>;
 		spi-max-frequency = <DT_FREQ_M(IMU_SPI_FREQ_MHZ)>;
 	};
 
 	imu_spi_9: imu_spi_9@9 {
 		status = "okay";
-		compatible = "vnd,spi-device";
-		label = "index-1";
+		compatible = "svr,imu-spi";
+		label = "POSITION_LEFT_INDEX_PROXIMAL";
+		sensor-position = <24>;
 		reg = <9>;
 		spi-max-frequency = <DT_FREQ_M(IMU_SPI_FREQ_MHZ)>;
 	};
 
 	imu_spi_10: imu_spi_10@a {
 		status = "okay";
-		compatible = "vnd,spi-device";
-		label = "middle-3";
+		compatible = "svr,imu-spi";
+		label = "POSITION_LEFT_MIDDLE_DISTAL";
+		sensor-position = <29>;
 		reg = <0x0a>;
 		spi-max-frequency = <DT_FREQ_M(IMU_SPI_FREQ_MHZ)>;
 	};
 
 	imu_spi_11: imu_spi_11@b {
 		status = "okay";
-		compatible = "vnd,spi-device";
-		label = "middle-2";
+		compatible = "svr,imu-spi";
+		label = "POSITION_LEFT_MIDDLE_PROXIMAL";
+		sensor-position = <27>;
 		reg = <0x0b>;
 		spi-max-frequency = <DT_FREQ_M(IMU_SPI_FREQ_MHZ)>;
 	};
 
 	imu_spi_12: imu_spi_12@c {
 		status = "okay";
-		compatible = "vnd,spi-device";
-		label = "thumb-3";
+		compatible = "svr,imu-spi";
+		label = "POSITION_LEFT_THUMB_DISTAL";
+		sensor-position = <23>;
 		reg = <0x0c>;
 		spi-max-frequency = <DT_FREQ_M(IMU_SPI_FREQ_MHZ)>;
 	};
 
 	imu_spi_13: imu_spi_13@d {
 		status = "okay";
-		compatible = "vnd,spi-device";
-		label = "thumb-2";
+		compatible = "svr,imu-spi";
+		label = "POSITION_LEFT_THUMB_INTERMEDIATE";
+		sensor-position = <22>;
 		reg = <0x0d>;
 		spi-max-frequency = <DT_FREQ_M(IMU_SPI_FREQ_MHZ)>;
 	};
 
 	imu_spi_14: imu_spi_14@e {
 		status = "okay";
-		compatible = "vnd,spi-device";
-		label = "thumb-1";
+		compatible = "svr,imu-spi";
+		label = "POSITION_LEFT_THUMB_PROXIMAL";
+		sensor-position = <21>;
 		reg = <0x0e>;
 		spi-max-frequency = <DT_FREQ_M(IMU_SPI_FREQ_MHZ)>;
 	};
 
 	imu_spi_15: imu_spi_15@f {
 		status = "okay";
-		compatible = "vnd,spi-device";
-		label = "index-3";
+		compatible = "svr,imu-spi";
+		label = "POSITION_LEFT_INDEX_DISTAL";
+		sensor-position = <26>;
 		reg = <0x0f>;
 		spi-max-frequency = <DT_FREQ_M(IMU_SPI_FREQ_MHZ)>;
 	};

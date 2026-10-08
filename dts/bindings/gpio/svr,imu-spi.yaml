@@ -1,0 +1,12 @@
+description: "imu with added properties"
+
+compatible: "svr,imu-spi"
+
+include: spi-device.yaml
+
+properties:
+  sensor-position:
+    type: int
+    required: false
+    description: Value of sensor position as described in sensor_position.h
+sensor_imu_spi_devs[i].name

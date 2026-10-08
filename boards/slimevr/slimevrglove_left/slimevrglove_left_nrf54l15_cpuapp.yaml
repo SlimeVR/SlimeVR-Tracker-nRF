@@ -1,5 +1,5 @@
-identifier: slimevrglove/nrf54l15/cpuapp
-name: slimevrglove
+identifier: slimevrglove_left/nrf54l15/cpuapp
+name: slimevrglove_left
 type: mcu
 arch: arm
 toolchain:

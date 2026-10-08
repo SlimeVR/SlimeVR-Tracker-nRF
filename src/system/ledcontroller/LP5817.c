@@ -48,9 +48,9 @@ void set_leds_controller(uint8_t r, uint8_t g, uint8_t b, struct i2c_dt_spec *de
     write_to_i2c(0x02, 0x07, dev);
 
     // LED Brightness
-    write_to_i2c(0x14, 0x7F, dev); // Red
-    write_to_i2c(0x15, 0x7F, dev); // Green
-    write_to_i2c(0x16, 0x7F, dev); // Blue
+    write_to_i2c(0x14, 0x01, dev); // Red
+    write_to_i2c(0x15, 0x01, dev); // Green
+    write_to_i2c(0x16, 0x01, dev); // Blue
 
     // LED Colors
     write_to_i2c(0x18, r, dev); // Red

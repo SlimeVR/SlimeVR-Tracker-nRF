@@ -48,11 +48,13 @@ struct imu_spi_entry
 {
 	struct spi_dt_spec spec;
 	const char *name;
+	const sensor_position_e sensor_position;
 };
 
-#define IMU_SPI_ENTRY(i, _) {                                      \
-	.spec = SPI_DT_SPEC_GET(DT_NODELABEL(imu_spi_##i), SPI_OP, 0), \
-	.name = DT_PROP(DT_NODELABEL(imu_spi_##i), label),             \
+#define IMU_SPI_ENTRY(i, _) {                                               \
+	.spec = SPI_DT_SPEC_GET(DT_NODELABEL(imu_spi_##i), SPI_OP, 0),          \
+	.name = DT_PROP(DT_NODELABEL(imu_spi_##i), label),                      \
+	.sensor_position = DT_PROP(DT_NODELABEL(imu_spi_##i), sensor_position), \
 }
 
 static struct imu_spi_entry sensor_imu_spi_devs[GLOVE_IMUS] = {
@@ -242,7 +244,7 @@ int sensor_scan(void)
 	// TODO: Get better at C
 	for (int i = 0; i < GLOVE_IMUS; i++)
 	{
-		imu_ids[i] = sensor_scan_imu_spi(&sensor_imu_spi_devs[i], &sensor_imu_dev_reg);
+		imu_ids[i] = sensor_scan_imu_spi(&sensor_imu_spi_devs[i].spec, &sensor_imu_dev_reg);
 		LOG_INF("Sensor ID: %d", imu_ids[i]);
 		if (imu_ids[i] >= 0)
 			sensor_interface_register_sensor_imu_spi(&sensor_imu_spi_devs[i]);
@@ -251,6 +253,8 @@ int sensor_scan(void)
 	{
 		LOG_INF("Imu ID: %d, for Sensor %d, Count %d", imu_ids[i], &sensor_imu_spi_devs[i].spec.config.cs.gpio, i);
 	}
+	// TODO: This will make mixing and matching of imu types unsupported, maybe worth considering having it be supported later on?
+	imu_id = imu_ids[0];
 #elif SENSOR_IMU_SPI_EXISTS
 	// for SPI scan, set frequency of 10MHz, it will be set later by the driver initialization if needed
 	// sensor_imu_spi_dev.config.frequency = MHZ(10);
@@ -890,9 +894,8 @@ void sensor_loop(void)
 	// Initialize all sensors
 	for (int i = 0; i < GLOVE_IMUS; i++)
 	{
-		sensor_interface_register_sensor_imu_spi(&sensor_imu_spi_devs[i].spec);
+		// sensor_interface_register_sensor_imu_spi(&sensor_imu_spi_devs[i].spec);
 		sensor_imu_spi_dev = sensor_imu_spi_devs[i].spec;
-		LOG_INF("Sensor %s", sensor_imu_spi_devs[i].name);
 		if (!sensor_sensor_init)
 			return;
 		sys_interface_resume(); // make sure interfaces are enabled
@@ -913,7 +916,7 @@ void sensor_loop(void)
 		{
 			sensor_interface_register_sensor_imu_spi(&sensor_imu_spi_devs[i].spec);
 			sensor_imu_spi_dev = sensor_imu_spi_devs[i].spec;
-			LOG_INF("Sensor %s", sensor_imu_spi_devs[i].name);
+			LOG_INF("Sensor %s, Position: %u", sensor_imu_spi_devs[i].name, sensor_imu_spi_devs[i].sensor_position);
 			int64_t time_begin = k_uptime_get();
 			if (main_running)
 			{
@@ -1196,7 +1199,7 @@ void sensor_loop(void)
 					float q_offset[4];
 					q_multiply(q, q3, q_offset); // quaternion in device orientation, connection will change format from wxyz to xyzw
 					v_rotate(lin_a, q3, lin_a);	 // linear acceleration in local device frame, no other transformation will be done
-					connection_update_sensor_data(q_offset, lin_a, sensor_data_time);
+					connection_update_sensor_data(q_offset, lin_a, sensor_data_time, sensor_imu_spi_devs[i].sensor_position);
 				}
 
 				// Handle magnetometer calibration on transition

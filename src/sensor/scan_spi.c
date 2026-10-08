@@ -55,12 +55,9 @@ int sensor_scan_spi(struct spi_dt_spec *bus, uint8_t *spi_dev_reg, int dev_addr_
 			{
 				uint8_t id;
 				tx_data[0] = reg | 0x80; // set read bit
-				LOG_DBG("Scanning register: 0x%02X", reg);
 				// TODO: BMM150 workaround?
 				int err = spi_transceive_dt(bus, &tx, &rx);
-				LOG_DBG("err: %d", err);
 				id = buf[1] ? buf[1] : buf[2]; // ID may be in first byte, or skip one byte (such as BMI270)
-				LOG_DBG("Read value: 0x%02X, 0x%02X, 0x%02X (0x%02X)", buf[0], buf[1], buf[2], id);
 				if (err)
 					continue;
 				for (int l = 0; l < id_cnt; l++)

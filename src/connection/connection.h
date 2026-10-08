@@ -24,6 +24,8 @@
 
 #include "../system/led.h"
 #include "esb.h"
+#include "../sensor/sensor_position.h"
+#include "../sensor/sensor.h"
 
 void connection_clocks_request_stop(void);
 
@@ -31,7 +33,7 @@ uint8_t connection_get_id(void);
 void connection_set_id(uint8_t id);
 
 void connection_update_sensor_ids(int imu_id, int mag_id);
-void connection_update_sensor_data(float *q, float *a, int64_t data_time); // ticks
+void connection_update_sensor_data(float *q, float *a, int64_t data_time, uint8_t current_sensor_position); // ticks
 void connection_update_sensor_mag(float *m);
 void connection_update_sensor_temp(float temp);
 void connection_update_sensor_timeout_time(int64_t timeout);
@@ -43,7 +45,7 @@ void connection_set_shutdown(void);
 
 bool connection_process(void);
 
-void connection_packet_received(uint8_t * data, uint8_t length);
+void connection_packet_received(uint8_t *data, uint8_t length);
 
 void connection_motion_ack(uint8_t packet_sequence);
 
@@ -54,12 +56,14 @@ void connection_motion_ack(uint8_t packet_sequence);
 #define ESB_PACKET_HELLO 50
 #define ESB_PACKET_LED_CONTROL 52
 
-struct packet_t {
+struct packet_t
+{
 	uint8_t length;
 	uint8_t data[ESB_PACKET_MAX_SIZE];
-} ;
+};
 
-typedef struct __attribute__((packed)) {
+typedef struct __attribute__((packed))
+{
 	uint8_t sequence;
 	uint8_t packet_id;
 	uint8_t tracker_id;
@@ -72,37 +76,41 @@ typedef struct __attribute__((packed)) {
 	uint16_t timeout;
 } packet_led_control_t;
 
-enum __attribute__ ((__packed__)) server_type_t {
-    SERVER_UNKNOWN = 0,
-    SERVER_NORMAL = 1,
-    SERVER_ASTERTRACK = 2
+enum __attribute__((__packed__)) server_type_t
+{
+	SERVER_UNKNOWN = 0,
+	SERVER_NORMAL = 1,
+	SERVER_ASTERTRACK = 2
 };
 
-enum __attribute__ ((__packed__)) esb_prtocol_version_t {
-    P_VERSION_LEGACY = 0,
-    P_VERSION_LEGACY_2 = 2,
-    P_VERSION_TRANSITIONAL = 3,
-    P_VERSION_MODERN = 4
+enum __attribute__((__packed__)) esb_prtocol_version_t
+{
+	P_VERSION_LEGACY = 0,
+	P_VERSION_LEGACY_2 = 2,
+	P_VERSION_TRANSITIONAL = 3,
+	P_VERSION_MODERN = 4
 };
 
 #define ESB_TRACKER_PROTOCOL P_VERSION_TRANSITIONAL
 
-typedef struct __attribute__((packed)) {
-    uint8_t seq;
-    uint8_t packet_id;
+typedef struct __attribute__((packed))
+{
+	uint8_t seq;
+	uint8_t packet_id;
 	uint8_t tracker_id;
-    enum esb_prtocol_version_t protocol_version;
-    enum server_type_t server_type;
-    unsigned int : 7;
-    unsigned int flag_send_all : 1;
-    uint64_t server_time;
+	enum esb_prtocol_version_t protocol_version;
+	enum server_type_t server_type;
+	unsigned int : 7;
+	unsigned int flag_send_all : 1;
+	uint64_t server_time;
 } packet_hello_t;
 
-typedef struct __attribute__((packed)) {
-    uint8_t packet_id;
+typedef struct __attribute__((packed))
+{
+	uint8_t packet_id;
 	uint8_t tracker_id;
 	uint64_t hwid;
-    enum esb_prtocol_version_t protocol_version;
+	enum esb_prtocol_version_t protocol_version;
 	uint8_t board_id;
 	uint8_t mcu_id;
 	uint8_t board_revision;
@@ -114,8 +122,9 @@ typedef struct __attribute__((packed)) {
 	uint8_t sensors_number;
 } packet_device_info_t;
 
-typedef struct __attribute__((packed)) {
-    uint8_t packet_id;
+typedef struct __attribute__((packed))
+{
+	uint8_t packet_id;
 	uint8_t tracker_id;
 	uint8_t sensor_id;
 	uint8_t imu_id;

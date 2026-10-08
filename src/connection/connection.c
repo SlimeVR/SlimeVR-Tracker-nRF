@@ -34,7 +34,7 @@
 
 #define ALWAYS_SEND false
 
-static uint8_t tracker_id, batt, batt_v, sensor_temp, imu_id, mag_id, tracker_status, tracker_button;
+static uint8_t tracker_id, batt, batt_v, sensor_temp, imu_id, mag_id, sensor_id, sensor_position, tracker_status, tracker_button;
 static uint8_t tracker_svr_status = SVR_STATUS_OK;
 static float sensor_q[4], sensor_a[3], sensor_m[3];
 
@@ -83,10 +83,11 @@ static int64_t quat_update_time = 0;
 static int64_t last_quat_time = 0;
 static bool send_precise_quat;
 
-void connection_update_sensor_data(float *q, float *a, int64_t data_time)
+void connection_update_sensor_data(float *q, float *a, int64_t data_time, uint8_t current_sensor_position)
 {
 	// data_time is in system ticks, nonzero means valid measurement
 	// TODO: use data_time to measure latency! the latency should be calculated up to before radio sent data
+	sensor_position = current_sensor_position;
 	send_precise_quat = q_epsilon(q, sensor_q, 0.005);
 	memcpy(sensor_q, q, sizeof(sensor_q));
 	memcpy(sensor_a, a, sizeof(sensor_a));
@@ -447,12 +448,13 @@ static void send_device_info()
 		.board_id = FW_BOARD,
 		.mcu_id = FW_MCU,
 		.board_revision = 0,
-		.device_type = 0, // Normal tracker
+		.device_type = DEVICE_TYPE,
 		.fw_build_date = ((BUILD_YEAR - 2020) & 127) << 9 | (BUILD_MONTH & 15) << 5 | (BUILD_DAY & 31),
 		.fw_major = FW_VERSION_MAJOR & 255,
 		.fw_minor = FW_VERSION_MINOR & 255,
 		.fw_patch = FW_VERSION_PATCH,
-		.sensors_number = 1};
+		.sensors_number = SENSORS_NUMBER};
+
 	connection_queue_packet((uint8_t *)&device_info, sizeof(device_info));
 }
 
@@ -465,7 +467,7 @@ static void send_sensor_info()
 		.imu_id = imu_id,
 		.mag_id = mag_id,
 		.sensor_state = tracker_svr_status, // TODO Better status
-		.def_body_position = 0,
+		.def_body_position = sensor_position,
 		.target_tps = 100,
 		._reserved = 0};
 	connection_queue_packet((uint8_t *)&sensor_info, sizeof(sensor_info));
