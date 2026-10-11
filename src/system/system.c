@@ -171,10 +171,11 @@ static bool ram_retention_valid = false;
 
 static int sys_retained_init(void)
 {
+	// Not clearing RESETREAS here
 #ifdef NRF_RESET
-	bool reset_pin_reset = NRF_RESET->RESETREAS & 0x01;
+	bool reset_pin_reset = NRF_RESET->RESETREAS & RESET_RESETREAS_RESETPIN_Msk;
 #else
-	bool reset_pin_reset = NRF_POWER->RESETREAS & 0x01;
+	bool reset_pin_reset = NRF_POWER->RESETREAS & POWER_RESETREAS_RESETPIN_Msk;
 #endif
 	// on most nrf, reset by pin reset will clear retained
 	if (!reset_pin_reset) // if reset reason is not by pin reset, system automatically trusts retained state
@@ -322,7 +323,7 @@ int set_sensor_clock(bool enable, float rate, float *actual_rate)
 static const struct gpio_dt_spec button0 = GPIO_DT_SPEC_GET(DT_ALIAS(sw0), gpios);
 static int64_t press_time = 0;
 static int64_t last_press_duration = 0;
-bool button_held_from_init;
+bool button_held_from_init = false;
 
 static void button_interrupt_handler(const struct device *dev, struct gpio_callback *cb, uint32_t pins)
 {
@@ -343,16 +344,17 @@ static struct gpio_callback button_cb_data;
 static int sys_button_init(void)
 {
 	// Not clearing RESETREAS here
+	// Button is considered to be "held from init" if it was pressed during start and the wakeup reason appears to be from button press
 #ifdef NRF_RESET
-	bool reset_vbus_reset = NRF_RESET->RESETREAS & RESET_RESETREAS_VBUS_Msk;
+	bool reset_off_reset = NRF_RESET->RESETREAS & RESET_RESETREAS_OFF_Msk;
 #else
-	bool reset_vbus_reset = NRF_POWER->RESETREAS & POWER_RESETREAS_VBUS_Msk;
+	bool reset_off_reset = NRF_POWER->RESETREAS & POWER_RESETREAS_OFF_Msk;
 #endif
 	gpio_pin_configure_dt(&button0, GPIO_INPUT);
 	gpio_pin_interrupt_configure_dt(&button0, GPIO_INT_EDGE_BOTH);
 	gpio_init_callback(&button_cb_data, button_interrupt_handler, BIT(button0.pin));
 	gpio_add_callback(button0.port, &button_cb_data);
-	if (!reset_vbus_reset)
+	if (reset_off_reset)
 		button_held_from_init = gpio_pin_get_dt(&button0);
 	return 0;
 }
