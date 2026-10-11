@@ -30,6 +30,8 @@ void sys_request_WOM(bool force, bool immediate);
 void sys_request_system_off(bool immediate);
 void sys_request_system_reboot(bool immediate);
 void sys_request_system_silent_off(bool immediate);
+void sys_request_system_dfu_uf2(bool immediate);
+void sys_request_system_dfu_serial(bool immediate);
 
 bool vin_read(void);
 

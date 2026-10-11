@@ -542,8 +542,7 @@ void sys_reset_mode(uint8_t mode)
 	case 4: // Reset mode DFU
 		LOG_INF("DFU requested");
 #if ADAFRUIT_BOOTLOADER
-		NRF_POWER->GPREGRET = 0x57; // DFU_MAGIC_UF2_RESET
-		sys_request_system_reboot(false);
+		sys_request_system_dfu_uf2(false);
 #endif
 #if NRF5_BOOTLOADER
 		gpio_pin_configure(gpio_dev, 19, GPIO_OUTPUT | GPIO_OUTPUT_INIT_LOW);

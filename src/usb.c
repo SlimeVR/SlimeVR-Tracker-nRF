@@ -111,8 +111,7 @@ static void usb_ctrl_thread(void)
 	if (k_uptime_get() - start_time < 100 ? button_read_filtered() : button_read()) // button held on usb connect, enter DFU. if held from wake and usb is plugged in after, then allow initial button hold
 	{
 #if ADAFRUIT_BOOTLOADER
-		NRF_POWER->GPREGRET = 0x57; // DFU_MAGIC_UF2_RESET
-		sys_request_system_reboot(false);
+		sys_request_system_dfu_uf2(false);
 #endif
 #if NRF5_BOOTLOADER
 		gpio_pin_configure(gpio_dev, 19, GPIO_OUTPUT | GPIO_OUTPUT_INIT_LOW);
@@ -146,8 +145,7 @@ static void usb_ctrl_thread(void)
 				if (baudrate == 1200)
 				{
 #if ADAFRUIT_BOOTLOADER
-					NRF_POWER->GPREGRET = 0x4e; // DFU_MAGIC_SERIAL_ONLY_RESET
-					sys_request_system_reboot(false);
+					sys_request_system_dfu_serial(false);
 #endif
 					// TODO: not sure if nrf5 bootloader can make use of this
 #if NRF5_BOOTLOADER

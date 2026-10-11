@@ -311,6 +311,28 @@ void sys_request_system_silent_off(bool immediate)
 	sys_power_state_request(5);
 }
 
+void sys_request_system_dfu_uf2(bool immediate)
+{
+	if (immediate)
+	{
+		NRF_POWER->GPREGRET = 0x57; // DFU_MAGIC_UF2_RESET
+		sys_system_reboot();
+		return;
+	}
+	sys_power_state_request(6);
+}
+
+void sys_request_system_dfu_serial(bool immediate)
+{
+	if (immediate)
+	{
+		NRF_POWER->GPREGRET = 0x4e; // DFU_MAGIC_SERIAL_ONLY_RESET
+		sys_system_reboot();
+		return;
+	}
+	sys_power_state_request(7);
+}
+
 static void sys_WOM(bool force) // TODO: if IMU interrupt does not exist what does the system do?
 {
 	LOG_INF("IMU wake up requested");
@@ -541,6 +563,14 @@ static void power_thread(void)
 			break;
 		case 5:
 			sys_system_off(true);
+			break;
+		case 6:
+			NRF_POWER->GPREGRET = 0x57; // DFU_MAGIC_UF2_RESET
+			sys_system_reboot();
+			break;
+		case 7:
+			NRF_POWER->GPREGRET = 0x4e; // DFU_MAGIC_SERIAL_ONLY_RESET
+			sys_system_reboot();
 			break;
 		default:
 			break;
