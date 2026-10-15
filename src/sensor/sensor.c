@@ -76,7 +76,8 @@ static uint8_t sensor_mag_dev_reg = 0xFF;
 static float q[4] = {1.0f, 0.0f, 0.0f, 0.0f}; // vector to hold quaternion
 static float last_q[4] = {1.0f, 0.0f, 0.0f, 0.0f}; // vector to hold quaternion
 
-static float q3[4] = {SENSOR_QUATERNION_CORRECTION}; // correction quaternion
+static float sensor_correction[4] = {SENSOR_QUATERNION_CORRECTION}; // correction quaternion
+static float inverse_sensor_correction[4];
 
 static float last_lin_a[3] = {0}; // vector to hold last linear accelerometer
 
@@ -659,6 +660,7 @@ static void sensor_update_sensor_state(void)
 
 int sensor_init(void)
 {
+	q_conj(sensor_correction, inverse_sensor_correction);
 	int err;
 	LOG_INF("Sensor init, shutdown first");
 	// TODO : Do not reset sensor if we just WOM'ed
@@ -1033,7 +1035,7 @@ void sensor_loop(void)
 				total_accel_fuse_time += k_uptime_ticks() - fuse_time;
 #endif
 
-				v_rotate(m, q3, m); // magnetic field in local device frame, no other transformation will be done
+				v_rotate(m, inverse_sensor_correction, m); // magnetic field in local device frame, no other transformation will be done
 				connection_update_sensor_mag(m);
 			}
 
@@ -1101,8 +1103,8 @@ void sensor_loop(void)
 				memcpy(last_q, q, sizeof(q));
 				memcpy(last_lin_a, lin_a, sizeof(lin_a));
 				float q_offset[4];
-				q_multiply(q, q3, q_offset); // quaternion in device orientation, connection will change format from wxyz to xyzw
-				v_rotate(lin_a, q3, lin_a); // linear acceleration in local device frame, no other transformation will be done
+				q_multiply(q, sensor_correction, q_offset); // quaternion in device orientation, connection will change format from wxyz to xyzw
+				v_rotate(lin_a, inverse_sensor_correction, lin_a); // linear acceleration in local device frame, no other transformation will be done
 				connection_update_sensor_data(q_offset, lin_a, sensor_data_time);
 			}
 
