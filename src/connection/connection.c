@@ -578,7 +578,7 @@ bool connection_process(void)
 		last_quat_time = k_uptime_get();
 		connection_write_packet_1();
 	}
-	
+
 	if (data_buffer_position != 0) // have valid data
 	{
 		last_data_time = 0;

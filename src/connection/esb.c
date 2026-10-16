@@ -150,13 +150,13 @@ void event_handler(struct esb_evt const *event)
 			{
 				return;
 			}
-			
+
 			const uint8_t packet_number = rx_payload.data[0];
 			const uint8_t packet_id = rx_payload.data[1];
-			
+
 			packets_received++;
 			packets_rssi += (uint8_t) rx_payload.rssi;
-			
+
 			//LOG_INF("Packet %016llX", *(uint64_t *)tx_payload_pair.data);
 			if(packet_id > ESB_PACKET_DONGLE_PACKETS) {
 				if(packet_number != 0 && packet_number != last_packet_sequence) {
@@ -221,13 +221,13 @@ void event_handler(struct esb_evt const *event)
 						tdma_set_our_window(window);
 						retained->tdma_window = window;
 						int32_t received_time = *((uint32_t *) &rx_payload.data[3]);
-						
+
 						// See NTP algorithm
 						int32_t diff = ((received_time - packet_time) + (received_time - time)) / 2;
 						// int32_t roundtrip_time = time - packet_time;
 
 						tdma_update_timer_offset(diff);
-						// if(ABS(diff) != 0) 
+						// if(ABS(diff) != 0)
 						// 	LOG_WRN("Our: %d, packet: %d, dongle's: %d, diff: %d, roundtrip: %d (was slot %d), clock 0x%08x", time, packet_time, received_time, diff, roundtrip_time, tdma_get_slot(packet_time), nrf_clock_lf_src_get(NRF_CLOCK));
 						break;
 					case ESB_PACKET_CONTROL_PONG:
@@ -297,7 +297,7 @@ int esb_initialize(bool tx, bool advertize)
 			uint32_t current_channel = 0;
 			esb_get_rf_channel(&current_channel);
 			if(esb_channel == current_channel)
-				return 0;		
+				return 0;
 		}
 		esb_deinitialize();
 	}

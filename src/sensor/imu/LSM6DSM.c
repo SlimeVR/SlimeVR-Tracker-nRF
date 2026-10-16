@@ -191,7 +191,7 @@ uint16_t lsm6dsm_data_read(uint8_t *data, uint16_t len)
 	uint16_t count = (uint16_t)((rawCount[1] & 7) << 8 | rawCount[0]); // Turn the 16 bits into a unsigned 16-bit value
 
 	count /= PACKET_SIZE / 2; // words to "packets" (actually PACKET_SIZE - 1)
-	
+
 	const uint16_t limit = len / PACKET_SIZE;
 	if (count > limit)
 	{

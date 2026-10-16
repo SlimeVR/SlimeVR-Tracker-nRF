@@ -168,7 +168,7 @@ uint16_t lsm6dso_data_read(uint8_t *data, uint16_t len)
 {
 	uint8_t rawCount[2] = {0};
 	int err = ssi_burst_read(SENSOR_INTERFACE_DEV_IMU, LSM6DSO_FIFO_STATUS1, &rawCount[0], 2);
-		
+
 	uint16_t count = (uint16_t)((rawCount[1] & 3) << 8 | rawCount[0]); // Turn the 16 bits into a unsigned 16-bit value // TODO: might be 3 bits not 2
 
 	const int16_t limit = len / PACKET_SIZE;
@@ -219,11 +219,11 @@ int lsm6dso_ext_setup(sensor_ext_mode_t mode, const sensor_mag_t *mag, uint8_t m
 			err |= ssi_reg_write_byte(SENSOR_INTERFACE_DEV_IMU, LSM6DSV_MASTER_CONFIG, 0x10); // passthrough on
 			err |= ssi_reg_write_byte(SENSOR_INTERFACE_DEV_IMU, LSM6DSV_FUNC_CFG_ACCESS, 0x00); // switch to normal registers
 			break;
-			
+
 		case SENSOR_EXT_MODE_I2CM_PROXY:
 			sensor_interface_ext_configure(&sensor_ext_lsm6dsv);
 			break;
-		
+
 		case SENSOR_EXT_MODE_I2CM_AUTONOMOUS:
 			return -1;
 	}

@@ -12,7 +12,7 @@ p4 = V0.4 R8, Rectantular PCB 20x30mm with Type-C
 
 p4r9 = V0.4 R9, Rectantular PCB with PCB Tonge Type-C and rounded corners
        V0.4 R10, Rectantular PCB with PCB Tonge Type-C and cutted corners
-	  
+	
 p4r11 = V0.4 R11, Rectantular PCB with short shield Type-C from MUP
 		V0.4 R12, Rectantular PCB with short shield Type-C from G-Switch
 		V0.4 R13, Rectantular PCB 18x30mm with Type-C, green solder mask, LDO

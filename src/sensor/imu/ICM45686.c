@@ -369,13 +369,13 @@ int icm45_ext_addr_set(const uint8_t addr, const uint8_t reg) {
 	return err;
 }
 
-int icm45_ext_write(const uint8_t addr, const uint8_t *buf, uint32_t num_bytes) 
+int icm45_ext_write(const uint8_t addr, const uint8_t *buf, uint32_t num_bytes)
 {
 	if (ext_mode != SENSOR_EXT_MODE_I2CM_PROXY) {
 		LOG_ERR("Sensor not in correct mode to perform ext write: %d", ext_mode);
 	}
 
-	if (num_bytes > 6) 
+	if (num_bytes > 6)
 	{
 		LOG_ERR("Unsupported write");
 		return -1;
@@ -455,7 +455,7 @@ int icm45_ext_write_read(const uint8_t addr, const uint8_t *write_buf, size_t nu
 
 int icm45_ext_setup(sensor_ext_mode_t mode, const sensor_mag_t *mag, uint8_t mag_addr) {
 	int err = 0;
-	ext_mag = NULL; // only autonomous mode will set this 
+	ext_mag = NULL; // only autonomous mode will set this
 
 	switch (mode) {
 		case SENSOR_EXT_MODE_OFF:
@@ -465,14 +465,14 @@ int icm45_ext_setup(sensor_ext_mode_t mode, const sensor_mag_t *mag, uint8_t mag
 		case SENSOR_EXT_MODE_I2C_PASSTHROUGH:
 			err |= ssi_reg_write_byte(SENSOR_INTERFACE_DEV_IMU, ICM45686_IOC_PAD_SCENARIO_AUX_OVRD, 0x1B); // AUX1_ENABLE=1 AUX1_MODE=I2CM Bypass
 			break;
-			
+
 		case SENSOR_EXT_MODE_I2CM_PROXY:
 			err |= ssi_reg_write_byte(SENSOR_INTERFACE_DEV_IMU, ICM45686_IOC_PAD_SCENARIO_AUX_OVRD, 0x17); // AUX1_ENABLE=1 AUX1_MODE=I2CM
 			if (!err) {
 				sensor_interface_ext_configure(&sensor_ext_icm45686);
 			}
 			break;
-		
+
 		case SENSOR_EXT_MODE_I2CM_AUTONOMOUS:
 			ext_mag = mag;
 			const uint8_t total_bytes = mag->ext_burst + mag->ext_dummy_bytes;
@@ -544,7 +544,7 @@ uint16_t icm45_data_read(uint8_t *data, uint16_t len)
 				err |= icm45_bank_read(ICM45686_IPREG_TOP1, ICM45686_I2CM_RD_DATA_0 + ext_mag->ext_dummy_bytes, &data[1], ext_mag->ext_burst + ext_mag->ext_dummy_bytes);
 
 				data += PACKET_SIZE;
-				len -= PACKET_SIZE; 
+				len -= PACKET_SIZE;
 				total++;
 			}
 			else {
@@ -568,7 +568,7 @@ uint16_t icm45_data_read(uint8_t *data, uint16_t len)
 			LOG_WRN("FIFO read buffer limit reached, %d packets dropped", packets - limit);
 			packets = limit;
 		}
-		
+
 		const uint16_t read_size = packets * PACKET_SIZE;
 
 		err |= ssi_burst_read_interval(SENSOR_INTERFACE_DEV_IMU, ICM45686_FIFO_DATA, data, read_size, PACKET_SIZE);

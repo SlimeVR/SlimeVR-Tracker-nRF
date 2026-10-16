@@ -160,7 +160,7 @@ int compare_dongles(const void* a, const void* b) {
         return flag_comp;
     flag_comp = (a_d->flags & ESB_DONGLE_FLAG_FORCE_PAIRING) - (b_d->flags & ESB_DONGLE_FLAG_FORCE_PAIRING);
     if(flag_comp != 0)
-        return flag_comp;   
+        return flag_comp;
     return (a_d->rssi > b_d->rssi) - (a_d->rssi < b_d->rssi);
 }
 

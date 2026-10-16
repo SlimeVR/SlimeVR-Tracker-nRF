@@ -12,7 +12,7 @@
 
 LOG_MODULE_REGISTER(net_test, LOG_LEVEL_INF);
 
-static struct esb_payload sweep_payload = ESB_EMPTY_PAYLOAD(0, ESB_PACKET_MAX_SIZE); 
+static struct esb_payload sweep_payload = ESB_EMPTY_PAYLOAD(0, ESB_PACKET_MAX_SIZE);
 
 void sweep_test_run(void) {
     k_msleep(2000);
