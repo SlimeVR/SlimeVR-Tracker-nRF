@@ -175,7 +175,7 @@ void qmc_mag_read(float m[3])
 		err |= ssi_reg_read_byte(SENSOR_INTERFACE_DEV_MAG, QMC6309_STAT_REG, &status);
 	}
 	while((status & STAT_DATA_RDY_MASK) == 0 && k_uptime_get() <= timeout);
-	
+
 	if ((status & STAT_DATA_RDY_MASK) == 0) {
 		LOG_WRN("Data not ready");
 		return;
