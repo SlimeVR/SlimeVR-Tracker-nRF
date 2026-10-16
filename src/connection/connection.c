@@ -45,7 +45,7 @@ static int64_t last_data_time = 0;
 static uint8_t packet_sequence = 0;
 static bool allow_packet_bundling = false; // Can only be used with new server and dongle
 static bool motion_acked = false;
-static enum esb_prtocol_version_t server_protocol = P_VERSION_LEGACY;
+static enum esb_protocol_version server_protocol = P_VERSION_LEGACY;
 
 LOG_MODULE_REGISTER(connection, LOG_LEVEL_INF);
 

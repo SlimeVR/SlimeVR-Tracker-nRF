@@ -10,8 +10,8 @@
 
 LOG_MODULE_REGISTER(pairing, LOG_LEVEL_INF);
 
-static struct pairing_discovery_t* discovered_dongles = NULL;
-static struct pairing_discovery_t current_pairing_dongle;
+static struct pairing_discovery* discovered_dongles = NULL;
+static struct pairing_discovery current_pairing_dongle;
 static struct esb_payload tx_payload_pair = ESB_EMPTY_PAYLOAD(0, 16);
 static uint8_t paired_addr[8] = {0}; // Paired address bytes: <0> Is Paired | <1> Tracker Id | <2-8> Dongle Address
 static bool pairing_needs_saving = false;
@@ -62,8 +62,8 @@ bool pairing_find_dongles_to_pair() {
         return false;
     }
     if(discovered_dongles == NULL)
-        discovered_dongles = k_calloc(sizeof(struct pairing_discovery_t), ESB_CHANNELS_AMOUNT);
-    memset(discovered_dongles, 0, sizeof(struct pairing_discovery_t) * ESB_CHANNELS_AMOUNT);
+        discovered_dongles = k_calloc(sizeof(struct pairing_discovery), ESB_CHANNELS_AMOUNT);
+    memset(discovered_dongles, 0, sizeof(struct pairing_discovery) * ESB_CHANNELS_AMOUNT);
     // TODO Move PAIRING_FIND_DONGLES to CONFIG
     // Wait for any dongle for up to 30 seconds, but continue if we find any in the first 2 seconds
     while(esb_get_tracker_state() == PAIRING_FIND_DONGLES && start + ESB_SEARCH_TIMEOUT > k_uptime_get()) {
@@ -73,7 +73,7 @@ bool pairing_find_dongles_to_pair() {
             return true; // State changed, it's not our problem anymore
         }
         for(int i = 0; i < ESB_CHANNELS_AMOUNT; ++i) {
-            struct pairing_discovery_t* dg = &discovered_dongles[i];
+            struct pairing_discovery* dg = &discovered_dongles[i];
             if(dg->dongle_hwid != 0 && (dg->flags & ESB_DONGLE_FLAG_ACCEPTS_NEW_TRACKERS) > 0) {
                 esb_set_tracker_state(PAIRING_PICK_DONGLE);
                 return true;
@@ -88,7 +88,7 @@ void pairing_dongle_found(const struct esb_payload *payload) {
         uint64_t dongle_hwid = *((uint64_t *) &payload->data[2]) & 0xFFFFFFFFFFFF;
         uint8_t channel = payload->data[8];
         for(int i = 0; i < ESB_CHANNELS_AMOUNT; ++i) {
-            struct pairing_discovery_t* dg = &discovered_dongles[i];
+            struct pairing_discovery* dg = &discovered_dongles[i];
             if(dg->dongle_hwid == 0) {
                 dg->dongle_hwid = dongle_hwid;
                 dg->channel = channel;
@@ -153,8 +153,8 @@ void pairing_dongle_response(const struct esb_payload *payload) {
 }
 
 int compare_dongles(const void* a, const void* b) {
-    const struct pairing_discovery_t* a_d = (const struct pairing_discovery_t*) a;
-    const struct pairing_discovery_t* b_d = (const struct pairing_discovery_t*) b;
+    const struct pairing_discovery* a_d = (const struct pairing_discovery*) a;
+    const struct pairing_discovery* b_d = (const struct pairing_discovery*) b;
     int flag_comp = (a_d->flags & ESB_DONGLE_FLAG_ACCEPTS_NEW_TRACKERS) - (b_d->flags & ESB_DONGLE_FLAG_ACCEPTS_NEW_TRACKERS);
     if(flag_comp != 0)
         return flag_comp;
@@ -168,22 +168,22 @@ bool pairing_pick_dongle_and_pair(void) {
     set_led(SYS_LED_PATTERN_SHORT, SYS_LED_PRIORITY_PAIR);
     int members = 0;
 	for(; members < ESB_CHANNELS_AMOUNT; ++members) {
-        struct pairing_discovery_t* dg = &discovered_dongles[members];
+        struct pairing_discovery* dg = &discovered_dongles[members];
         if(dg->dongle_hwid == 0) {
             break;
         }
     }
     if(members != 0) {
-        qsort(discovered_dongles, members, sizeof(struct pairing_discovery_t), compare_dongles);
+        qsort(discovered_dongles, members, sizeof(struct pairing_discovery), compare_dongles);
     }
     for(int i = 0; i < members; ++i) {
-        struct pairing_discovery_t* dg = &discovered_dongles[i];
+        struct pairing_discovery* dg = &discovered_dongles[i];
         if(dg->dongle_hwid != 0) {
             LOG_INF("Found dongle %d: %012llX, signal %d, flags %x", i, dg->dongle_hwid, dg->rssi, dg->flags);
         }
     }
     for(int i = 0; i < members; ++i) {
-        struct pairing_discovery_t* dg = &discovered_dongles[i];
+        struct pairing_discovery* dg = &discovered_dongles[i];
         if(dg->dongle_hwid != 0 && (dg->flags & ESB_DONGLE_FLAG_ACCEPTS_NEW_TRACKERS) > 0) {
             LOG_INF("Trying to pair to %012llX...", dg->dongle_hwid);
             current_pairing_dongle = *dg;

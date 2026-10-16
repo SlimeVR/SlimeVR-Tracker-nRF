@@ -34,9 +34,9 @@
 #define FW_VERSION_MINOR APP_VERSION_MINOR
 #define FW_VERSION_PATCH APP_PATCHLEVEL
 
-static uint8_t get_server_constant_imu_id(int id) __attribute__((unused));
-static uint8_t get_server_constant_mag_id(int id) __attribute__((unused));
-static uint8_t get_server_constant_tracker_status(int status) __attribute__((unused));
+static uint8_t get_server_constant_imu_id(int id) __unused;
+static uint8_t get_server_constant_mag_id(int id) __unused;
+static uint8_t get_server_constant_tracker_status(int status) __unused;
 
 // constants from server, should include BoardType, MCUType, IMUType, MagType (not yet)
 // https://github.com/SlimeVR/SlimeVR-Server/blob/main/server/core/src/main/java/dev/slimevr/tracking/trackers/udp/FirmwareConstants.kt

@@ -87,7 +87,7 @@ void esb_write(uint8_t *data, uint8_t packet_sequnce, uint8_t data_length);
 
 bool esb_ready(void);
 
-struct pairing_discovery_t {
+struct pairing_discovery {
 	uint64_t dongle_hwid;
 	uint8_t channel;
 	int8_t rssi;
@@ -99,7 +99,7 @@ struct pairing_discovery_t {
 	uint32_t response_time;
 };
 
-enum esb_tracker_state_t {
+enum esb_tracker_state {
 	NOT_PAIRED,
 	PAIRING_FIND_DONGLES,
 	PAIRING_PICK_DONGLE,
@@ -114,19 +114,19 @@ enum esb_tracker_state_t {
 	SEND_PING
 };
 
-struct ping_request_t {
+struct esb_ping_request {
 	uint64_t target;
 	uint64_t time;
 	uint8_t channel;
-	enum esb_tracker_state_t return_sate;
+	enum esb_tracker_state return_state;
 };
 
-enum esb_tracker_state_t esb_get_tracker_state(void);
-void esb_set_tracker_state(enum esb_tracker_state_t state);
+enum esb_tracker_state esb_get_tracker_state(void);
+void esb_set_tracker_state(enum esb_tracker_state state);
 // Waits state change from from_state maximum timeout_ms millisconds.
 // Returns true if the state was changed or false if the state remained from_state
 // when timeout was reached
-bool esb_wait_state_change(enum esb_tracker_state_t from_state, uint32_t timeout_ms);
+bool esb_wait_state_change(enum esb_tracker_state from_state, uint32_t timeout_ms);
 
 /*
  * Best channels and frequencies to use:

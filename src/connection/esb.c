@@ -69,11 +69,11 @@ static bool esb_tx = false;
 static bool esb_advertize = false;
 static uint8_t esb_channel = ESB_RIMARY_ADVERTISEMENT_CHANNEL;
 static bool dongle_found = false;
-static enum esb_tracker_state_t esb_tracker_state = NOT_PAIRED;
+static enum esb_tracker_state esb_tracker_state = NOT_PAIRED;
 static uint32_t esb_tracker_state_last_change = 0;
 static const uint8_t ESB_ALLOWED_CHANNEL_BUNDLES[] = {ESB_CHANNELS};
 static uint8_t currentChannelBundle = 0;
-static struct ping_request_t ping_request;
+static struct esb_ping_request ping_request;
 static bool esb_skip_tdma = false;
 static uint32_t dongle_search_started = 0;
 
@@ -258,14 +258,14 @@ void event_handler(struct esb_evt const *event)
 	}
 }
 
-void esb_set_tracker_state(enum esb_tracker_state_t state) {
-	enum esb_tracker_state_t old_state = esb_tracker_state;
+void esb_set_tracker_state(enum esb_tracker_state state) {
+	enum esb_tracker_state old_state = esb_tracker_state;
 	esb_tracker_state_last_change = k_uptime_get_32();
 	esb_tracker_state = state;
 	LOG_INF("ESB state change: %d -> %d", old_state, state);
 }
 
-bool esb_wait_state_change(enum esb_tracker_state_t from_state, uint32_t timeout_ms) {
+bool esb_wait_state_change(enum esb_tracker_state from_state, uint32_t timeout_ms) {
 	uint64_t start = k_uptime_get();
 	while(esb_tracker_state == from_state && start + timeout_ms > k_uptime_get()) {
 		k_msleep(1);
@@ -273,7 +273,7 @@ bool esb_wait_state_change(enum esb_tracker_state_t from_state, uint32_t timeout
 	return esb_tracker_state != from_state;
 }
 
-enum esb_tracker_state_t esb_get_tracker_state(void) {
+enum esb_tracker_state esb_get_tracker_state(void) {
 	return esb_tracker_state;
 }
 
@@ -468,7 +468,7 @@ void esb_ping(uint64_t receiver_addr, uint8_t channel) {
 	ping_request.target = receiver_addr;
 	ping_request.time = k_uptime_ticks();
 	ping_request.channel = channel;
-	ping_request.return_sate = esb_get_tracker_state();
+	ping_request.return_state = esb_get_tracker_state();
 	esb_set_tracker_state(SEND_PING);
 }
 
@@ -489,7 +489,7 @@ void esb_send_ping() {
 
 	esb_set_channel(ch);
 	esb_deinitialize();
-	esb_set_tracker_state(ping_request.return_sate);
+	esb_set_tracker_state(ping_request.return_state);
 }
 
 bool esb_ready(void) {
