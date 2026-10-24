@@ -319,7 +319,6 @@ jobs:
       - name: Download artifacts
         uses: actions/download-artifact@v8
         with:
-          pattern: SlimeNRF_*
           merge-multiple: true
 
       - name: Upload to draft release
