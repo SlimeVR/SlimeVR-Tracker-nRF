@@ -320,6 +320,7 @@ jobs:
         uses: actions/download-artifact@v8
         with:
           pattern: SlimeNRF_*
+          merge-multiple: true
 
       - name: Upload to draft release
         uses: softprops/action-gh-release@v3
