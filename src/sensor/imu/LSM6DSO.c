@@ -276,7 +276,7 @@ int lsm6dso_ext_write(const uint8_t addr, const uint8_t *buf, uint32_t num_bytes
 
 int lsm6dso_ext_write_read(const uint8_t addr, const uint8_t *write_buf, size_t num_write, uint8_t *read_buf, size_t num_read)
 {
-	if (num_write != 1 || num_read < 1 || num_read > 8)
+	if (num_write != 1 || num_read < 1 || num_read > 7)
 	{
 		LOG_ERR("Unsupported write_read");
 		return -1;
@@ -345,5 +345,5 @@ const sensor_imu_t sensor_imu_lsm6dso = {
 const sensor_ext_ssi_t sensor_ext_lsm6dso = {
 	*lsm6dso_ext_write,
 	*lsm6dso_ext_write_read,
-	8
+	7
 };
