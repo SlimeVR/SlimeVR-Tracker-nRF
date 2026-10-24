@@ -316,18 +316,16 @@ jobs:
     if: startsWith(github.ref, 'refs/tags/')
     runs-on: ubuntu-latest
     steps:
-      - name: Upload binaries
-        uses: actions/upload-artifact@v7
+      - name: Download artifacts
+        uses: actions/download-artifact@v8
         with:
-          name: binaries
-          path: ./*.(hex|uf2)
+          pattern: SlimeNRF_*
 
       - name: Upload to draft release
         uses: softprops/action-gh-release@v3
-        if: startsWith(github.ref, 'refs/tags/')
         with:
           draft: true
           generate_release_notes: true
           files: |
-            ./*.hex
-            ./*.uf2
+            *.hex
+            *.uf2
