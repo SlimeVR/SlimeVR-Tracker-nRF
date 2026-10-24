@@ -71,8 +71,6 @@ static uint8_t esb_channel = ESB_RIMARY_ADVERTISEMENT_CHANNEL;
 static bool dongle_found = false;
 static enum esb_tracker_state esb_tracker_state = NOT_PAIRED;
 static uint32_t esb_tracker_state_last_change = 0;
-static const uint8_t ESB_ALLOWED_CHANNEL_BUNDLES[] = {ESB_CHANNELS};
-static uint8_t currentChannelBundle = 0;
 static struct esb_ping_request ping_request;
 static bool esb_skip_tdma = false;
 static uint32_t dongle_search_started = 0;
@@ -97,12 +95,6 @@ void found_dongle(uint64_t dongle_hwid, uint8_t channel, int32_t received_time) 
 	int32_t diff = (received_time - time);
 	LOG_INF("Our time: %d, rcvd time: %d", time, received_time);
 	tdma_update_timer_offset(diff);
-	for(int i = 0; i < sizeof(ESB_ALLOWED_CHANNEL_BUNDLES); ++i) {
-		if(ESB_ALLOWED_CHANNEL_BUNDLES[i] == channel) {
-			currentChannelBundle = i;
-			break;
-		}
-	}
 	retained->last_dongle_channel = esb_get_channel();
 	retained_update();
 	LOG_INF("Dongle successfully found!");
@@ -363,6 +355,16 @@ int esb_initialize(bool tx, bool advertize)
 
 	int32_t ch;
 	esb_get_rf_channel(&ch);
+	if(!tx) {
+		err = esb_start_rx();
+		if(err) {
+			k_msleep(2000);
+			LOG_ERR("ESB start RX failed: %d", err);
+			set_status(SYS_STATUS_CONNECTION_ERROR, true);
+			esb_initialized = false;
+			return err;
+		}
+	}
 	LOG_INF("Initialized ESB, %sX mode ch %d, address %08X", tx ? "T" : "R", ch, *((uint32_t *) &base_addr_1[0]));
 
 	return 0;
@@ -476,7 +478,8 @@ void esb_send_ping() {
 	uint8_t ch = esb_get_channel();
 
 	esb_set_channel(ping_request.channel);
-	esb_initialize(true, false);
+	if(esb_initialize(true, false) != 0)
+		return;
 
 	uint64_t *addr = (uint64_t *)NRF_FICR->DEVICEADDR;
 	tx_payload.data[1] = ESB_PACKET_CONTROL_PING;
@@ -501,8 +504,8 @@ bool find_dongle() {
 	LOG_INF("Searching for our dongle %012llX...", (*(uint64_t *)&retained->paired_addr[0] >> 16) & 0xFFFFFFFFFFFF);
 	clocks_allow_stopping(false);
 	clocks_start();
-	esb_initialize(false, true);
-	esb_start_rx();
+	if(esb_initialize(false, true) != 0)
+		return false;
 	uint64_t start = k_uptime_get();
 	while(!dongle_found && start + ESB_SEARCH_TIMEOUT > k_uptime_get()) {
 		k_msleep(20);
@@ -525,11 +528,11 @@ void populate_connect_payload() {
 }
 
 void connect_to_dongle() {
-	// TODO : Fast connect if we just woke up
 	// TODO : Frequency hopping
 	clocks_allow_stopping(false);
 	clocks_start();
-	esb_initialize(true, false);
+	if(esb_initialize(true, false) != 0)
+		return;
 	uint64_t start = k_uptime_get();
 	while(esb_get_tracker_state() == DONGLE_CONNECT && start + 1000 > k_uptime_get()) {
 		populate_connect_payload();

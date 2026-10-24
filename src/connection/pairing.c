@@ -46,21 +46,8 @@ bool pairing_find_dongles_to_pair() {
     esb_set_addr_discovery();
 	clocks_allow_stopping(false);
 	clocks_start();
-    int code = esb_initialize(false, true);
-    if(code < 0) {
-        LOG_ERR("ESB init error %d", code);
-        esb_set_tracker_state(PAIRING_ERROR);
-        return false;
-    }
-    // TODO Why are we turning off and on rx here? I forgor -Eiren
-    esb_stop_rx();
-    WAIT_FOR(esb_is_idle(), 1000000, k_msleep(1));
-    code = esb_start_rx();
-    if(code < 0) {
-        LOG_ERR("RX Start error %d", code);
-        esb_set_tracker_state(PAIRING_ERROR);
-        return false;
-    }
+    if(esb_initialize(false, true) != 0)
+        return;
     if(discovered_dongles == NULL)
         discovered_dongles = k_calloc(sizeof(struct pairing_discovery), ESB_CHANNELS_AMOUNT);
     memset(discovered_dongles, 0, sizeof(struct pairing_discovery) * ESB_CHANNELS_AMOUNT);
@@ -191,20 +178,18 @@ bool pairing_pick_dongle_and_pair(void) {
             prepare_pair_payload();
             esb_set_channel(current_pairing_dongle.channel);
             esb_set_receiver_addr(current_pairing_dongle.dongle_hwid);
-            int ret = esb_initialize(true, false);
-            if(ret < 0) {
+            if(esb_initialize(true, false) != 0)
                 return false;
-            }
             uint32_t start = k_uptime_get_32();
             while(start + 2000 > k_uptime_get_32() && esb_get_tracker_state() == PAIRING_PICK_DONGLE) {
                 // TODO If we use channel hopping, we need to do something with timings here
                 // We should sync our timer to the received packets
-                ret = esb_write_payload(&tx_payload_pair);
+                int ret = esb_write_payload(&tx_payload_pair);
                 if(ret < 0) {
                     LOG_ERR("Write error: %d", ret);
                     return false;
                 }
-                esb_start_tx();
+                ret = esb_start_tx();
                 if(ret < 0) {
                     LOG_ERR("TX error: %d", ret);
                     return false;
