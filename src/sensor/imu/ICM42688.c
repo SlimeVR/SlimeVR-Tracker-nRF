@@ -230,7 +230,7 @@ sensor_data_attrs_t icm_data_process(uint16_t index, uint8_t *data, float a[3], 
 	{
 		for (int i = 0; i < 3; i++) // gyro x, y, z
 			g[i] = (int32_t)((((uint32_t)data[index + 7 + (i * 2)]) << 24) | (((uint32_t)data[index + 8 + (i * 2)]) << 16) | (((uint32_t)data[index + 17 + i] & 0x0F) << 12));
-		
+
 		result |= DATA_VALID_GYRO;
 	}
 	else if (!memcmp(&data[index + 1], invalid, sizeof(invalid))) // Skip invalid data

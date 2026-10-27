@@ -5,6 +5,7 @@ on:
   push:
     branches:
       - main
+    tags: ["*"]
   workflow_dispatch:
 
 concurrency:
@@ -14,7 +15,7 @@ concurrency:
 permissions: write-all
 
 env:
-  ZEPHYR_SDK_VERSION: "0.16.9"
+  ZEPHYR_SDK_VERSION: "0.17.0"
 
 jobs:
   setup:
@@ -38,7 +39,7 @@ jobs:
         id: generate-vars
         run: |
           WEST_FILE="west.yml"
-          
+
           if [ -f "$WEST_FILE" ]; then
             echo "Found west.yml in the root directory"
           elif [ -f "zephyr-workspace/$WEST_FILE" ]; then
@@ -67,7 +68,7 @@ jobs:
             BRANCH="${GITHUB_REF#refs/heads/}"
             REPO_COMMIT="$GITHUB_SHA"
           fi
-          
+
           echo "sdk-hash=$SDK_COMMIT" >> "$GITHUB_OUTPUT"
           echo "sdk-revision=$SDK_REVISION" >> "$GITHUB_OUTPUT"
           echo "repo=$REPO" >> "$GITHUB_OUTPUT"
@@ -193,6 +194,8 @@ jobs:
                   {boardname: "promicro_uf2/nrf52840/spi", fileformat: "uf2", filename: "SlimeNRF_ProMicro_SPI_Tracker"},
                   {boardname: "promicro_uf2/nrf52840/smspi", fileformat: "uf2", filename: "SlimeNRF_ProMicro_smSPI_Tracker"},
                   {boardname: "promicro_uf2/nrf52840/chrysalis", fileformat: "uf2", filename: "SlimeNRF_ProMicro_Chrysalis_Tracker"},
+                  {boardname: "promicro_uf2/nrf52840/stackedi2c", fileformat: "uf2", filename: "SlimeNRF_ProMicro_Stacked_I2C_Tracker"},
+                  {boardname: "promicro_uf2/nrf52840/stackedspi", fileformat: "uf2", filename: "SlimeNRF_ProMicro_Stacked_SPI_Tracker"},
                   {boardname: "xiao_ble/nrf52840", fileformat: "uf2", filename: "SlimeNRF_XIAO_Tracker"},
                   {boardname: "xiao_ble/nrf52840/sense", fileformat: "uf2", filename: "SlimeNRF_XIAO_Sense_Tracker"},
                   {boardname: "slimenrf_r1/nrf52840", fileformat: "hex", filename: "SlimeNRF_slimenrf_r1_Tracker"},
@@ -205,6 +208,7 @@ jobs:
                   {boardname: "slimevrmini_p4_uf2/nrf52833", fileformat: "uf2", filename: "SlimeNRF_slimevrmini_p4r8_Tracker"},
                   {boardname: "slimevrmini_p4r9_uf2/nrf52833", fileformat: "uf2", filename: "SlimeNRF_slimevrmini_p4r9_Tracker"},
                   {boardname: "slimevrmini_p4r11_uf2/nrf52833", fileformat: "uf2", filename: "SlimeNRF_slimevrmini_p4r11_Tracker"},
+                  {boardname: "butterfly_r15_uf2/nrf52833", fileformat: "uf2", filename: "SlimeVR_Butterfly_R15_Tracker"},
                   {boardname: "nrf52dk/nrf52832", fileformat: "hex", filename: "SlimeNRF_nRF52dk_Tracker"},
                   {boardname: "nrf52840dk/nrf52840", fileformat: "hex", filename: "SlimeNRF_nRF52840dk_Tracker"},
                 ]
@@ -305,3 +309,23 @@ jobs:
           name: ${{ matrix.boards.filename }}
           if-no-files-found: warn
           path: zephyr-workspace/Releases/${{ matrix.boards.filename }}.${{ matrix.boards.fileformat }}
+
+  create-release:
+    name: Finalize Release Draft
+    needs: [build]
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download artifacts
+        uses: actions/download-artifact@v8
+        with:
+          merge-multiple: true
+
+      - name: Upload to draft release
+        uses: softprops/action-gh-release@v3
+        with:
+          draft: true
+          generate_release_notes: true
+          files: |
+            *.hex
+            *.uf2

@@ -20,3 +20,6 @@ CONFIG_FLASH_LOAD_OFFSET=0x1000
 
 # Disable external clock
 CONFIG_USE_SENSOR_CLOCK=n
+
+# Use passive XTAL clock source for TDMA
+CONFIG_CLOCK_SOURCE_LFCLK_XTAL=y
