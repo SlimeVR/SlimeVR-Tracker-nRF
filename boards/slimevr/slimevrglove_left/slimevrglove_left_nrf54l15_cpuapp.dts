@@ -104,8 +104,9 @@
 	};
 
 	zephyr,user {
-		int0-gpios = <&gpio0 2 0>;
+		//int0-gpios = <&gpio0 2 0>;
 		multiple-imus = <1>;
+		imu-count = <16>;
 	};
 
 	battery-divider {

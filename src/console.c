@@ -125,7 +125,8 @@ static void print_board(void)
 
 static void print_sensor(void)
 {
-	printk("IMU: %s\n", (retained->imu_addr & 0x7F) != 0x7F ? sensor_get_sensor_imu_name() : "Not searching");
+	// TODO: Make this work with multiple imus
+	// printk("IMU: %s\n", (retained->imu_addr & 0x7F) != 0x7F ? sensor_get_sensor_imu_name() : "Not searching");
 	if (retained->imu_reg != 0xFF)
 		printk("Interface: %s\n", (retained->imu_reg & 0x80) ? "SPI" : "I2C");
 	printk("Address: 0x%02X%02X\n", retained->imu_addr, retained->imu_reg);
@@ -154,8 +155,8 @@ static void print_sensor(void)
 	for (int i = 0; i < 3; i++)
 		printk("%.5f %.5f %.5f %.5f\n", (double)retained->magBAinv[0][i], (double)retained->magBAinv[1][i], (double)retained->magBAinv[2][i], (double)retained->magBAinv[3][i]);
 #endif
-
-	printk("\nFusion: %s\n", sensor_get_sensor_fusion_name());
+	// TODO: Make this compatible with multiple imus
+	// printk("\nFusion: %s\n", sensor_get_sensor_fusion_name());
 }
 
 static void print_connection(void)

@@ -150,6 +150,19 @@ void sys_interface_suspend(void)
 	const struct device *const pm_i2c_mag = DEVICE_DT_GET(DT_PARENT(DT_NODELABEL(mag)));
 	pm_device_action_run(pm_i2c_mag, PM_DEVICE_ACTION_SUSPEND);
 #endif
+#if DT_NODE_HAS_STATUS_OKAY(DT_PARENT(DT_NODELABEL(csgpio)))
+
+#endif
+}
+
+void sys_interface_dev_suspend(const struct device *dev)
+{
+	pm_device_action_run(dev, PM_DEVICE_ACTION_SUSPEND);
+}
+
+void sys_interface_dev_resume(const struct device *dev)
+{
+	pm_device_action_run(dev, PM_DEVICE_ACTION_RESUME);
 }
 
 void sys_interface_resume(void)
@@ -556,7 +569,9 @@ static void power_thread(void)
 		float die_temp;
 		float sensor_temp;
 		int sys_ret = sys_get_die_temperature(&die_temp);
-		int sensor_ret = sensor_get_sensor_temperature(&sensor_temp);
+		// TODO: Make this compatible with multiple imus
+		//  int sensor_ret = sensor_get_sensor_temperature(&sensor_temp);
+		int sensor_ret = 10;
 		float min_temp = MIN(die_temp, sensor_temp);
 		float max_temp = MAX(die_temp, sensor_temp);
 		switch (sys_ret ? sensor_ret : sys_ret)

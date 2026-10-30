@@ -26,6 +26,9 @@
 void sys_interface_suspend(void);
 void sys_interface_resume(void);
 
+void sys_interface_dev_suspend(const struct device *dev);
+void sys_interface_dev_resume(const struct device *dev);
+
 void sys_request_WOM(bool force, bool immediate);
 void sys_request_system_off(bool immediate);
 void sys_request_system_reboot(bool immediate);
