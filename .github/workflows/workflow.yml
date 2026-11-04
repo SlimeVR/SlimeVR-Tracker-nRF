@@ -209,6 +209,7 @@ jobs:
                   {boardname: "slimevrmini_p4r9_uf2/nrf52833", fileformat: "uf2", filename: "SlimeNRF_slimevrmini_p4r9_Tracker"},
                   {boardname: "slimevrmini_p4r11_uf2/nrf52833", fileformat: "uf2", filename: "SlimeNRF_slimevrmini_p4r11_Tracker"},
                   {boardname: "butterfly_r15_uf2/nrf52833", fileformat: "uf2", filename: "SlimeVR_Butterfly_R15_Tracker"},
+                  {boardname: "mochi_uf2/nrf52833", fileformat: "uf2", filename: "SlimeNRF_Mochi_Tracker"},
                   {boardname: "nrf52dk/nrf52832", fileformat: "hex", filename: "SlimeNRF_nRF52dk_Tracker"},
                   {boardname: "nrf52840dk/nrf52840", fileformat: "hex", filename: "SlimeNRF_nRF52840dk_Tracker"},
                 ]
