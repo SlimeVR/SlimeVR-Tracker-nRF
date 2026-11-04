@@ -51,14 +51,14 @@ void main_imu_resume(void);
 void main_imu_wakeup(void);
 void main_imu_restart(void);
 
-typedef enum {
+typedef enum sensor_ext_mode {
 	SENSOR_EXT_MODE_OFF = 0, // no external sensor
 	SENSOR_EXT_MODE_I2C_PASSTHROUGH = 1, // shorting external i2c bus to main i2c bus, mcu controls everything
 	SENSOR_EXT_MODE_I2CM_PROXY = 2, // separate buses, imu is as as a proxy / protocol to i2c converter
 	SENSOR_EXT_MODE_I2CM_AUTONOMOUS = 4, // separate buses, mag is autonomically driven by imu, data lands into fifo
 } sensor_ext_mode_t;
 
-typedef enum {
+typedef enum sensor_data_attrs {
 	DATA_VALID_ACCEL = 1,
 	DATA_VALID_GYRO = 2,
 	DATA_VALID_MAG = 4,

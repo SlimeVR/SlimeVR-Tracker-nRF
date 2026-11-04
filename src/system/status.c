@@ -46,6 +46,9 @@ void set_status(enum sys_status status, bool set)
 		case SYS_STATUS_BUTTON_PRESSED:
 			LOG_INF("Button pressed");
 			break;
+		case SYS_STATUS_SERIAL_ACTIVE:
+			LOG_INF("Serial connected");
+			break;
 		default:
 			break;
 		}
@@ -68,7 +71,7 @@ static void status_error_thread(void)
 {
 	while (1) // cycle through errors
 	{
-		int status = status_state & (SYS_STATUS_SENSOR_ERROR | SYS_STATUS_SYSTEM_ERROR);
+		int status = status_state & SYS_STATUS_ERROR;
 		if (status & SYS_STATUS_SENSOR_ERROR)
 		{
 			set_led(SYS_LED_PATTERN_ERROR_A, SYS_LED_PRIORITY_ERROR);
@@ -92,7 +95,7 @@ static void status_warn_thread(void)
 	// will only show if there are no errors! they are higher priority than warnings
 	while (1) // cycle through warnings
 	{
-		int status = status_state & (SYS_STATUS_CONNECTION_ERROR);
+		int status = status_state & SYS_STATUS_WARN;
 		if (status & SYS_STATUS_CONNECTION_ERROR)
 		{
 			set_led(SYS_LED_PATTERN_ERROR_B, SYS_LED_PRIORITY_WARN);

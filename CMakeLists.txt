@@ -64,3 +64,13 @@ target_include_directories(app PRIVATE vqf-c/src)
 add_custom_target(touch_util_h ALL
     COMMAND ${CMAKE_COMMAND} -E touch ${CMAKE_SOURCE_DIR}/src/build_defines.h
 )
+
+# clangd wants compile_commands.json in the root of build directory
+# try to find the build root clangd will be happy with
+cmake_path(GET CMAKE_CURRENT_BINARY_DIR PARENT_PATH build_dir)
+cmake_path(COMPARE ${CMAKE_CURRENT_LIST_DIR} NOT_EQUAL ${build_dir} build_dir_is_subdirectory)
+
+if(build_dir_is_subdirectory)
+  add_custom_target(link_target ALL
+    COMMAND ${CMAKE_COMMAND} -E create_symlink ${CMAKE_CURRENT_BINARY_DIR}/compile_commands.json ${build_dir}/compile_commands.json)
+endif()

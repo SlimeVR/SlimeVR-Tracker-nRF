@@ -82,6 +82,12 @@ static int current_priority;
 static enum sys_led_pattern led_patterns[SYS_LED_PATTERN_DEPTH] = {[0 ... (SYS_LED_PATTERN_DEPTH - 1)] = SYS_LED_PATTERN_OFF};
 static int led_pattern_state;
 
+static uint8_t override_r;
+static uint8_t override_g;
+static uint8_t override_b;
+static uint8_t override_brightness;
+static uint16_t override_timeout;
+
 static int led_pin_init(void)
 {
 	LOG_DBG("led_pin_init");
@@ -295,6 +301,25 @@ static void led_pin_set(enum sys_led_color color, int brightness_pptt, int value
 	gpio_pin_set_dt(&led, value_pptt > 5000);
 #endif
 }
+
+static void set_colors_from_override() {
+	int value_pptt = 10000 * override_brightness / 255;
+#if PWM_LED_EXISTS
+	// only supporting color if PWM is supported
+
+	pwm_set_pulse_dt(&pwm_led, pwm_led.period / 10000 * (10000 * override_r / 255 * value_pptt / 10000));
+#if PWM_LED1_EXISTS
+	pwm_set_pulse_dt(&pwm_led1, pwm_led1.period / 10000 * (10000 *  override_g / 255 * value_pptt / 10000));
+#if PWM_LED2_EXISTS
+	pwm_set_pulse_dt(&pwm_led2, pwm_led2.period / 10000 * (10000 * override_b / 255 * value_pptt / 10000));
+#endif
+#endif
+
+#else
+	gpio_pin_set_dt(&led, value_pptt > 5000);
+#endif
+
+}
 #endif
 
 void set_led(enum sys_led_pattern led_pattern, int priority)
@@ -343,6 +368,24 @@ void set_led(enum sys_led_pattern led_pattern, int priority)
 #endif
 }
 
+void led_override(enum user_led_pattern pattern, uint8_t r, uint8_t g, uint8_t b, uint8_t brightness, uint32_t timeout) {
+	if(pattern == U_PATTERN_OFF) {
+		if(override_timeout != 0) {
+			override_timeout = 0;
+			k_thread_resume(led_thread_id);
+			k_wakeup(led_thread_id);
+		}
+	} else if(pattern == U_PATTERN_ON) {
+		override_r = r;
+		override_g = g;
+		override_b = b;
+		override_brightness = brightness;
+		override_timeout = timeout;
+		k_thread_resume(led_thread_id);
+		k_wakeup(led_thread_id);
+	}
+}
+
 static void led_thread(void)
 {
 #if !LED_EXISTS && !LED_STRIP_EXISTS
@@ -351,6 +394,12 @@ static void led_thread(void)
 #else
 	while (1)
 	{
+		if(override_timeout > 0) {
+			set_colors_from_override();
+			k_msleep(override_timeout);
+			override_timeout = 0;
+			continue;
+		}
 		LOG_DBG("led_thread: current_led_pattern %d", current_led_pattern);
 		switch (current_led_pattern)
 		{
@@ -377,7 +426,7 @@ static void led_thread(void)
 		case SYS_LED_PATTERN_ONESHOT_WAKE:
 			led_pattern_state++;
 			led_pin_set(SYS_LED_COLOR_SUCCESS, 10000, !(led_pattern_state % 2) * 10000);
-			if (led_pattern_state == 3)
+			if (led_pattern_state == 4)
 				set_led(SYS_LED_PATTERN_OFF, SYS_LED_PRIORITY_HIGHEST);
 			else
 				k_msleep(100);
@@ -385,7 +434,7 @@ static void led_thread(void)
 		case SYS_LED_PATTERN_ONESHOT_POWERON:
 			led_pattern_state++;
 			led_pin_set(SYS_LED_COLOR_SUCCESS, 10000, !(led_pattern_state % 2) * 10000);
-			if (led_pattern_state == 5)
+			if (led_pattern_state == 6)
 				set_led(SYS_LED_PATTERN_OFF, SYS_LED_PRIORITY_HIGHEST);
 			else
 				k_msleep(100);
@@ -402,7 +451,7 @@ static void led_thread(void)
 		case SYS_LED_PATTERN_ONESHOT_PROGRESS:
 			led_pattern_state++;
 			led_pin_set(SYS_LED_COLOR_SUCCESS, 10000, !(led_pattern_state % 2) * 10000);
-			if (led_pattern_state == 5)
+			if (led_pattern_state == 6)
 				set_led(SYS_LED_PATTERN_OFF, SYS_LED_PRIORITY_HIGHEST);
 			else
 				k_msleep(200);
@@ -410,7 +459,7 @@ static void led_thread(void)
 		case SYS_LED_PATTERN_ONESHOT_COMPLETE:
 			led_pattern_state++;
 			led_pin_set(SYS_LED_COLOR_SUCCESS, 10000, !(led_pattern_state % 2) * 10000);
-			if (led_pattern_state == 9)
+			if (led_pattern_state == 10)
 				set_led(SYS_LED_PATTERN_OFF, SYS_LED_PRIORITY_HIGHEST);
 			else
 				k_msleep(200);

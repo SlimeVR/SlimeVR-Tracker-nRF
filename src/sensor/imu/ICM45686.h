@@ -187,7 +187,7 @@ writing to the register pointed by the post-auto-incremented address.
 #define FIFO_ACCEL_ODR     (1 << 1)
 #define FIFO_GYRO_ODR      (1 << 0)
 
-#define INT_STATUS_I2CM_SMC_EXT_ODR_EN (1 << 1) // trigger eDMP operation on target ODR (without that i2cm don't start automatically) 
+#define INT_STATUS_I2CM_SMC_EXT_ODR_EN (1 << 1) // trigger eDMP operation on target ODR (without that i2cm don't start automatically)
 
 #define INT1_STATUS_FIFO_THS (1 << 1)
 #define INT1_STATUS_I2CM_DONE (1 << 5) // bit set to 1 in int1_status register when i2cm finished operation

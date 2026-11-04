@@ -145,11 +145,11 @@
 	status = "okay";
 	compatible = "nordic,nrf-spim";
 	cs-gpios = <&gpio0 10 GPIO_ACTIVE_LOW>;
-	
+
 	pinctrl-0 = <&spi0_default>;
 	pinctrl-1 = <&spi0_sleep>;
 	pinctrl-names = "default", "sleep";
-	
+
 	clock-frequency = < DT_FREQ_M(10) >;
 
 	imu_spi: imu_spi@0 {
@@ -157,9 +157,9 @@
 		compatible = "vnd,spi-device";
 		label = "imu-spi";
 		reg = <0>;
-		
+
 		spi-max-frequency = <DT_FREQ_M(24)>;
-		
+
 		// MAG on aux I2C yet not supported #77
 	};
 };

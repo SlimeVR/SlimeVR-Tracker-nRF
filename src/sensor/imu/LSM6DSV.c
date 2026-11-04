@@ -181,9 +181,9 @@ uint16_t lsm_data_read(uint8_t *data, uint16_t len)
 {
 	uint8_t rawCount[2] = {0};
 	int err = ssi_burst_read(SENSOR_INTERFACE_DEV_IMU, LSM6DSV_FIFO_STATUS1, &rawCount[0], 2);
-	
+
 	uint16_t count = (uint16_t)((rawCount[1] & 3) << 8 | rawCount[0]); // Turn the 16 bits into a unsigned 16-bit value. Only LSB on FIFO_STATUS2 is used, but we mask 2nd bit too // TODO: might be 3 bits not 2
-	
+
 	const uint16_t limit = len / PACKET_SIZE;
 	if (count > limit)
 	{
@@ -215,7 +215,7 @@ sensor_data_attrs_t lsm_data_process(uint16_t index, uint8_t *data, float a[3], 
 		{
 			g[i] = (int16_t)((((uint16_t)data[index + 2 + (i * 2)]) << 8) | data[index + 1 + (i * 2)]);
 			g[i] *= gyro_sensitivity;
-			
+
 		}
 		return DATA_VALID_GYRO;
 	default:
@@ -314,13 +314,13 @@ int lsm_ext_setup(sensor_ext_mode_t mode, const sensor_mag_t *mag, uint8_t mag_a
 			err |= ssi_reg_write_byte(SENSOR_INTERFACE_DEV_IMU, LSM6DSV_MASTER_CONFIG, 0x10); // passthrough on
 			err |= ssi_reg_write_byte(SENSOR_INTERFACE_DEV_IMU, LSM6DSV_FUNC_CFG_ACCESS, 0x00); // switch to normal registers
 			break;
-			
+
 		case SENSOR_EXT_MODE_I2CM_PROXY:
 			// enable internal pull-up for auxiliary I2C
 			err |= ssi_reg_write_byte(SENSOR_INTERFACE_DEV_IMU, LSM6DSV_IF_CFG, 0x58); // SHUB_PU_EN, INT H_LACTIVE active low, PP_OD open-drain
 			sensor_interface_ext_configure(&sensor_ext_lsm6dsv);
 			break;
-		
+
 		case SENSOR_EXT_MODE_I2CM_AUTONOMOUS:
 			return -1;
 	}

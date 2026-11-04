@@ -11,18 +11,6 @@
 		};
 	};
 
-	sram0@20007f7c {
-		compatible = "zephyr,memory-region", "mmio-sram";
-		reg = <0x20007f7c 4>;
-		zephyr,memory-region = "DFU_DBL_RESET_MEM";
-		status = "okay";
-
-		retainedmem {
-			compatible = "zephyr,retained-ram";
-			status = "okay";
-		};
-	};
-
 	aliases {
 		retainedmemdevice = &retainedmem0;
 	};

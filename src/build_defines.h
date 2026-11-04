@@ -34,9 +34,9 @@
 #define FW_VERSION_MINOR APP_VERSION_MINOR
 #define FW_VERSION_PATCH APP_PATCHLEVEL
 
-static uint8_t get_server_constant_imu_id(int id) __attribute__((unused));
-static uint8_t get_server_constant_mag_id(int id) __attribute__((unused));
-static uint8_t get_server_constant_tracker_status(int status) __attribute__((unused));
+static uint8_t get_server_constant_imu_id(int id) __unused;
+static uint8_t get_server_constant_mag_id(int id) __unused;
+static uint8_t get_server_constant_tracker_status(int status) __unused;
 
 // constants from server, should include BoardType, MCUType, IMUType, MagType (not yet)
 // https://github.com/SlimeVR/SlimeVR-Server/blob/main/server/core/src/main/java/dev/slimevr/tracking/trackers/udp/FirmwareConstants.kt
@@ -115,8 +115,10 @@ static uint8_t get_server_constant_tracker_status(int status) __attribute__((unu
 #define SVR_STATUS_OCCLUDED 4
 #define SVR_STATUS_TIMED_OUT 5
 
-#if CONFIG_BOARD_SLIMEVRMINI_P1_UF2 || CONFIG_BOARD_SLIMEVRMINI_P2_UF2 || CONFIG_BOARD_SLIMEVRMINI_P3R6_UF2 || CONFIG_BOARD_SLIMEVRMINI_P3R7_UF2 || CONFIG_BOARD_SLIMEVRMINI_P4_UF2 || CONFIG_BOARD_SLIMEVRMINI_P4R9_UF2
+#if CONFIG_BOARD_SLIMEVRMINI_P1_UF2 || CONFIG_BOARD_SLIMEVRMINI_P2_UF2 || CONFIG_BOARD_SLIMEVRMINI_P3R6_UF2 || CONFIG_BOARD_SLIMEVRMINI_P3R7_UF2 || CONFIG_BOARD_SLIMEVRMINI_P4_UF2 || CONFIG_BOARD_SLIMEVRMINI_P4R9_UF2 || CONFIG_BOARD_SLIMEVRMINI_P4R11_UF2
 #define FW_BOARD SVR_BOARD_SLIMEVR_BUTTERFLY_DEV
+#elif CONFIG_BOARD_BUTTERFLY_R15_UF2
+#define FW_BOARD SVR_BOARD_SLIMEVR_BUTTERFLY
 #else
 #define FW_BOARD SVR_BOARD_GENERIC_NRF
 #endif

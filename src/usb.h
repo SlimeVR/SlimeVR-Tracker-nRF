@@ -20,12 +20,11 @@
 	OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 	THE SOFTWARE.
 */
-#ifndef SLIMENRF_TIMER
-#define SLIMENRF_TIMER
+#ifndef SLIMENRF_USB
+#define SLIMENRF_USB
 
-#include <nrfx_timer.h>
+void usb_initialize(void);
+void usb_deinitialize(void);
 
-void timer_handler(nrf_timer_event_t event_type, void *p_context);
-void timer_init(void);
 
 #endif

@@ -28,11 +28,6 @@
 
 #include <zephyr/sys/reboot.h>
 
-#define DFU_DBL_RESET_MEM 0x20007F7C
-#define DFU_DBL_RESET_APP 0x4ee5677e
-
-static uint32_t *dbl_reset_mem __attribute__((unused)) = ((uint32_t *)DFU_DBL_RESET_MEM); // retained
-
 LOG_MODULE_REGISTER(main, LOG_LEVEL_INF);
 
 #if DT_NODE_HAS_PROP(DT_ALIAS(sw0), gpios)
@@ -65,7 +60,7 @@ int main(void)
 	/* if button is not held after booting from shutdown, power off again
 	 * if button press is normal, continue boot
 	 * if button is held for 1 second, reset pairing and continue boot
-	 * if button is held but tracker was waking (not booting from shutdown) ignore the press // TODO: should it pass on to regular handler (e.g. intent to shutdown)
+	 * if button is held but tracker was waking (not booting from shutdown) ignore the press // TODO: this should pass on to regular handler (e.g. intent to shutdown)
 	 */
 
 	if (booting_from_shutdown)
@@ -80,7 +75,7 @@ int main(void)
 				if (k_uptime_get() - start_time > 1000)
 				{
 					LOG_INF("Pairing requested");
-					esb_reset_pair();
+					pairing_request_pair();
 					break;
 				}
 				k_msleep(1);
@@ -108,9 +103,9 @@ int main(void)
 #if ADAFRUIT_BOOTLOADER
 #if BUTTON_EXISTS
 		if (!CONFIG_0_SETTINGS_READ(CONFIG_0_IGNORE_RESET))
-			(*dbl_reset_mem) = DFU_DBL_RESET_APP; // Using Adafruit bootloader, skip DFU if reset button could be used
+			NRF_POWER->GPREGRET = 0x6d; // Using Adafruit bootloader, skip DFU if reset button could be used
 #else
-		(*dbl_reset_mem) = DFU_DBL_RESET_APP; // Using Adafruit bootloader, skip DFU since reset button is used
+		NRF_POWER->GPREGRET = 0x6d; // Using Adafruit bootloader, skip DFU since reset button is used
 #endif
 #endif
 		k_msleep(1000); // Wait before clearing counter and continuing

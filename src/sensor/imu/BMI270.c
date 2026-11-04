@@ -184,7 +184,7 @@ uint16_t bmi_data_read(uint8_t *data, uint16_t len)
 	err |= ssi_burst_read_interval(SENSOR_INTERFACE_DEV_IMU, BMI270_FIFO_DATA, data, read_size, PACKET_SIZE);
 	if (err)
 		LOG_ERR("Communication error");
-	
+
 	return packets;
 }
 

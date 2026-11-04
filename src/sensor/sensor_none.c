@@ -113,7 +113,7 @@ const sensor_imu_t sensor_imu_none = {
 
 	*imu_none_setup_DRDY,
 	*imu_none_setup_WOM,
-	
+
 	*imu_none_ext_setup
 };
 
