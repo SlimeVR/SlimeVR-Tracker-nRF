@@ -396,8 +396,9 @@ static void led_thread(void)
 	{
 		if(override_timeout > 0) {
 			set_colors_from_override();
-			k_msleep(override_timeout);
+			uint16_t sleep_for = override_timeout;
 			override_timeout = 0;
+			k_msleep(sleep_for);
 			continue;
 		}
 		LOG_DBG("led_thread: current_led_pattern %d", current_led_pattern);
