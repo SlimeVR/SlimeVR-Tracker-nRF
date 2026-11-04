@@ -194,9 +194,9 @@ void event_handler(struct esb_evt const *event)
 								esb_set_tracker_state(CONNECTED);
 							} else {
 								if(tracker_id == ESB_STATUS_NOT_PAIRED) {
-									esb_set_tracker_state(NOT_PAIRED);
+									pairing_clear_pair();
 								} else if(tracker_id == ESB_STATUS_NO_SLOTS) {
-									esb_set_tracker_state(NOT_PAIRED);
+									pairing_clear_pair();
 								} else {
 									esb_set_tracker_state(CONNECTION_ERROR);
 								}

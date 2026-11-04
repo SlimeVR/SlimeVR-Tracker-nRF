@@ -79,6 +79,16 @@ k_timeout_t tdma_get_time_till_our_window() {
 	return K_CYC(our_time - timer);
 }
 
+bool tdma_close_window() {
+	uint32_t timer = tdma_get_time_with_static_offset();
+	uint32_t current_slot = tdma_get_slot(timer);
+	uint8_t current_window = tdma_get_window(current_slot);
+	if(current_window == our_window || ((current_window - 1) % TDMA_MAX_TRACKERS) == our_window) {
+		return true;
+	}
+	return false;
+}
+
 bool tdma_is_our_window() {
 	uint32_t timer = tdma_get_time_with_static_offset();
 	uint32_t current_slot = tdma_get_slot(timer);
