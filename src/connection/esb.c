@@ -500,6 +500,10 @@ bool esb_ready(void) {
 }
 
 bool find_dongle() {
+	if(!pairing_is_paired()) {
+		esb_set_tracker_state(NOT_PAIRED);
+		return true;
+	}
 	dongle_found = false;
 	LOG_INF("Searching for our dongle %012llX...", (*(uint64_t *)&retained->paired_addr[0] >> 16) & 0xFFFFFFFFFFFF);
 	clocks_allow_stopping(false);
@@ -551,8 +555,13 @@ void shutdown_unconnected() {
 	if(dongle_search_started == 0)
 		return;
 	bool use_shutdown = CONFIG_0_SETTINGS_READ(CONFIG_0_USER_SHUTDOWN);
-	if(use_shutdown && should_raise_errors() && !get_status(SYS_STATUS_SERIAL_ACTIVE) && k_uptime_get_32() - dongle_search_started > CONFIG_3_SETTINGS_READ(CONFIG_3_CONNECTION_TIMEOUT_DELAY)) {
-		sys_request_system_off(false);
+	if(use_shutdown && should_raise_errors() && k_uptime_get_32() - dongle_search_started > CONFIG_3_SETTINGS_READ(CONFIG_3_CONNECTION_TIMEOUT_DELAY)) {
+		if(get_status(SYS_STATUS_SERIAL_ACTIVE))
+			return;
+		if(get_status(SYS_STATUS_PLUGGED))
+			esb_set_tracker_state(SUSPENDED);
+		else
+			sys_request_system_off(false);
 	}
 }
 
@@ -654,15 +663,15 @@ static void esb_thread(void)
 			case PAIRING_ERROR:
 				if (!get_status(SYS_STATUS_CONNECTION_ERROR) && should_raise_errors())
 					set_status(SYS_STATUS_CONNECTION_ERROR, true);
-				shutdown_unconnected();
 				esb_set_tracker_state(PAIRING_FIND_DONGLES);
+				shutdown_unconnected();
 			break;
 			case CONNECTION_ERROR:
 				if (!get_status(SYS_STATUS_CONNECTION_ERROR) && should_raise_errors())
 					set_status(SYS_STATUS_CONNECTION_ERROR, true);
 				clocks_allow_stopping(true);
-				shutdown_unconnected();
 				esb_set_tracker_state(FIND_DONGLE);
+				shutdown_unconnected();
 				break;
 			case CONNECTED:
 				clocks_allow_stopping(true);
@@ -682,6 +691,13 @@ static void esb_thread(void)
 			break;
 			case SEND_PING:
 				esb_send_ping();
+			break;
+			case SUSPENDED:
+				set_status(SYS_STATUS_CONNECTION_ERROR, false);
+				clocks_allow_stopping(true);
+				esb_deinitialize();
+				clocks_stop();
+				k_msleep(1000);
 			break;
 			default: // Other states are handled in a different place
 				break;

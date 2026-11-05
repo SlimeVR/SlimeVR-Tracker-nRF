@@ -503,6 +503,7 @@ static void print_help(void)
 	printk("\nping <address>             Ping specified address\n");
 	printk("pair                         Enter pairing mode\n");
 	printk("clear                        Clear pairing data\n");
+	printk("wake                         Wake up ESB from suspended state\n");
 #if DFU_EXISTS
 	printk("\ndfu                          Enter DFU bootloader\n");
 #endif
@@ -550,6 +551,7 @@ static void console_thread(void)
 	const char command_ping[] = "ping";
 	const char command_pair[] = "pair";
 	const char command_clear[] = "clear";
+	const char command_wake[] = "wake";
 #if DFU_EXISTS
 	const char command_dfu[] = "dfu";
 #endif
@@ -626,6 +628,10 @@ static void console_thread(void)
 		else if (strcmp(argv[0], command_calibrate) == 0)
 		{
 			sensor_request_calibration();
+		}
+		else if (strcmp(argv[0], command_wake) == 0)
+		{
+			esb_set_tracker_state(FIND_DONGLE);
 		}
 		else if (strcmp(argv[0], command_6_side) == 0)
 		{

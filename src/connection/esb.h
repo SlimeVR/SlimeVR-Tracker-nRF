@@ -111,7 +111,8 @@ enum esb_tracker_state {
 	CONNECTED,
 	PAIRING_ERROR,
 	CONNECTION_ERROR,
-	SEND_PING
+	SEND_PING,
+	SUSPENDED
 };
 
 struct esb_ping_request {

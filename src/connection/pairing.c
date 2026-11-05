@@ -28,10 +28,14 @@ void prepare_pair_payload() {
     tx_payload_pair.data[15] = ESB_DEVICE_TYPE_NORMAL;
 }
 
+bool pairing_is_paired() {
+    return paired_addr[0] != 0;
+}
+
 void pairing_restore(void) {
     // Read paired address from retained
 	memcpy(paired_addr, retained->paired_addr, sizeof(paired_addr));
-    if(paired_addr[0] != 0) {
+    if(pairing_is_paired()) {
         connection_set_id(paired_addr[1]);
         esb_set_addr_paired(&paired_addr[2]);
         esb_set_tracker_state(FIND_DONGLE);

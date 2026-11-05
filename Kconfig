@@ -134,7 +134,7 @@ config WOM_USE_DCDC
 
 config CONNECTION_TIMEOUT_DELAY
     int "Connection timeout delay (ms)"
-    default 300000
+    default 600000
     depends on USER_SHUTDOWN
     help
         Connection timeout duration when receiver is not detected.
