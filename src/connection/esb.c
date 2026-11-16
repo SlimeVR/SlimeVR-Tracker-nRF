@@ -66,8 +66,8 @@ static uint8_t base_addr_0[4], base_addr_1[4], addr_prefix[8] = {0};
 
 static bool esb_initialized = false;
 static bool esb_tx = false;
-static bool esb_advertize = false;
-static uint8_t esb_channel = ESB_RIMARY_ADVERTISEMENT_CHANNEL;
+static bool esb_advertise = false;
+static uint8_t esb_channel = ESB_PRIMARY_ADVERTISEMENT_CHANNEL;
 static bool dongle_found = false;
 static enum esb_tracker_state esb_tracker_state = NOT_PAIRED;
 static uint32_t esb_tracker_state_last_change = 0;
@@ -280,12 +280,12 @@ void fill_packets_stat(uint8_t *data) {
 	packets_rssi = 0;
 }
 
-int esb_initialize(bool tx, bool advertize)
+int esb_initialize(bool tx, bool advertise)
 {
 	if(esb_initialized) {
-		if(tx == esb_tx && advertize == esb_advertize) {
-			if(advertize)
-				return 0; // Don't switch channel in advertize mode
+		if(tx == esb_tx && advertise == esb_advertise) {
+			if(advertise)
+				return 0; // Don't switch channel in advertise mode
 			uint32_t current_channel = 0;
 			esb_get_rf_channel(&current_channel);
 			if(esb_channel == current_channel)
@@ -294,7 +294,7 @@ int esb_initialize(bool tx, bool advertize)
 		esb_deinitialize();
 	}
 	esb_tx = tx;
-	esb_advertize = advertize;
+	esb_advertise = advertise;
 	esb_initialized = true;
 	int err;
 
@@ -342,7 +342,7 @@ int esb_initialize(bool tx, bool advertize)
 		esb_set_base_address_0(base_addr_0);
 		esb_set_base_address_1(base_addr_1);
 		esb_set_prefixes(addr_prefix, ARRAY_SIZE(addr_prefix));
-		esb_set_rf_channel(advertize ? ESB_RIMARY_ADVERTISEMENT_CHANNEL : esb_channel);
+		esb_set_rf_channel(advertise ? ESB_PRIMARY_ADVERTISEMENT_CHANNEL : esb_channel);
 	}
 	else
 	{
