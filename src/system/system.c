@@ -186,14 +186,14 @@ static int sys_retained_init(void)
 		LOG_WRN("Invalidated RAM");
 		sys_nvs_init();
 		// read from nvs to retained
-		sys_read(PAIRED_ID, &retained->paired_addr, sizeof(retained->paired_addr));
-		sys_read(MAIN_SENSOR_DATA_ID, &retained->sensor_data, sizeof(retained->sensor_data));
-		sys_read(MAIN_ACCEL_BIAS_ID, &retained->accelBias, sizeof(retained->accelBias));
-		sys_read(MAIN_GYRO_BIAS_ID, &retained->gyroBias, sizeof(retained->gyroBias));
-		sys_read(MAIN_MAG_BIAS_ID, &retained->magBAinv, sizeof(retained->magBAinv));
-		sys_read(MAIN_ACC_6_BIAS_ID, &retained->accBAinv, sizeof(retained->accBAinv));
-		sys_read(BATT_STATS_CURVE_ID, &retained->battery_pptt_curve, sizeof(retained->battery_pptt_curve));
-		sys_read(SETTINGS_ID, &retained->settings, sizeof(retained->settings));
+		sys_read(PAIRED_ID, retained->paired_addr, sizeof(retained->paired_addr));
+		sys_read(MAIN_SENSOR_DATA_ID, retained->sensor_data, sizeof(retained->sensor_data));
+		sys_read(MAIN_ACCEL_BIAS_ID, retained->accelBias, sizeof(retained->accelBias));
+		sys_read(MAIN_GYRO_BIAS_ID, retained->gyroBias, sizeof(retained->gyroBias));
+		sys_read(MAIN_MAG_BIAS_ID, retained->magBAinv, sizeof(retained->magBAinv));
+		sys_read(MAIN_ACC_6_BIAS_ID, retained->accBAinv, sizeof(retained->accBAinv));
+		sys_read(BATT_STATS_CURVE_ID, retained->battery_pptt_curve, sizeof(retained->battery_pptt_curve));
+		sys_read(SETTINGS_ID, retained->settings, sizeof(retained->settings));
 		// restore default settings
 		/* okay to run here, as the only time defaults can change is on newer firmware
 		 * if retain is cleared, defaults are also restored on top of settings stored in nvs (if not overridden by user)
