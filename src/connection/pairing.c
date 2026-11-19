@@ -47,8 +47,7 @@ bool pairing_find_dongles_to_pair() {
 	clocks_allow_stopping(false);
 	clocks_start();
     if(esb_initialize(false, true) != 0)
-        // TODO: Return value is missing
-        return;
+        return false;
     if(discovered_dongles == NULL)
         discovered_dongles = k_calloc(sizeof(struct pairing_discovery), ESB_CHANNELS_AMOUNT);
     // TODO: calloc already zeroes the array, either change to malloc or remove below if it does not need to be zeroed every time
@@ -225,10 +224,11 @@ void pairing_request_pair(void)
     LOG_INF("Pairing requested, looking for dongle");
 }
 
+
 void pairing_clear_pair(void)
 {
     memset(paired_addr, 0, sizeof(paired_addr));
-	sys_write(PAIRED_ID, retained->paired_addr, paired_addr, sizeof(paired_addr)); // write zeroes
+	pairing_needs_saving = true;
 	LOG_INF("Pairing data reset");
 	pairing_request_pair();
 }
