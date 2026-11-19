@@ -49,7 +49,7 @@ bool pairing_find_dongles_to_pair() {
     if(esb_initialize(false, true) != 0)
         return false;
     if(discovered_dongles == NULL)
-        discovered_dongles = k_calloc(sizeof(struct pairing_discovery), ESB_CHANNELS_AMOUNT);
+        discovered_dongles = k_malloc(sizeof(struct pairing_discovery) * ESB_CHANNELS_AMOUNT);
     memset(discovered_dongles, 0, sizeof(struct pairing_discovery) * ESB_CHANNELS_AMOUNT);
     // TODO Move PAIRING_FIND_DONGLES to CONFIG
     // Wait for any dongle for up to 30 seconds, but continue if we find any in the first 2 seconds

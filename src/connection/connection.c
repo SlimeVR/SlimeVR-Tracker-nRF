@@ -224,6 +224,7 @@ bool can_send_packet(size_t size) {
 void connection_queue_packet(uint8_t * data, uint8_t length) {
 	if(length > sizeof(((struct packet_t *) 0)->data)) {
 		LOG_ERR("Trying too queue too large packet: %d, packet id %d", length, data[0]);
+		return;
 	}
 	struct packet_t packet;
 	packet.length = length;

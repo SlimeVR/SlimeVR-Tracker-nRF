@@ -200,8 +200,8 @@ void sensor_calibration_clear(float *a_bias, float *g_bias, bool write)
 	if (write)
 	{
 		LOG_INF("Clearing stored calibration data");
-		sys_write(MAIN_ACCEL_BIAS_ID, &retained->accelBias, a_bias, sizeof(accelBias));
-		sys_write(MAIN_GYRO_BIAS_ID, &retained->gyroBias, g_bias, sizeof(gyroBias));
+		sys_write(MAIN_ACCEL_BIAS_ID, retained->accelBias, a_bias, sizeof(accelBias));
+		sys_write(MAIN_GYRO_BIAS_ID, retained->gyroBias, g_bias, sizeof(gyroBias));
 	}
 
 	sensor_fusion_invalidate();
@@ -217,7 +217,7 @@ void sensor_calibration_clear_6_side(float a_inv[][3], bool write)
 	if (write)
 	{
 		LOG_INF("Clearing stored calibration data");
-		sys_write(MAIN_ACC_6_BIAS_ID, &retained->accBAinv, a_inv, sizeof(accBAinv));
+		sys_write(MAIN_ACC_6_BIAS_ID, retained->accBAinv, a_inv, sizeof(accBAinv));
 	}
 }
 
@@ -229,7 +229,7 @@ void sensor_calibration_clear_mag(float m_inv[][3], bool write)
 	if (write)
 	{
 		LOG_INF("Clearing stored calibration data");
-		sys_write(MAIN_MAG_BIAS_ID, &retained->magBAinv, m_inv, sizeof(magBAinv));
+		sys_write(MAIN_MAG_BIAS_ID, retained->magBAinv, m_inv, sizeof(magBAinv));
 	}
 }
 
@@ -368,7 +368,7 @@ static void sensor_calibrate_imu()
 			return; // Calibration failed
 		}
 		LOG_INF("Finished IMU specific calibration");
-		sys_write(MAIN_SENSOR_DATA_ID, &retained->sensor_data, sensor_data, sizeof(sensor_data));
+		sys_write(MAIN_SENSOR_DATA_ID, retained->sensor_data, sensor_data, sizeof(sensor_data));
 		sensor_fusion_invalidate(); // only invalidate fusion if calibration was successful
 		k_msleep(500); // Delay before beginning acquisition
 	}
@@ -405,8 +405,8 @@ static void sensor_calibrate_imu()
 		memcpy(gyroBias, g_bias, sizeof(gyroBias));
 		sensor_fusion_invalidate(); // only invalidate fusion if calibration was successful
 	}
-	sys_write(MAIN_ACCEL_BIAS_ID, &retained->accelBias, accelBias, sizeof(accelBias));
-	sys_write(MAIN_GYRO_BIAS_ID, &retained->gyroBias, gyroBias, sizeof(gyroBias));
+	sys_write(MAIN_ACCEL_BIAS_ID, retained->accelBias, accelBias, sizeof(accelBias));
+	sys_write(MAIN_GYRO_BIAS_ID, retained->gyroBias, gyroBias, sizeof(gyroBias));
 
 	LOG_INF("Finished calibration");
 	set_led(SYS_LED_PATTERN_ONESHOT_COMPLETE, SYS_LED_PRIORITY_SENSOR);
@@ -449,7 +449,7 @@ static void sensor_calibrate_6_side(void)
 		memcpy(accBAinv, a_inv, sizeof(accBAinv));
 		sensor_fusion_invalidate(); // only invalidate fusion if calibration was successful
 	}
-	sys_write(MAIN_ACC_6_BIAS_ID, &retained->accBAinv, accBAinv, sizeof(accBAinv));
+	sys_write(MAIN_ACC_6_BIAS_ID, retained->accBAinv, accBAinv, sizeof(accBAinv));
 
 	LOG_INF("Finished calibration");
 	set_led(SYS_LED_PATTERN_ONESHOT_COMPLETE, SYS_LED_PRIORITY_SENSOR);
@@ -506,7 +506,7 @@ static int sensor_calibrate_mag(void)
 		memcpy(magBAinv, m_inv, sizeof(magBAinv));
 		// fusion invalidation not necessary
 	}
-	sys_write(MAIN_MAG_BIAS_ID, &retained->magBAinv, magBAinv, sizeof(magBAinv));
+	sys_write(MAIN_MAG_BIAS_ID, retained->magBAinv, magBAinv, sizeof(magBAinv));
 
 	LOG_INF("Finished calibration");
 	set_led(SYS_LED_PATTERN_ONESHOT_COMPLETE, SYS_LED_PRIORITY_SENSOR);

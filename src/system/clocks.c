@@ -120,24 +120,40 @@ BUILD_ASSERT(false, "No Clock Control driver");
 void clock_switch(nrf_clock_lfclk_t source) {
 	unsigned int key = irq_lock();
 
-    nrf_clock_task_trigger(NRF_CLOCK, NRF_CLOCK_TASK_LFCLKSTOP);
+	nrf_clock_lfclk_t clk_source;
+	nrf_clock_is_running(NRF_CLOCK, NRF_CLOCK_DOMAIN_LFCLK, &clk_source);
+
+	if (clk_source == source) {
+		LOG_DBG("Clock is already using correct source");
+		return;
+	}
+
+	nrf_clock_task_trigger(NRF_CLOCK, NRF_CLOCK_TASK_LFCLKSTOP);
 
 	uint32_t waited_us = 0;
-    while (nrf_clock_is_running(NRF_CLOCK, NRF_CLOCK_DOMAIN_LFCLK, NULL) && (waited_us < 5000)) {
-        k_busy_wait(100);
-        waited_us += 100;
-    }
+	while (nrf_clock_is_running(NRF_CLOCK, NRF_CLOCK_DOMAIN_LFCLK, NULL) && (waited_us < 5000)) {
+		k_busy_wait(100);
+		waited_us += 100;
+	}
+	if (nrf_clock_is_running(NRF_CLOCK, NRF_CLOCK_DOMAIN_LFCLK, NULL)) {
+		LOG_ERR("Clock has not stopped!");
+		// TODO: silently continues
+	}
 
 	nrf_clock_event_clear(NRF_CLOCK, NRF_CLOCK_EVENT_LFCLKSTARTED);
 
-    nrf_clock_lf_src_set(NRF_CLOCK, source);
-    nrf_clock_task_trigger(NRF_CLOCK, NRF_CLOCK_TASK_LFCLKSTART);
+	nrf_clock_lf_src_set(NRF_CLOCK, source);
+	nrf_clock_task_trigger(NRF_CLOCK, NRF_CLOCK_TASK_LFCLKSTART);
 
 	waited_us = 0;
-    while (!nrf_clock_is_running(NRF_CLOCK, NRF_CLOCK_DOMAIN_LFCLK, NULL) && (waited_us < 5000)) {
-        k_busy_wait(100);
-        waited_us += 100;
-    }
+	while (!nrf_clock_is_running(NRF_CLOCK, NRF_CLOCK_DOMAIN_LFCLK, NULL) && (waited_us < 5000)) {
+		k_busy_wait(100);
+		waited_us += 100;
+	}
+	if (!nrf_clock_is_running(NRF_CLOCK, NRF_CLOCK_DOMAIN_LFCLK, NULL)) {
+		LOG_ERR("Clock has not started!");
+		// TODO: silently continues
+	}
 
 	nrf_clock_event_clear(NRF_CLOCK, NRF_CLOCK_EVENT_LFCLKSTARTED);
 

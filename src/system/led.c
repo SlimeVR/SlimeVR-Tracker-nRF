@@ -303,6 +303,7 @@ static void led_pin_set(enum sys_led_color color, int brightness_pptt, int value
 }
 
 static void set_colors_from_override() {
+	// TODO: Brightness and RGB need to be gamma corrected
 	int value_pptt = 10000 * override_brightness / 255;
 #if PWM_LED_EXISTS
 	// only supporting color if PWM is supported
