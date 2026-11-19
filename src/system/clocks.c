@@ -124,7 +124,7 @@ void clock_switch(nrf_clock_lfclk_t source) {
 	nrf_clock_is_running(NRF_CLOCK, NRF_CLOCK_DOMAIN_LFCLK, &clk_source);
 
 	if (clk_source == source) {
-		LOG_WRN("Clock is already using correct source");
+		LOG_DBG("Clock is already using correct source");
 		return;
 	}
 
