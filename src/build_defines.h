@@ -59,6 +59,7 @@ static uint8_t get_server_constant_tracker_status(int status) __unused;
 #define SVR_IMU_ICM45686 16
 #define SVR_IMU_ICM45605 17
 #define SVR_IMU_ADC_RESISTANCE 18
+#define SVR_IMU_ISM330BX 20
 #define SVR_IMU_DEV_RESERVED 250
 
 #define SVR_BOARD_UNKNOWN 0
@@ -170,7 +171,7 @@ static uint8_t get_server_constant_imu_id(int id)
 	case IMU_LSM6DSV:
 		return SVR_IMU_LSM6DSV;
 	case IMU_ISM330BX:
-		return SVR_IMU_LSM6DSV; // not really
+		return SVR_IMU_ISM330BX;
 	default:
 		return SVR_IMU_UNKNOWN;
 	}
